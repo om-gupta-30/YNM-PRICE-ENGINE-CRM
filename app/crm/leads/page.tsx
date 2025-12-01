@@ -194,9 +194,16 @@ export default function LeadsPage() {
           const scoreB = calculateLeadScore(b);
           return scoreB - scoreA;
         case 'priority':
-          const priorityOrder = { 'High Priority': 3, 'Medium Priority': 2, 'Low Priority': 1, null: 0 };
-          const priorityA = priorityOrder[a.priority || null] || 0;
-          const priorityB = priorityOrder[b.priority || null] || 0;
+          const priorityOrder: Record<string, number> = {
+            'High Priority': 3,
+            'Medium Priority': 2,
+            'Low Priority': 1,
+            'none': 0,
+          };
+          const priorityKeyA = a.priority ?? 'none';
+          const priorityKeyB = b.priority ?? 'none';
+          const priorityA = priorityOrder[priorityKeyA] ?? 0;
+          const priorityB = priorityOrder[priorityKeyB] ?? 0;
           return priorityB - priorityA;
         default:
           return 0;
@@ -581,7 +588,7 @@ export default function LeadsPage() {
                   >
                     <option value="">All Statuses</option>
                     {uniqueStatuses.map(status => (
-                      <option key={status} value={status}>{status}</option>
+                      <option key={status} value={status || ''}>{status}</option>
                     ))}
                   </select>
                 </div>
@@ -596,7 +603,7 @@ export default function LeadsPage() {
                   >
                     <option value="">All Lead Sources</option>
                     {uniqueLeadSources.map(source => (
-                      <option key={source} value={source}>{source}</option>
+                      <option key={source} value={source || ''}>{source}</option>
                     ))}
                   </select>
                 </div>
@@ -611,7 +618,7 @@ export default function LeadsPage() {
                   >
                     <option value="">All Employees</option>
                     {uniqueEmployees.map(employee => (
-                      <option key={employee} value={employee}>{employee}</option>
+                      <option key={employee} value={employee || ''}>{employee}</option>
                     ))}
                   </select>
                 </div>

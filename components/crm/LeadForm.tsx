@@ -39,6 +39,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     assigned_employee: '',
     accounts: null,
     sub_accounts: null,
+    contact_id: null,
   });
 
   const [accounts, setAccounts] = useState<Array<{ id: number; account_name: string }>>([]);

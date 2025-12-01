@@ -6,12 +6,12 @@ export const sampleActivities: Activity[] = [
     activity_type: 'call',
     description: 'Call with Raj from ABC Infra. Talked about payment terms.',
     account_name: 'ABC Corp',
-    subaccount_name: 'ABC Infra Project',
     contact_name: 'Raj Gupta',
+    employee_id: 'Employee1',
     metadata: {
       call_status: 'Connected',
+      subaccount_name: 'ABC Infra Project',
     },
-    created_by: 'Employee1',
     created_at: new Date().toISOString(),
   },
   {
@@ -19,7 +19,7 @@ export const sampleActivities: Activity[] = [
     activity_type: 'note',
     description: 'Internal note: Customer liked the new pricing grid.',
     account_name: 'Zenith Industries',
-    created_by: 'Employee2',
+    employee_id: 'Employee2',
     created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
   },
   {
@@ -27,10 +27,10 @@ export const sampleActivities: Activity[] = [
     activity_type: 'followup',
     description: 'Reminder to send revised proposal tomorrow morning.',
     account_name: 'Horizon Builders',
+    employee_id: 'Employee1',
     metadata: {
       followup_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     },
-    created_by: 'Employee1',
     created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
   },
 ];

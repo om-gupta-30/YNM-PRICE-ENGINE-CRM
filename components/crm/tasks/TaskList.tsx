@@ -1,6 +1,6 @@
 'use client';
 
-import { Task } from '@/app/crm/tasks/page';
+import { Task } from '@/lib/constants/types';
 
 interface TaskListProps {
   tasks: Task[];
