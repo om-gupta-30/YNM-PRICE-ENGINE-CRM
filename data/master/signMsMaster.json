@@ -1,0 +1,268 @@
+[
+  {
+    "shape": "Circular",
+    "sizeCode": "1200",
+    "postLengthM": 3.6,
+    "frameLengthM": 5.409999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Circular",
+    "sizeCode": "1500",
+    "postLengthM": 3.75,
+    "frameLengthM": 6.609999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Circular",
+    "sizeCode": "300",
+    "postLengthM": 3.15,
+    "frameLengthM": 1.81,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Circular",
+    "sizeCode": "600",
+    "postLengthM": 3.3,
+    "frameLengthM": 3.0100000000000002,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Circular",
+    "sizeCode": "750",
+    "postLengthM": 3.375,
+    "frameLengthM": 3.61,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Circular",
+    "sizeCode": "900",
+    "postLengthM": 3.45,
+    "frameLengthM": 4.21,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "1200",
+    "postLengthM": 3.6,
+    "frameLengthM": 5.789999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "1500",
+    "postLengthM": 3.75,
+    "frameLengthM": 7.09,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "300",
+    "postLengthM": 3.15,
+    "frameLengthM": 1.8900000000000001,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "600",
+    "postLengthM": 3.3,
+    "frameLengthM": 3.19,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "750",
+    "postLengthM": 3.375,
+    "frameLengthM": 3.86,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Octagonal",
+    "sizeCode": "900",
+    "postLengthM": 3.45,
+    "frameLengthM": 4.489999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1200x1500",
+    "postLengthM": 4.2,
+    "frameLengthM": 8.29,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1200x500",
+    "postLengthM": 3.25,
+    "frameLengthM": 4.449999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1500x1500",
+    "postLengthM": 4.2,
+    "frameLengthM": 9.49,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1550x600",
+    "postLengthM": 3.3,
+    "frameLengthM": 5.45,
+    "remarks": "Single Post - Double Chevron"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1600x1100",
+    "postLengthM": 8.14,
+    "frameLengthM": 9.1,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "1830x760",
+    "postLengthM": 7.6,
+    "frameLengthM": 9.11,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "2130x1140",
+    "postLengthM": 11.97,
+    "frameLengthM": 11.969999999999997,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "2200x850",
+    "postLengthM": 11.535,
+    "frameLengthM": 11.599999999999998,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "2440x900",
+    "postLengthM": 11.61,
+    "frameLengthM": 12.419999999999998,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "2500x1000",
+    "postLengthM": 11.76,
+    "frameLengthM": 12.799999999999997,
+    "remarks": "Two Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "300x900",
+    "postLengthM": 1.5,
+    "frameLengthM": 3.0100000000000002,
+    "remarks": "Single Post - Hazard Marker"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "450x600",
+    "postLengthM": 3.3,
+    "frameLengthM": 3.1,
+    "remarks": "Single Post - Informatory"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "450x900",
+    "postLengthM": 1.5,
+    "frameLengthM": 3.31,
+    "remarks": "Single Post - 2 Way Hazard Marker"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "500x600",
+    "postLengthM": 3.35,
+    "frameLengthM": 3.2,
+    "remarks": "Single Post - Chevron"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "600x600",
+    "postLengthM": 3.3,
+    "frameLengthM": 3.5500000000000003,
+    "remarks": "Single Post - Informatory"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "600x800",
+    "postLengthM": 3.4,
+    "frameLengthM": 3.95,
+    "remarks": "Single Post - Informatory"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "600x900",
+    "postLengthM": 3.45,
+    "frameLengthM": 4.1499999999999995,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "750x900",
+    "postLengthM": 3.45,
+    "frameLengthM": 4.6,
+    "remarks": "Single Post - Chevron"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "900x1200",
+    "postLengthM": 3.6,
+    "frameLengthM": 5.6499999999999995,
+    "remarks": "Single Post - Informatory"
+  },
+  {
+    "shape": "Rectangular",
+    "sizeCode": "900x900",
+    "postLengthM": 3.45,
+    "frameLengthM": 5.05,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "1200",
+    "postLengthM": 3.35,
+    "frameLengthM": 4.88,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "1500",
+    "postLengthM": 3.45,
+    "frameLengthM": 5.969999999999999,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "300",
+    "postLengthM": 3.1,
+    "frameLengthM": 1.57,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "600",
+    "postLengthM": 3.2,
+    "frameLengthM": 2.65,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "750",
+    "postLengthM": 3.25,
+    "frameLengthM": 3.2,
+    "remarks": "Single Post"
+  },
+  {
+    "shape": "Triangle",
+    "sizeCode": "900",
+    "postLengthM": 3.3,
+    "frameLengthM": 3.7400000000000007,
+    "remarks": "Single Post"
+  }
+]

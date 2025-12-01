@@ -1,0 +1,338 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import IndustrySelector from './IndustrySelector';
+
+interface SelectedIndustry {
+  industry_id: number;
+  industry_name: string;
+  sub_industry_id: number;
+  sub_industry_name: string;
+}
+
+export interface AccountFormData {
+  accountName: string;
+  companyStage: string;
+  companyTag: string;
+  assignedEmployee: string;
+  website?: string;
+  gstNumber?: string;
+  notes?: string;
+  industries?: SelectedIndustry[];
+}
+
+interface AccountFormProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: AccountFormData) => void;
+  initialData?: AccountFormData | null;
+  mode?: 'create' | 'edit';
+  isAdmin?: boolean;
+  currentUser?: string;
+}
+
+export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, currentUser = '' }: AccountFormProps) {
+  // Company Stage options (from enum)
+  const companyStageOptions = [
+    'Enterprise',
+    'SMB',
+    'Pan India',
+    'APAC',
+    'Middle East & Africa',
+    'Europe',
+    'North America',
+    'LATAM_SouthAmerica'
+  ];
+
+  // Company Tag options (from enum)
+  const companyTagOptions = [
+    'New',
+    'Prospect',
+    'Customer',
+    'Onboard',
+    'Lapsed',
+    'Needs Attention',
+    'Retention',
+    'Renewal',
+    'Upselling'
+  ];
+
+  // Form state
+  const [formData, setFormData] = useState<AccountFormData>({
+    accountName: '',
+    companyStage: '',
+    companyTag: '',
+    assignedEmployee: '',
+    website: '',
+    gstNumber: '',
+    notes: '',
+    industries: [],
+  });
+  const [employeeOptions, setEmployeeOptions] = useState<string[]>(['Employee1', 'Employee2']);
+
+  // Initialize form data when modal opens or initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        ...initialData,
+        industries: initialData.industries || [],
+      });
+    } else {
+      // Auto-assign to current user if employee (not admin)
+      const defaultAssignedEmployee = !isAdmin && currentUser ? currentUser : '';
+      setFormData({
+        accountName: '',
+        companyStage: '',
+        companyTag: '',
+        assignedEmployee: defaultAssignedEmployee,
+        website: '',
+        gstNumber: '',
+        notes: '',
+        industries: [],
+      });
+    }
+  }, [initialData, isOpen, isAdmin, currentUser]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchEmployees = async () => {
+      try {
+        const response = await fetch('/api/employees');
+        const data = await response.json();
+        if (data.success && Array.isArray(data.employees) && data.employees.length > 0) {
+          const filtered = data.employees.filter(
+            (employee: string) => employee?.toLowerCase() !== 'admin'
+          );
+          setEmployeeOptions(filtered);
+        }
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+      }
+    };
+    fetchEmployees();
+  }, [isOpen]);
+
+  // Handle input change
+  const handleInputChange = (field: keyof AccountFormData, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  // Handle form submit
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fade-up overflow-hidden"
+      onClick={onClose}
+    >
+      <div 
+        className="glassmorphic-premium rounded-3xl max-w-4xl w-full border-2 border-premium-gold/30 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header - Fixed */}
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-white/10 flex-shrink-0">
+          <h2 className="text-2xl font-extrabold text-white drop-shadow-lg">
+            {mode === 'edit' ? 'Edit Account' : 'Create New Account'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-slate-300 hover:text-white text-2xl font-bold transition-colors"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Scrollable Form Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4 modal-scrollable">
+          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Company Details Section */}
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-premium-gold border-b border-premium-gold/30 pb-2">
+              Company Details
+            </h3>
+
+            {/* Account Name */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
+                Company Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.accountName}
+                onChange={(e) => handleInputChange('accountName', e.target.value)}
+                className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                placeholder="Enter company name"
+                required
+              />
+            </div>
+
+            {/* Stage and Tag - Side by Side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Stage {!isAdmin && <span className="text-red-400">*</span>}
+                </label>
+                <select
+                  value={formData.companyStage || ''}
+                  onChange={(e) => handleInputChange('companyStage', e.target.value)}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                  required={!isAdmin}
+                >
+                  <option value="">Select Stage</option>
+                  {companyStageOptions.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage.replace('_', '/')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Tag {!isAdmin && <span className="text-red-400">*</span>}
+                </label>
+                <select
+                  value={formData.companyTag || ''}
+                  onChange={(e) => handleInputChange('companyTag', e.target.value)}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                  required={!isAdmin}
+                >
+                  <option value="">Select Tag</option>
+                  {companyTagOptions.map((tag) => (
+                    <option key={tag} value={tag}>
+                      {tag}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Assigned Employee - Only show for admin */}
+            {isAdmin ? (
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Assigned Employee <span className="text-slate-400 text-xs">(optional - assign later)</span>
+                </label>
+                <select
+                  value={formData.assignedEmployee || ''}
+                  onChange={(e) => handleInputChange('assignedEmployee', e.target.value)}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                >
+                  <option value="">Unassigned (assign later)</option>
+                  {employeeOptions
+                    .filter((employee) => employee?.toLowerCase() !== 'admin')
+                    .map((employee) => (
+                    <option key={employee} value={employee}>
+                      {employee}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              // For employees, show read-only field with their name
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Assigned Employee
+                </label>
+                <input
+                  type="text"
+                  value={currentUser || 'Not assigned'}
+                  className="input-premium w-full px-4 py-3 text-slate-300 bg-white/5 border border-white/10 rounded-lg cursor-not-allowed"
+                  disabled
+                  readOnly
+                />
+                <p className="text-xs text-slate-400 mt-1">Account will be automatically assigned to you</p>
+              </div>
+            )}
+
+            {/* Website and GST Number - Side by Side */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Website
+                </label>
+                <input
+                  type="url"
+                  value={formData.website || ''}
+                  onChange={(e) => handleInputChange('website', e.target.value)}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                  placeholder="https://example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  GST Number
+                </label>
+                <input
+                  type="text"
+                  value={formData.gstNumber || ''}
+                  onChange={(e) => handleInputChange('gstNumber', e.target.value)}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                  placeholder="Enter GST number"
+                  maxLength={15}
+                />
+              </div>
+            </div>
+
+            {/* Notes Section */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
+                Notes
+              </label>
+              <textarea
+                value={formData.notes || ''}
+                onChange={(e) => handleInputChange('notes', e.target.value)}
+                className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent min-h-[120px] resize-y"
+                placeholder="Enter any additional notes about this account..."
+                rows={4}
+              />
+            </div>
+
+          </div>
+
+          {/* Industries Section */}
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-premium-gold border-b border-premium-gold/30 pb-2">
+              Industries & Sub-Industries
+            </h3>
+            <p className="text-sm text-slate-400">
+              Select the industries and sub-industries this account operates in. You can select multiple options.
+            </p>
+            <IndustrySelector
+              value={formData.industries || []}
+              onChange={(selected) => setFormData(prev => ({ ...prev, industries: selected }))}
+            />
+          </div>
+
+            {/* Form Buttons */}
+            <div className="flex gap-4 pt-4 border-t border-white/20">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-6 py-3 text-lg font-semibold text-slate-200 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-200 border border-white/20"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-xl transition-all duration-300 shadow-lg shadow-premium-gold/50 hover:shadow-xl hover:shadow-premium-gold/70"
+              >
+                {mode === 'edit' ? 'Update Account' : 'Submit'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+

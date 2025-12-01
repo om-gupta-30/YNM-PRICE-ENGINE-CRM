@@ -1,0 +1,76 @@
+/* Scoped styles for ShowcaseSection - completely isolated */
+/* All styles are prefixed to prevent conflicts */
+
+.showcaseSection {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Phone Frame Styles */
+.showcasePhoneFrame {
+  width: 260px;
+  height: 520px;
+  background: #111;
+  border-radius: 30px;
+  padding: 30px;
+  box-shadow: 
+    0 50px 100px rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(255, 255, 255, 0.1),
+    inset 0 0 40px rgba(0, 0, 0, 0.3);
+  position: relative;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.showcasePhoneFrame::before {
+  content: '';
+  position: absolute;
+  top: 15px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 6px;
+  background: #000;
+  border-radius: 3px;
+  z-index: 10;
+}
+
+.showcasePhoneFrame::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 30px;
+  padding: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.showcasePhoneScreen {
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #000;
+  position: relative;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .showcasePhoneFrame {
+    width: 200px;
+    height: 400px;
+    padding: 20px;
+  }
+}
+

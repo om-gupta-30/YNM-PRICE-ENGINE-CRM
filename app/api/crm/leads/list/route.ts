@@ -1,0 +1,113 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
+import { formatTimestampIST } from '@/lib/utils/dateFormatters';
+
+// GET - Fetch all leads with joined account and sub-account names
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const employeeUsername = searchParams.get('employee');
+    const isAdmin = searchParams.get('isAdmin') === 'true';
+
+    const supabase = createSupabaseServerClient();
+
+    // Build query
+    let query = supabase
+      .from('leads')
+      .select(`
+        id,
+        lead_name,
+        contact_person,
+        phone,
+        email,
+        requirements,
+        lead_source,
+        status,
+        priority,
+        assigned_employee,
+        account_id,
+        sub_account_id,
+        contact_id,
+        follow_up_date,
+        created_by,
+        created_at,
+        updated_at
+      `)
+      .order('created_at', { ascending: false });
+
+    // Filter by assigned_employee if not admin
+    if (!isAdmin && employeeUsername) {
+      query = query.eq('assigned_employee', employeeUsername);
+    }
+
+    // Fetch leads
+    const { data: leads, error } = await query;
+
+    if (error) {
+      console.error('Error fetching leads:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Get unique account and sub-account IDs
+    const accountIds = [...new Set((leads || []).map((l: any) => l.account_id).filter(Boolean))];
+    const subAccountIds = [...new Set((leads || []).map((l: any) => l.sub_account_id).filter(Boolean))];
+
+    // Fetch accounts
+    const accountMap = new Map();
+    if (accountIds.length > 0) {
+      const { data: accountsData } = await supabase
+        .from('accounts')
+        .select('id, account_name')
+        .in('id', accountIds);
+      
+      (accountsData || []).forEach((acc: any) => {
+        accountMap.set(acc.id, acc.account_name);
+      });
+    }
+
+    // Fetch sub-accounts
+    const subAccountMap = new Map();
+    if (subAccountIds.length > 0) {
+      const { data: subAccountsData } = await supabase
+        .from('sub_accounts')
+        .select('id, sub_account_name')
+        .in('id', subAccountIds);
+      
+      (subAccountsData || []).forEach((sa: any) => {
+        subAccountMap.set(sa.id, sa.sub_account_name);
+      });
+    }
+
+    // Format the response with account and sub-account names and IST timestamps
+    const formattedLeads = (leads || []).map((lead: any) => ({
+      id: lead.id,
+      lead_name: lead.lead_name,
+      contact_person: lead.contact_person || null,
+      phone: lead.phone || null,
+      email: lead.email || null,
+      requirements: lead.requirements || null,
+      lead_source: lead.lead_source || null,
+      status: lead.status || null,
+      priority: lead.priority || null,
+      assigned_employee: lead.assigned_employee || null,
+      accounts: lead.account_id || null,
+      sub_accounts: lead.sub_account_id || null,
+      contact_id: lead.contact_id || null,
+      follow_up_date: lead.follow_up_date || null,
+      account_name: lead.account_id ? accountMap.get(lead.account_id) || null : null,
+      sub_account_name: lead.sub_account_id ? subAccountMap.get(lead.sub_account_id) || null : null,
+      created_by: lead.created_by || null,
+      created_at: formatTimestampIST(lead.created_at),
+      updated_at: formatTimestampIST(lead.updated_at),
+    }));
+
+    return NextResponse.json({ success: true, leads: formattedLeads });
+  } catch (error: any) {
+    console.error('Leads list API error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
