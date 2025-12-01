@@ -6,7 +6,32 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createSupabaseServerClient();
 
-    // Try to fetch from employees table if it exists
+    // First, try to fetch from users table (primary source)
+    const { data: usersData, error: usersError } = await supabase
+      .from('users')
+      .select('username')
+      .order('username', { ascending: true });
+
+    if (!usersError && usersData && usersData.length > 0) {
+      // Extract unique usernames and exclude Admin
+      const uniqueEmployees = [...new Set(
+        usersData
+          .map((user: any) => user.username)
+          .filter((username: string | null | undefined) => {
+            if (!username) return false;
+            return username.trim().toLowerCase() !== 'admin';
+          })
+      )].sort();
+      
+      if (uniqueEmployees.length > 0) {
+        return NextResponse.json({ 
+          success: true, 
+          employees: uniqueEmployees
+        });
+      }
+    }
+
+    // Fallback: Try to fetch from employees table if it exists
     const { data: employeesData, error: employeesError } = await supabase
       .from('employees')
       .select('name, username')
@@ -23,10 +48,12 @@ export async function GET(request: NextRequest) {
           })
       )].sort();
       
-      return NextResponse.json({ 
-        success: true, 
-        employees: uniqueEmployees.length > 0 ? uniqueEmployees : ['Employee1', 'Employee2', 'Employee3']
-      });
+      if (uniqueEmployees.length > 0) {
+        return NextResponse.json({ 
+          success: true, 
+          employees: uniqueEmployees
+        });
+      }
     }
 
     // Fallback: Try to get employees from accounts assigned_employee column
@@ -45,10 +72,12 @@ export async function GET(request: NextRequest) {
           })
       )].sort();
       
-      return NextResponse.json({ 
-        success: true, 
-        employees: uniqueEmployees.length > 0 ? uniqueEmployees : ['Employee1', 'Employee2', 'Employee3']
-      });
+      if (uniqueEmployees.length > 0) {
+        return NextResponse.json({ 
+          success: true, 
+          employees: uniqueEmployees
+        });
+      }
     }
 
     // Final fallback: return default list

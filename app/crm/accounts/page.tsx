@@ -225,16 +225,17 @@ export default function AccountsPage() {
       if (editAccount) {
         // Update account
         try {
-          const assignedEmployee = !isAdmin && username ? username : formData.assignedEmployee;
+          // Admin can assign to any employee, employees cannot change assignment
+          const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee);
           
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               accountName: formData.accountName,
-              companyStage: formData.companyStage,
-              companyTag: formData.companyTag,
-              assignedEmployee: assignedEmployee,
+              companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
+              companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
+              assignedEmployee: assignedEmployee || null,
               website: formData.website || null,
               gstNumber: formData.gstNumber || null,
               notes: formData.notes || null,
@@ -260,9 +261,10 @@ export default function AccountsPage() {
         }
       }
 
-      // For employees, always use their username as assignedEmployee
-      // For admin, use the selected employee from the form
-      const assignedEmployee = !isAdmin && username ? username : formData.assignedEmployee;
+      // For employees, always use their username as assignedEmployee (auto-assigned)
+      // For admin, use the selected employee from the form (or null if not selected)
+      // The backend will handle auto-assignment if createdBy is an employee
+      const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : null);
 
       // Create new account
       const response = await fetch('/api/accounts', {
@@ -270,9 +272,9 @@ export default function AccountsPage() {
         headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             accountName: formData.accountName,
-            companyStage: formData.companyStage,
-            companyTag: formData.companyTag,
-            assignedEmployee: assignedEmployee,
+            companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
+            companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
+            assignedEmployee: assignedEmployee || null,
             website: formData.website || null,
             gstNumber: formData.gstNumber || null,
             notes: formData.notes || null,

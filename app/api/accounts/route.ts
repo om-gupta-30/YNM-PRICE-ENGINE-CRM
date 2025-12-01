@@ -160,15 +160,28 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseServerClient();
 
+    // Determine assigned employee:
+    // 1. If assignedEmployee is provided (admin assigning), use it
+    // 2. If createdBy is provided and is an employee (not Admin), auto-assign to them
+    // 3. Otherwise, leave as null (admin can assign later)
+    let finalAssignedEmployee = assignedEmployee || null;
+    if (!finalAssignedEmployee && createdBy && createdBy.toLowerCase() !== 'admin') {
+      // Auto-assign to the employee who created the account
+      finalAssignedEmployee = createdBy;
+    }
+
     // Insert account (parent accounts don't have state/city - only sub-accounts do)
     // Stage, Tag, and Employee are optional - admin can assign later
+    // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)
+    // assigned_to is an alias for assigned_employee (both columns updated for compatibility)
     const { data: account, error } = await supabase
       .from('accounts')
       .insert({
         account_name: accountName,
-        company_stage: companyStage || null,
-        company_tag: companyTag || null,
-        assigned_employee: assignedEmployee || null,
+        company_stage: (companyStage && companyStage.trim() !== '') ? companyStage : null,
+        company_tag: (companyTag && companyTag.trim() !== '') ? companyTag : null,
+        assigned_employee: finalAssignedEmployee,
+        assigned_to: finalAssignedEmployee, // Also update assigned_to column
         website: website || null,
         gst_number: gstNumber || null,
         notes: notes || null,
@@ -190,12 +203,13 @@ export async function POST(request: NextRequest) {
     try {
       await supabase.from('activities').insert({
         account_id: account.id,
-        employee_id: createdBy || assignedEmployee || 'System',
+        employee_id: createdBy || finalAssignedEmployee || 'System',
         activity_type: 'note',
-        description: `Account "${accountName}" created`,
+        description: `Account "${accountName}" created${finalAssignedEmployee ? ` and assigned to ${finalAssignedEmployee}` : ''}`,
         metadata: {
           website: website || null,
           gst_number: gstNumber || null,
+          assigned_employee: finalAssignedEmployee,
         },
       });
     } catch (activityError) {

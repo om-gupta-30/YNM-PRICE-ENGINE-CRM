@@ -756,14 +756,17 @@ export default function AccountDetailsPage() {
           onClose={() => setShowEditModal(false)}
           onSubmit={async (formData: AccountFormData) => {
             try {
+              // Admin can assign to any employee, employees cannot change assignment
+              const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : account?.assigned_employee || null);
+              
               const response = await fetch(`/api/accounts/${accountId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   accountName: formData.accountName,
-                  companyStage: formData.companyStage,
-                  companyTag: formData.companyTag,
-                  assignedEmployee: formData.assignedEmployee,
+                  companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
+                  companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
+                  assignedEmployee: assignedEmployee || null,
                   website: formData.website || null,
                   gstNumber: formData.gstNumber || null,
                   notes: formData.notes || null,
@@ -797,6 +800,8 @@ export default function AccountDetailsPage() {
             industries: account.industries || [],
           }}
           mode="edit"
+          isAdmin={isAdmin}
+          currentUser={username}
         />
       )}
 

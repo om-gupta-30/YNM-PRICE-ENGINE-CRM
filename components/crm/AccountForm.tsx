@@ -215,7 +215,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
               </div>
             </div>
 
-            {/* Assigned Employee - Only show for admin */}
+            {/* Assigned Employee - Admin can assign to any employee, employees are auto-assigned */}
             {isAdmin ? (
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">
@@ -235,6 +235,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-slate-400 mt-1">Select an employee to assign this account to, or leave unassigned to assign later</p>
               </div>
             ) : (
               // For employees, show read-only field with their name
@@ -249,7 +250,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                   disabled
                   readOnly
                 />
-                <p className="text-xs text-slate-400 mt-1">Account will be automatically assigned to you</p>
+                <p className="text-xs text-slate-400 mt-1">This account will be automatically assigned to you when created</p>
               </div>
             )}
 

@@ -113,14 +113,20 @@ export async function PUT(
 
     // Update only provided fields (removed contact_person, phone, email, address, state_id, city_id - not needed for parent accounts)
     if (body.accountName !== undefined) updateData.account_name = body.accountName.trim();
-    if (body.companyStage !== undefined) updateData.company_stage = body.companyStage;
-    if (body.companyTag !== undefined) updateData.company_tag = body.companyTag;
+    // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)
+    if (body.companyStage !== undefined) updateData.company_stage = (body.companyStage && body.companyStage.trim() !== '') ? body.companyStage : null;
+    if (body.companyTag !== undefined) updateData.company_tag = (body.companyTag && body.companyTag.trim() !== '') ? body.companyTag : null;
     if (body.website !== undefined) updateData.website = body.website?.trim() || null;
     if (body.gstNumber !== undefined) updateData.gst_number = body.gstNumber?.trim() || null;
     if (body.relatedProducts !== undefined) updateData.related_products = body.relatedProducts || [];
     if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
     if (body.industries !== undefined) updateData.industries = body.industries || [];
-    if (body.assignedEmployee !== undefined) updateData.assigned_employee = body.assignedEmployee || null;
+    // Update both assigned_employee and assigned_to columns (assigned_to is an alias for compatibility)
+    if (body.assignedEmployee !== undefined) {
+      const assignedValue = (body.assignedEmployee && body.assignedEmployee.trim() !== '') ? body.assignedEmployee : null;
+      updateData.assigned_employee = assignedValue;
+      updateData.assigned_to = assignedValue; // Also update assigned_to column
+    }
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
     // Get old account data for activity logging

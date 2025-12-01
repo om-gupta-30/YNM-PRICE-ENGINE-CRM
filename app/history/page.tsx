@@ -433,51 +433,96 @@ export default function HistoryPage() {
   };
   
   const exportToExcel = async (quote?: Quote) => {
-    // Dynamic import xlsx to reduce initial bundle size
-    const XLSX = await import('xlsx');
-    
-    const dataToExport = quote ? [quote] : filteredQuotes;
-    
-    const excelData = dataToExport.map(q => {
-      const baseData: any = {
-        'ID': q.id,
-        'Created By': q.created_by || '',
-        'Section': q.section,
-        'State': q.state_name || '',
-        'City': q.city_name || '',
-        'Sub Account Name': q.sub_account_name || q.customer_name,
-        'Purpose': q.purpose || '',
-        'Date': q.date,
-        'Final Total Cost': q.final_total_cost || '',
-        'Created At': formatTimestampIST(q.created_at),
-      };
+    try {
+      // Dynamic import xlsx to reduce initial bundle size
+      // Use namespace import to get all exports
+      const XLSX = await import('xlsx');
       
-      // Add section-specific fields
-      if (isMBCBQuote(q)) {
-        baseData['Quantity (rm)'] = q.quantity_rm || '';
-        baseData['Total Weight per rm'] = q.total_weight_per_rm || '';
-        baseData['Total Cost per rm'] = q.total_cost_per_rm || '';
-      } else if (isSignagesQuote(q)) {
-        const payload = q.raw_payload || {};
-        baseData['Board Type'] = payload.boardType || '';
-        baseData['Shape'] = payload.shape || '';
-        baseData['Area (sq ft)'] = payload.areaSqFt || '';
-        baseData['Quantity'] = payload.quantity || '';
-        baseData['Cost Per Piece'] = payload.costPerPiece || '';
+      // Verify XLSX has required methods
+      if (!XLSX || !XLSX.utils || !XLSX.writeFile) {
+        console.error('XLSX library not properly loaded:', XLSX);
+        setToast({ message: 'Excel export library is not available. Please refresh the page and try again.', type: 'error' });
+        return;
       }
       
-      return baseData;
-    });
-    
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
-    
-    const fileName = quote 
-      ? `Quotation-${quote.id}-${quote.customer_name.replace(/\s+/g, '-')}.xlsx`
-      : `${activeTab.toUpperCase()}-Quotations-${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    XLSX.writeFile(wb, fileName);
+      const dataToExport = quote ? [quote] : filteredQuotes;
+      
+      if (!dataToExport || dataToExport.length === 0) {
+        setToast({ message: 'No quotations to export', type: 'error' });
+        return;
+      }
+      
+      const excelData = dataToExport.map(q => {
+        const baseData: any = {
+          'ID': q.id,
+          'Created By': q.created_by || '',
+          'Section': q.section,
+          'State': q.state_name || '',
+          'City': q.city_name || '',
+          'Sub Account Name': q.sub_account_name || q.customer_name || '',
+          'Purpose': q.purpose || '',
+          'Date': q.date || '',
+          'Final Total Cost': q.final_total_cost || 0,
+          'Created At': formatTimestampIST(q.created_at),
+        };
+        
+        // Add section-specific fields
+        if (isMBCBQuote(q)) {
+          baseData['Quantity (rm)'] = q.quantity_rm || '';
+          baseData['Total Weight per rm'] = q.total_weight_per_rm || '';
+          baseData['Total Cost per rm'] = q.total_cost_per_rm || '';
+        } else if (isSignagesQuote(q)) {
+          const payload = q.raw_payload || {};
+          baseData['Board Type'] = payload.boardType || '';
+          baseData['Shape'] = payload.shape || '';
+          baseData['Area (sq ft)'] = payload.areaSqFt || '';
+          baseData['Quantity'] = payload.quantity || '';
+          baseData['Cost Per Piece'] = payload.costPerPiece || '';
+        } else if (q.section?.toLowerCase().includes('paint')) {
+          const payload = q.raw_payload || {};
+          baseData['Area (sq ft)'] = payload.areaSqFt || '';
+          baseData['Cost Per Sq Ft'] = payload.costPerSqFt || '';
+          baseData['Quantity'] = payload.quantity || '';
+        }
+        
+        return baseData;
+      });
+      
+      if (!excelData || excelData.length === 0) {
+        setToast({ message: 'No data to export', type: 'error' });
+        return;
+      }
+      
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      
+      // Set column widths for better readability
+      const maxWidth = 30;
+      const wscols = Object.keys(excelData[0] || {}).map(() => ({ wch: maxWidth }));
+      ws['!cols'] = wscols;
+      
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
+      
+      const fileName = quote 
+        ? `Quotation-${quote.id}-${(quote.customer_name || quote.sub_account_name || 'Unknown').replace(/\s+/g, '-')}.xlsx`
+        : `${activeTab.toUpperCase()}-Quotations-${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      XLSX.writeFile(wb, fileName);
+      
+      // Show success message
+      setToast({ 
+        message: quote 
+          ? 'Quotation exported to Excel successfully' 
+          : `${dataToExport.length} quotation(s) exported to Excel successfully`, 
+        type: 'success' 
+      });
+    } catch (err: any) {
+      console.error('Error exporting to Excel:', err);
+      setToast({ 
+        message: `Failed to export to Excel: ${err.message || 'Unknown error'}. Please try again.`, 
+        type: 'error' 
+      });
+    }
   };
 
   // Helper function to convert Quote to any (removed - PDF export disabled)
