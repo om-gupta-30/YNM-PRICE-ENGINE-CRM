@@ -21,10 +21,11 @@ export async function GET(
 
     if (type === 'places') {
       // Return states as places of supply (since places_of_supply table doesn't exist)
+      // Use state_name column (not name) to match the actual database schema
       const { data, error } = await supabase
         .from('states')
-        .select('name')
-        .order('name', { ascending: true })
+        .select('state_name')
+        .order('state_name', { ascending: true })
         .limit(10000);
 
       if (error) {
@@ -33,7 +34,7 @@ export async function GET(
         return NextResponse.json({ data: [] });
       }
 
-      return NextResponse.json({ data: data.map((item) => item.name) });
+      return NextResponse.json({ data: data.map((item) => item.state_name) });
     }
 
     if (type === 'customers') {

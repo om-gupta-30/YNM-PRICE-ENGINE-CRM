@@ -43,6 +43,11 @@ export async function POST(request: NextRequest) {
           continue;
         } else if (functionError) {
           console.warn(`Database function error for ${table.name}:`, functionError);
+          // If it's a format() argument error, the function signature might be wrong
+          // Continue to fallback method which works reliably
+          if (functionError.code === '22023' || functionError.message?.includes('format()')) {
+            console.warn(`Database function has incorrect signature for ${table.name}, using manual method`);
+          }
           // Continue to fallback method
         }
 

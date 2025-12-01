@@ -1,7 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { shouldDisableAnimations } from '@/lib/utils/performanceUtils';
+
+// Dynamic import for Recharts to reduce initial bundle size
+const PieChart = dynamic(() => import('recharts').then(mod => mod.PieChart), { ssr: false });
+const Pie = dynamic(() => import('recharts').then(mod => mod.Pie), { ssr: false });
+const Cell = dynamic(() => import('recharts').then(mod => mod.Cell), { ssr: false });
+const ResponsiveContainer = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), { ssr: false });
+const Legend = dynamic(() => import('recharts').then(mod => mod.Legend), { ssr: false });
+const Tooltip = dynamic(() => import('recharts').then(mod => mod.Tooltip), { ssr: false });
 
 interface ChartData {
   name: string;
@@ -26,10 +35,32 @@ const COLORS = {
 export default function QuotationStatusChart({ accountId, employeeUsername, isAdmin }: QuotationStatusChartProps) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isVisible, setIsVisible] = useState(false);
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // Lazy load chart only when visible (IntersectionObserver)
+  useEffect(() => {
+    if (!chartRef.current) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+    
+    observer.observe(chartRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
-    loadData();
-  }, [accountId, employeeUsername, isAdmin]);
+    if (isVisible) {
+      loadData();
+    }
+  }, [accountId, employeeUsername, isAdmin, isVisible]);
 
   const loadData = async () => {
     try {
@@ -52,6 +83,14 @@ export default function QuotationStatusChart({ accountId, employeeUsername, isAd
     }
   };
 
+  if (!isVisible) {
+    return (
+      <div ref={chartRef} className="flex items-center justify-center h-64">
+        <p className="text-slate-400">Loading chart...</p>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -69,7 +108,7 @@ export default function QuotationStatusChart({ accountId, employeeUsername, isAd
   }
 
   return (
-    <div className="w-full h-64">
+    <div ref={chartRef} className="w-full h-64">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -81,6 +120,7 @@ export default function QuotationStatusChart({ accountId, employeeUsername, isAd
             outerRadius={80}
             fill="#8884d8"
             dataKey="value"
+            isAnimationActive={!shouldDisableAnimations()} // Disable animation on low-power devices
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={COLORS[entry.name as keyof typeof COLORS] || '#64748b'} />

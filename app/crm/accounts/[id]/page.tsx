@@ -241,7 +241,7 @@ export default function AccountDetailsPage() {
               </button>
               
               {/* Main header card */}
-              <div className="relative bg-gradient-to-r from-slate-800/90 via-slate-800/70 to-slate-900/90 rounded-3xl border border-slate-700/50 overflow-hidden backdrop-blur-xl">
+              <div className="relative bg-gradient-to-r from-slate-800/90 via-slate-800/70 to-slate-900/90 rounded-3xl border border-slate-700/50 overflow-hidden backdrop-blur-sm">
                 {/* Decorative accent */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-premium-gold via-amber-500 to-premium-gold"></div>
                 <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-premium-gold/10 to-transparent rounded-bl-full"></div>

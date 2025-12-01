@@ -14,13 +14,13 @@ const LogoutButton = memo(function LogoutButton() {
   const [submitting, setSubmitting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Check if user is admin on mount
+  // Check if user is admin on mount and on pathname change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const adminStatus = localStorage.getItem('isAdmin');
       setIsAdmin(adminStatus === 'true');
     }
-  }, []);
+  }, [pathname]); // Re-check when pathname changes
 
   const options = useMemo(
     () => ['Lunch Break', 'Meeting / Field Visit', 'End of Day', 'Other'],
@@ -31,13 +31,17 @@ const LogoutButton = memo(function LogoutButton() {
     e.preventDefault();
     e.stopPropagation();
     
-    // If admin, logout directly without showing modal
-    if (isAdmin) {
+    // Check admin status again to ensure it's current
+    const currentIsAdmin = typeof window !== 'undefined' && localStorage.getItem('isAdmin') === 'true';
+    
+    // If admin, logout directly without showing modal (no reason required)
+    if (currentIsAdmin || isAdmin) {
       handleDirectLogout();
-    } else {
-      // If employee, show modal to ask for reason
-      setShowModal(true);
+      return;
     }
+    
+    // If employee, show modal to ask for reason
+    setShowModal(true);
   };
 
   const handleDirectLogout = async () => {
@@ -128,15 +132,18 @@ const LogoutButton = memo(function LogoutButton() {
           e.stopPropagation();
         }}
         disabled={submitting}
-        className="glassmorphic-premium rounded-xl text-sm font-semibold text-white hover:text-premium-gold transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-premium-gold/30 cursor-pointer btn-ripple btn-press btn-3d disabled:opacity-60 disabled:cursor-not-allowed"
+        className="glassmorphic-premium rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold text-white hover:text-premium-gold transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-premium-gold/30 cursor-pointer btn-ripple btn-press btn-3d disabled:opacity-60 disabled:cursor-not-allowed touch-manipulation"
         style={{
           backdropFilter: 'blur(20px)',
           backgroundColor: 'rgba(255, 255, 255, 0.1)',
           border: '1px solid rgba(255, 255, 255, 0.2)',
           cursor: 'pointer',
           pointerEvents: 'auto',
-          padding: '8px 14px',
+          padding: '10px 16px',
+          minHeight: '44px',
+          minWidth: '44px',
           margin: 0,
+          WebkitTapHighlightColor: 'transparent',
         }}
       >
         {submitting ? 'Logging out…' : 'Log Out'}

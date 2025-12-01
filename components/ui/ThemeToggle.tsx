@@ -2,7 +2,6 @@
 
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 
 export default function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -65,30 +64,25 @@ export default function ThemeToggle() {
   };
 
   return (
-    <motion.button
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
+    <button
       onClick={handleToggle}
-      className="relative p-3 rounded-full backdrop-blur-xl border-2 transition-all duration-300 shadow-2xl pointer-events-auto cursor-pointer z-[10000]"
+      className="relative p-2 sm:p-3 rounded-full backdrop-blur-sm border-2 transition-all duration-200 shadow-lg pointer-events-auto cursor-pointer z-[10000] touch-manipulation"
       style={{
         background: isDark
           ? 'linear-gradient(135deg, rgba(116, 6, 13, 0.9) 0%, rgba(139, 10, 18, 0.9) 100%)'
           : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 238, 231, 0.95) 100%)',
         borderColor: isDark ? 'rgba(209, 168, 90, 0.5)' : 'rgba(116, 6, 13, 0.3)',
+        minHeight: '44px',
+        minWidth: '44px',
+        WebkitTapHighlightColor: 'transparent',
       }}
       aria-label="Toggle theme"
       type="button"
     >
-      <motion.div
-        animate={{ rotate: isDark ? 180 : 0 }}
-        transition={{ duration: 0.5, ease: 'easeInOut' }}
-        className="text-2xl"
-      >
+      <div className="text-xl sm:text-2xl">
         {isDark ? '🌙' : '☀️'}
-      </motion.div>
-    </motion.button>
+      </div>
+    </button>
   );
 }
 

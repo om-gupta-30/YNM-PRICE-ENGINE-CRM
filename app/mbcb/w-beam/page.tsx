@@ -16,9 +16,10 @@ import { calculateWBeamWeights } from '@/lib/calculations/wBeamCalculations';
 import { calculatePostWeights } from '@/lib/calculations/postCalculations';
 import { calculateSpacerWeights } from '@/lib/calculations/spacerCalculations';
 import { useDebounce } from '@/hooks/useDebounce';
-import { generateProfessionalPDF, PDFQuotationData } from '@/lib/utils/pdfGenerator';
-import { generateNewProfessionalPDF, PDFQuotationDataNew, PDFItemData } from '@/lib/utils/pdfGeneratorNew';
-import { generateYNMESTPDF } from '@/app/utils/pdfGeneratorYNMEST';
+// Dynamic imports for PDF generation to reduce initial bundle size
+import dynamic from 'next/dynamic';
+import type { PDFQuotationData } from '@/lib/utils/pdfGenerator';
+import type { PDFQuotationDataNew, PDFItemData } from '@/lib/utils/pdfGeneratorNew';
 import { numberToWords } from '@/lib/utils/numberToWords';
 import { getHSNCode, getGSTRate } from '@/lib/utils/hsnSacCodes';
 
@@ -740,8 +741,9 @@ export default function WBeamPage() {
       bankDetails: undefined, // Can be added later
     };
     
-    // Generate PDF using clean YNMEST generator
+    // Generate PDF using clean YNMEST generator - dynamic import for performance
     try {
+      const { generateYNMESTPDF } = await import('@/app/utils/pdfGeneratorYNMEST');
       await generateYNMESTPDF({
         estimateNumber: currentEstimateNumber,
         estimateDate: formatDate(estimateDate),

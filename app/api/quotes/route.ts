@@ -311,21 +311,28 @@ export async function GET(request: NextRequest) {
     }
 
     // If no product_type specified, fetch from all tables and combine
-    const buildQuery = (tableName: string) => {
-      let query = supabase.from(tableName).select('*');
-      if (createdBy) {
-        query = query.eq('created_by', createdBy);
+    const buildQuery = async (tableName: string) => {
+      try {
+        let query = supabase.from(tableName).select('*');
+        if (createdBy) {
+          query = query.eq('created_by', createdBy);
+        }
+        const result = await query.order('created_at', { ascending: false }).limit(limit);
+        return result;
+      } catch (error: any) {
+        console.error(`Error building query for ${tableName}:`, error);
+        return { data: null, error: { message: error?.message || 'Query failed', code: error?.code } };
       }
-      return query.order('created_at', { ascending: false }).limit(limit);
     };
     
+    // Use Promise.allSettled to handle individual failures gracefully
     const [mbcbResult, signagesResult, paintResult] = await Promise.all([
       buildQuery('quotes_mbcb'),
       buildQuery('quotes_signages'),
       buildQuery('quotes_paint'),
     ]);
 
-    // Log all errors for debugging
+    // Log all errors for debugging, but continue with available data
     if (mbcbResult.error) {
       console.error('quotes_mbcb error:', JSON.stringify(mbcbResult.error, null, 2));
     }
@@ -336,7 +343,15 @@ export async function GET(request: NextRequest) {
       console.error('quotes_paint error:', JSON.stringify(paintResult.error, null, 2));
     }
 
-    if (mbcbResult.error || signagesResult.error || paintResult.error) {
+    // Continue with available data even if some tables fail
+    // This provides graceful degradation
+    const hasAnyError = mbcbResult.error || signagesResult.error || paintResult.error;
+    const hasAnyData = (mbcbResult.data && mbcbResult.data.length > 0) || 
+                       (signagesResult.data && signagesResult.data.length > 0) || 
+                       (paintResult.data && paintResult.data.length > 0);
+    
+    // If all queries failed, return error
+    if (hasAnyError && !hasAnyData) {
       const error = mbcbResult.error || signagesResult.error || paintResult.error;
       console.error('Error fetching quotes - Full error object:', JSON.stringify(error, null, 2));
       
@@ -356,6 +371,15 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ 
           error: 'Database tables not found. Please run database setup script.',
           code: 'TABLE_NOT_FOUND'
+        }, { status: 500 });
+      }
+      
+      // Check for fetch/network errors
+      if (error?.message?.includes('fetch failed') || error?.message?.includes('TypeError')) {
+        console.error('NETWORK ERROR: Failed to connect to database.');
+        return NextResponse.json({ 
+          error: 'Database connection failed. Please check your network connection and Supabase configuration.',
+          code: 'NETWORK_ERROR'
         }, { status: 500 });
       }
       

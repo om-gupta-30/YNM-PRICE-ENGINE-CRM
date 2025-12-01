@@ -6,7 +6,7 @@ import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
 import { supabaseBrowser } from '@/lib/utils/supabaseClient';
 import { Quote } from '@/lib/constants/types';
-import * as XLSX from 'xlsx';
+import dynamic from 'next/dynamic';
 import QuotationDetailsModal from '@/components/modals/QuotationDetailsModal';
 import StateCitySelect from '@/components/forms/StateCitySelect';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
@@ -432,7 +432,10 @@ export default function HistoryPage() {
     }
   };
   
-  const exportToExcel = (quote?: Quote) => {
+  const exportToExcel = async (quote?: Quote) => {
+    // Dynamic import xlsx to reduce initial bundle size
+    const XLSX = await import('xlsx');
+    
     const dataToExport = quote ? [quote] : filteredQuotes;
     
     const excelData = dataToExport.map(q => {
@@ -752,8 +755,8 @@ export default function HistoryPage() {
   
   // Render MBCB table
   const renderMBCBTable = () => (
-    <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-      <table className="w-full">
+    <div className="overflow-x-auto max-h-[600px] overflow-y-auto -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <table className="w-full min-w-[900px] sm:min-w-0">
         <thead className="sticky top-0 bg-[#1A103C]/95 backdrop-blur-sm z-10">
           <tr className="border-b border-white/20">
             <th className="text-left py-4 px-4 text-sm font-bold text-white">
@@ -1026,13 +1029,13 @@ export default function HistoryPage() {
   };
   
   return (
-    <div className="min-h-screen flex flex-col items-start py-12 pt-16 pb-32 relative">
+    <div className="min-h-screen flex flex-col items-start py-6 sm:py-8 md:py-12 pt-12 sm:pt-14 md:pt-16 pb-20 sm:pb-24 md:pb-32 relative">
       
-      <div className="w-full max-w-7xl mx-auto px-4">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
         {/* Header */}
         <div className="w-full flex flex-col items-center mb-10 title-glow fade-up">
-          <h1 className="text-6xl md:text-8xl font-extrabold text-white mb-4 text-center tracking-tight drop-shadow-2xl text-neon-gold" style={{ 
-            textShadow: '0 0 40px rgba(209, 168, 90, 0.4), 0 0 80px rgba(209, 168, 90, 0.2), 0 0 120px rgba(116, 6, 13, 0.1)',
+          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-8xl font-extrabold text-white mb-4 text-center tracking-tight drop-shadow-md text-neon-gold px-2" style={{ 
+            textShadow: '0 0 10px rgba(209, 168, 90, 0.3)', /* Reduced for performance */
             letterSpacing: '-0.02em'
           }}>
             Quotation History
@@ -1043,7 +1046,7 @@ export default function HistoryPage() {
         </div>
         
         {/* Section Tabs */}
-        <div className="glassmorphic-premium rounded-3xl p-6 mb-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl card-3d card-depth">
+        <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-6 mb-4 sm:mb-6 md:mb-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md card-3d card-depth">
           <div className="flex flex-wrap gap-4 justify-center">
             <button
               onClick={() => {
@@ -1089,7 +1092,7 @@ export default function HistoryPage() {
         
         {/* Paint - Coming Soon */}
         {activeTab === 'paint' && (
-          <div className="glassmorphic-premium rounded-3xl p-20 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl text-center card-3d card-depth">
+          <div className="glassmorphic-premium rounded-3xl p-20 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md text-center card-3d card-depth">
             <div className="text-6xl mb-6">🎨</div>
             <h2 className="text-4xl font-extrabold text-white mb-4">Coming Soon</h2>
             <p className="text-xl text-slate-300">Paint quotation history will be available here soon.</p>
@@ -1100,7 +1103,7 @@ export default function HistoryPage() {
         {activeTab !== 'paint' && (
           <>
             {/* Filters Card */}
-            <div className="glassmorphic-premium rounded-3xl p-8 mb-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
+            <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-4 sm:p-6 md:p-8 mb-4 sm:mb-6 md:mb-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-extrabold text-white drop-shadow-lg">Filters</h2>
                 <button
@@ -1204,7 +1207,7 @@ export default function HistoryPage() {
             </div>
             
             {/* Table Card */}
-            <div className="glassmorphic-premium rounded-3xl p-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
+            <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md">
               {loading ? (
                 <div className="text-center py-20">
                   <div className="animate-spin text-4xl text-premium-gold mb-4">⏳</div>

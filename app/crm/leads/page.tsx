@@ -56,6 +56,10 @@ export default function LeadsPage() {
   // Sorting state
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'score' | 'priority'>('newest');
   
+  // Pagination for performance on large lists
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 30; // Render max 30 items at a time for performance
+  
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   
@@ -212,6 +216,20 @@ export default function LeadsPage() {
 
     return filtered;
   }, [leads, searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
+  
+  // Paginated leads for performance (only render visible items)
+  const paginatedLeads = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredLeads.slice(startIndex, endIndex);
+  }, [filteredLeads, currentPage, itemsPerPage]);
+  
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
 
 
   // Handle open modal for create
@@ -484,15 +502,15 @@ export default function LeadsPage() {
 
   return (
     <CRMLayout>
-      <div className="min-h-screen flex flex-col items-start py-12 pb-32 relative">
-        <div className="w-full max-w-7xl mx-auto px-4">
+      <div className="min-h-screen flex flex-col items-start py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative">
+        <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
           {/* Header with Title and Add Button */}
           <div className="w-full flex flex-col items-center mb-10 title-glow fade-up relative">
             <div className="w-full flex items-center justify-center mb-4 relative">
               <h1 
-                className="text-6xl md:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-2xl text-neon-gold"
+                className="text-3xl sm:text-4xl md:text-6xl lg:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-md text-neon-gold"
                 style={{ 
-                  textShadow: '0 0 40px rgba(209, 168, 90, 0.4), 0 0 80px rgba(209, 168, 90, 0.2), 0 0 120px rgba(116, 6, 13, 0.1)',
+                  textShadow: '0 0 10px rgba(209, 168, 90, 0.3)', /* Reduced for performance */
                   letterSpacing: '-0.02em'
                 }}
               >
@@ -501,10 +519,11 @@ export default function LeadsPage() {
               <button 
                 onClick={handleOpenModal}
                 disabled={submitting}
-                className="absolute right-0 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-xl transition-all duration-300 shadow-lg shadow-premium-gold/50 hover:shadow-xl hover:shadow-premium-gold/70 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="absolute right-0 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
                 <span>+</span>
-                <span className="hidden md:inline">Add Lead</span>
+                <span className="hidden sm:inline">Add Lead</span>
               </button>
             </div>
             <div className="gold-divider w-full"></div>
@@ -546,11 +565,12 @@ export default function LeadsPage() {
             
             <div className="text-sm text-slate-400">
               {filteredLeads.length} {filteredLeads.length === 1 ? 'lead' : 'leads'} found
+              {totalPages > 1 && ` (Page ${currentPage} of ${totalPages})`}
             </div>
           </div>
 
           {/* Search and Filters */}
-          <div className="glassmorphic-premium rounded-3xl p-6 mb-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
+          <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-6 mb-4 sm:mb-5 md:mb-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md">
             <div className="mb-4">
               <div className="flex items-center gap-3 mb-2">
                 <div className="text-2xl">🔍</div>
@@ -719,8 +739,8 @@ export default function LeadsPage() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
+              <div className="overflow-x-auto -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <table className="w-full min-w-[800px] sm:min-w-0">
                   <thead className="sticky top-0 bg-[#1A103C]/95 backdrop-blur-sm z-10">
                     <tr className="border-b border-white/20">
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Lead Name</th>
@@ -737,7 +757,7 @@ export default function LeadsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                      {filteredLeads.map((lead) => {
+                      {paginatedLeads.map((lead) => {
                         const score = calculateLeadScore(lead);
                         const priority = lead.priority || null;
                         return (
@@ -821,19 +841,23 @@ export default function LeadsPage() {
                               <div className="flex items-center gap-1 md:gap-2 flex-wrap">
                             <button
                               onClick={() => handleViewDetails(lead)}
-                                  className="px-2 md:px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200 hover:scale-105"
+                                  className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px]"
+                                  style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
                               View
                             </button>
                             <button
                               onClick={() => handleEditLead(lead)}
-                                  className="px-2 md:px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200 hover:scale-105"
+                                  className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px]"
+                                  style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
                               Edit
                             </button>
                             <button
                               onClick={() => handleDeleteClick(lead)}
-                                  className="px-2 md:px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 hover:scale-105"
+                                  disabled={isDeleting}
+                                  className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px] disabled:opacity-50"
+                                  style={{ WebkitTapHighlightColor: 'transparent' }}
                             >
                                   Del
                             </button>
@@ -844,6 +868,34 @@ export default function LeadsPage() {
                       })}
                   </tbody>
                 </table>
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4 px-4 py-3 border-t border-slate-700/50">
+                    <div className="text-sm text-slate-400">
+                      Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredLeads.length)} of {filteredLeads.length} leads
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-slate-300 px-3">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -863,12 +915,42 @@ export default function LeadsPage() {
                   <p className="text-slate-300 font-medium">Loading leads...</p>
                 </div>
               ) : (
-                <LeadsKanban 
-                  leads={filteredLeads} 
-                  onStatusChange={handleStatusChange}
-                  onLeadClick={handleViewDetails}
-                  onPriorityChange={handlePriorityChange}
-                />
+                <>
+                  <LeadsKanban 
+                    leads={paginatedLeads} 
+                    onStatusChange={handleStatusChange}
+                    onLeadClick={handleViewDetails}
+                    onPriorityChange={handlePriorityChange}
+                  />
+                  
+                  {/* Pagination Controls for Kanban */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 px-4 py-3 border-t border-slate-700/50">
+                      <div className="text-sm text-slate-400">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredLeads.length)} of {filteredLeads.length} leads
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-slate-300 px-3">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}

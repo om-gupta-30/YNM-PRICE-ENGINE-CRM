@@ -198,7 +198,7 @@ function Breadcrumbs() {
 
   return (
     <nav className="mb-6 fade-up flex items-center justify-center" aria-label="Breadcrumb">
-      <ol className="flex items-center space-x-2 text-sm glassmorphic-premium px-6 py-3 rounded-xl">
+      <ol className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm glassmorphic-premium px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 rounded-lg sm:rounded-xl overflow-x-auto max-w-full">
         {breadcrumbs.map((crumb, index) => {
           const isLast = index === breadcrumbs.length - 1;
           return (

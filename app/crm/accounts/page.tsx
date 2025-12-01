@@ -50,6 +50,10 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Pagination for performance on large lists
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 30; // Render max 30 items at a time for performance
 
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
@@ -156,6 +160,20 @@ export default function AccountsPage() {
     
     return filtered;
   }, [accounts, filterStateId, filterCityId, sortField, sortDirection]);
+  
+  // Paginated accounts for performance (only render visible items)
+  const paginatedAccounts = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredAndSortedAccounts.slice(startIndex, endIndex);
+  }, [filteredAndSortedAccounts, currentPage, itemsPerPage]);
+  
+  const totalPages = Math.ceil(filteredAndSortedAccounts.length / itemsPerPage);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterStateId, filterCityId, sortField, sortDirection]);
   
   // Get unique states and cities for filters
   const uniqueStates = useMemo(() => {
@@ -311,15 +329,15 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="min-h-screen py-12 pb-32 relative w-full">
-      <div className="w-full max-w-7xl mx-auto px-4">
+    <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
         {/* Header with Title and Add Button */}
         <div className="w-full flex flex-col items-center mb-10 title-glow fade-up relative">
           <div className="w-full flex items-center justify-center mb-4 relative">
             <h1 
-              className="text-6xl md:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-2xl text-neon-gold"
+              className="text-3xl sm:text-4xl md:text-6xl lg:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-md text-neon-gold"
               style={{ 
-                textShadow: '0 0 40px rgba(209, 168, 90, 0.4), 0 0 80px rgba(209, 168, 90, 0.2), 0 0 120px rgba(116, 6, 13, 0.1)',
+                textShadow: '0 0 10px rgba(209, 168, 90, 0.3)', /* Reduced for performance */
                 letterSpacing: '-0.02em'
               }}
             >
@@ -328,17 +346,19 @@ export default function AccountsPage() {
             <button 
               onClick={handleOpenModal}
               disabled={submitting}
-              className="absolute right-0 px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-xl transition-all duration-300 shadow-lg shadow-premium-gold/50 hover:shadow-xl hover:shadow-premium-gold/70 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="absolute right-0 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               <span>+</span>
-              <span>Create New Account</span>
+              <span className="hidden sm:inline">Create New Account</span>
+              <span className="sm:hidden">New</span>
             </button>
           </div>
         <div className="gold-divider w-full"></div>
       </div>
 
         {/* Filters - More Prominent */}
-        <div className="glassmorphic-premium rounded-3xl p-6 mb-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
+        <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-6 mb-4 sm:mb-5 md:mb-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md">
           <div className="mb-4">
             <div className="flex items-center gap-3 mb-2">
               <div className="text-2xl">🔍</div>
@@ -399,7 +419,7 @@ export default function AccountsPage() {
         </div>
 
         {/* Accounts Table */}
-        <div className="rounded-3xl bg-black/20 border border-premium-gold/20 shadow-xl overflow-x-auto w-full">
+        <div className="rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/20 border border-premium-gold/20 shadow-md overflow-x-auto w-full -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* Sorting Instructions */}
           <div className="mb-4 p-3 bg-premium-gold/10 border border-premium-gold/30 rounded-lg">
             <p className="text-sm text-slate-300 mb-2">
@@ -421,14 +441,15 @@ export default function AccountsPage() {
             </div>
           ) : (
             <div
-              className="accounts-table-wrapper rounded-3xl bg-black/20 border border-premium-gold/20 shadow-xl w-full"
+              className="accounts-table-wrapper rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/20 border border-premium-gold/20 shadow-md w-full"
               style={{
                 overflowX: 'auto',
                 overflowY: 'visible',
                 WebkitOverflowScrolling: 'touch',
                 pointerEvents: 'auto',
                 touchAction: 'pan-x',
-                overscrollBehaviorX: 'contain'
+                overscrollBehaviorX: 'contain',
+                minWidth: '100%',
               }}
             >
               <table
@@ -467,9 +488,11 @@ export default function AccountsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAndSortedAccounts.map((account, idx) => (
+                  {paginatedAccounts.map((account, idx) => {
+                    const globalIndex = (currentPage - 1) * itemsPerPage + idx;
+                    return (
                     <tr key={account.id} className="crm-tr">
-                      <td className="crm-td sr-col">{idx + 1}</td>
+                      <td className="crm-td sr-col">{globalIndex + 1}</td>
                       <td className="crm-td acc-col" title={account.accountName}>{account.accountName}</td>
                       <td className="crm-td score-col">
                         <EngagementScoreBadge score={account.engagementScore || 0} />
@@ -479,16 +502,45 @@ export default function AccountsPage() {
                       </td>
                       <td className="crm-td actions-col text-right">
                         <div className="grid grid-cols-2 gap-2 w-full text-right">
-                          <button onClick={() => router.push(`/crm/accounts/${account.id}`)} className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 rounded-lg">Details</button>
-                          <button onClick={() => handleViewSubAccounts(account.id)} className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 rounded-lg">Sub-Accounts</button>
-                          <button onClick={() => handleEditAccount(account)} className="px-3 py-1.5 text-xs font-semibold text-white bg-yellow-500/80 rounded-lg">Edit</button>
-                          {isAdmin && <button onClick={() => handleDeleteAccount(account.id)} className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 rounded-lg">Delete</button>}
+                          <button onClick={() => router.push(`/crm/accounts/${account.id}`)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-green-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Details</button>
+                          <button onClick={() => handleViewSubAccounts(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-blue-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Sub-Accounts</button>
+                          <button onClick={() => handleEditAccount(account)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-yellow-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Edit</button>
+                          {isAdmin && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  );
+                  })}
                 </tbody>
               </table>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 px-4 py-3 border-t border-slate-700/50">
+                  <div className="text-sm text-slate-400">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedAccounts.length)} of {filteredAndSortedAccounts.length} accounts
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-slate-300 px-3">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

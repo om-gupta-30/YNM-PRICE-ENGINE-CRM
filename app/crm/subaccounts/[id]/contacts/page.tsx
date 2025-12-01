@@ -226,7 +226,7 @@ export default function SubAccountContactsPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-start py-12 pb-32 relative">
-      <div className="w-full max-w-7xl mx-auto px-4">
+      <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
         {/* Header */}
         <div className="w-full flex flex-col items-center mb-10 title-glow fade-up relative">
           <div className="w-full flex items-center justify-between mb-4 relative">
@@ -244,9 +244,9 @@ export default function SubAccountContactsPage() {
               ← Back
             </button>
             <h1 
-              className="text-6xl md:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-2xl text-neon-gold"
+              className="text-3xl sm:text-4xl md:text-6xl lg:text-8xl font-extrabold text-white text-center tracking-tight drop-shadow-md text-neon-gold"
               style={{ 
-                textShadow: '0 0 40px rgba(209, 168, 90, 0.4), 0 0 80px rgba(209, 168, 90, 0.2), 0 0 120px rgba(116, 6, 13, 0.1)',
+                textShadow: '0 0 10px rgba(209, 168, 90, 0.3)', /* Reduced for performance */
                 letterSpacing: '-0.02em'
               }}
             >
@@ -255,7 +255,8 @@ export default function SubAccountContactsPage() {
             <button 
               onClick={handleOpenModal}
               disabled={submitting}
-              className="px-6 py-3 text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-xl transition-all duration-300 shadow-lg shadow-premium-gold/50 hover:shadow-xl hover:shadow-premium-gold/70 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-300 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               <span>+</span>
               <span>Add Contact</span>
@@ -277,8 +278,8 @@ export default function SubAccountContactsPage() {
               <p className="text-slate-300">No contacts found</p>
             </div>
           ) : (
-            <div className="overflow-x-auto custom-scrollbar-x">
-              <table className="w-full min-w-[1000px]">
+            <div className="overflow-x-auto custom-scrollbar-x -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <table className="w-full min-w-[1000px] sm:min-w-0">
                 <thead className="sticky top-0 bg-[#1A103C]/95 backdrop-blur-sm z-10">
                   <tr className="border-b border-white/20">
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Contact Name</th>

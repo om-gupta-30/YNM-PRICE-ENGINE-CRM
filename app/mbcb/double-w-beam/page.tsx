@@ -16,7 +16,9 @@ import { calculateWBeamWeights } from '@/lib/calculations/wBeamCalculations';
 import { calculatePostWeights } from '@/lib/calculations/postCalculations';
 import { calculateSpacerWeights } from '@/lib/calculations/spacerCalculations';
 import { useDebounce } from '@/hooks/useDebounce';
-import { generateProfessionalPDF, PDFQuotationData } from '@/lib/utils/pdfGenerator';
+// Dynamic import for PDF generation to reduce initial bundle size
+import dynamic from 'next/dynamic';
+import type { PDFQuotationData } from '@/lib/utils/pdfGenerator';
 
 type PartInput = {
   thickness?: number;
@@ -679,6 +681,8 @@ export default function DoubleWBeamPage() {
     };
     
     // Generate PDF using professional generator
+    // Dynamic import for PDF generation to reduce initial bundle size
+    const { generateProfessionalPDF } = await import('@/lib/utils/pdfGenerator');
     await generateProfessionalPDF(pdfData, `Double-W-Beam-Estimate-${new Date().toISOString().split('T')[0]}.pdf`);
     
     // PDF generation no longer saves to Supabase to prevent duplicates

@@ -52,17 +52,20 @@ export default function LoginPage() {
         return;
       }
 
-      if (!response.ok) {
-        const errorMsg = data?.error || 'Invalid ID or password';
+      // Check if response has success flag first
+      if (!data?.success) {
+        const errorMsg = data?.error || 'Invalid user ID or password';
         console.error('Login failed:', errorMsg);
         setError(errorMsg);
         setIsLoading(false);
         return;
       }
 
-      // Check if response has success flag
-      if (!data?.success) {
-        setError(data?.error || 'Login failed. Please try again.');
+      // Check response status after checking success flag
+      if (!response.ok) {
+        const errorMsg = data?.error || 'Invalid user ID or password';
+        console.error('Login failed:', errorMsg);
+        setError(errorMsg);
         setIsLoading(false);
         return;
       }
