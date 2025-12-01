@@ -167,6 +167,7 @@ export interface Account {
   notes?: string | null;
   is_active?: boolean;
   engagement_score?: number | null;
+  industries?: Array<{ industry_id: number; industry_name: string; sub_industry_id: number; sub_industry_name: string }> | null;
   created_at: string;
   updated_at?: string | null;
   last_activity_at?: string | null;
