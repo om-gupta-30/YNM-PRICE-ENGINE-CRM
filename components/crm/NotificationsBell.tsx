@@ -19,6 +19,8 @@ export default function NotificationsBell() {
   }, []);
 
   const loadNotifications = async () => {
+    if (typeof window === 'undefined') return;
+    
     try {
       const username = localStorage.getItem('username') || '';
       const response = await fetch(`/api/notifications?userId=${username}&unreadOnly=true`);
