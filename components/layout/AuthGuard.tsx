@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 interface AuthGuardProps {
@@ -12,48 +12,65 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const lastPathname = useRef<string>('');
 
   useEffect(() => {
     // Check authentication on mount and route change
-    if (typeof window !== 'undefined') {
-      setIsChecking(true);
-      const auth = localStorage.getItem('auth');
-      const isAuth = auth === 'true';
-      
-      // Public routes - allow access
-      if (pathname === '/login' || pathname === '/change-password') {
-        // If already authenticated on login page, redirect to home
-        if (pathname === '/login' && isAuth) {
-          router.replace('/home');
-          setIsAuthenticated(true);
-        } else {
-          setIsAuthenticated(true); // Allow public pages to render
-        }
-        setIsChecking(false);
-        return;
-      }
+    if (typeof window === 'undefined') {
+      return;
+    }
 
-      // Protected route - require authentication
-      // This includes: /, /home, /mbcb, /mbcb/*, /paint, /signages, /crm, etc.
-      if (!isAuth) {
-        // Redirect to login immediately
-        router.replace('/login');
-        setIsAuthenticated(false);
+    // Prevent re-running for the same pathname
+    if (lastPathname.current === pathname) {
+      return;
+    }
+    lastPathname.current = pathname;
+
+    setIsChecking(true);
+    const auth = localStorage.getItem('auth');
+    const isAuth = auth === 'true';
+    
+    // Public routes - allow access
+    if (pathname === '/login' || pathname === '/change-password') {
+      // If already authenticated on login page, redirect to home
+      if (pathname === '/login' && isAuth) {
+        router.replace('/home');
+        setIsAuthenticated(true);
+        setIsChecking(false);
+        return;
+      } else {
+        setIsAuthenticated(true); // Allow public pages to render
         setIsChecking(false);
         return;
       }
-      
-      // If user visits root path while authenticated, redirect to home
-      if (pathname === '/') {
+    }
+
+    // If user visits root path, redirect based on auth status
+    if (pathname === '/') {
+      if (isAuth) {
         router.replace('/home');
-        return;
+      } else {
+        router.replace('/login');
       }
-      
-      // Authenticated - allow access
       setIsAuthenticated(true);
       setIsChecking(false);
+      return;
     }
-  }, [pathname, router]);
+
+    // Protected route - require authentication
+    // This includes: /home, /mbcb, /mbcb/*, /paint, /signages, /crm, etc.
+    if (!isAuth) {
+      // Redirect to login immediately
+      router.replace('/login');
+      setIsAuthenticated(false);
+      setIsChecking(false);
+      return;
+    }
+    
+    // Authenticated - allow access
+    setIsAuthenticated(true);
+    setIsChecking(false);
+  }, [pathname]); // Removed router from dependencies as it's stable
 
   // Show nothing while checking auth (prevents flash)
   if (isChecking || isAuthenticated === null) {
