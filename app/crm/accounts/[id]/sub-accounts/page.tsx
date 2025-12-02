@@ -181,18 +181,18 @@ export default function SubAccountsPage() {
   // Get unique states and cities for filters
   const uniqueStates = Array.from(new Map(subAccounts
     .filter(acc => acc.stateId && acc.stateName)
-    .map(acc => [acc.stateId, { id: acc.stateId, name: acc.stateName }]))
+    .map(acc => [acc.stateId, { id: acc.stateId!, name: acc.stateName! }]))
     .values())
-    .sort((a, b) => a.name!.localeCompare(b.name!));
+    .sort((a, b) => a.name.localeCompare(b.name));
   
   const uniqueCities = Array.from(new Map(subAccounts
     .filter(acc => {
       if (!stateFilter) return acc.cityId && acc.cityName;
       return acc.stateId === stateFilter && acc.cityId && acc.cityName;
     })
-    .map(acc => [acc.cityId, { id: acc.cityId, name: acc.cityName }]))
+    .map(acc => [acc.cityId, { id: acc.cityId!, name: acc.cityName! }]))
     .values())
-    .sort((a, b) => a.name!.localeCompare(b.name!));
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   useEffect(() => {
     if (accountId && (username || isAdmin)) {
@@ -432,7 +432,7 @@ export default function SubAccountsPage() {
               >
                 <option value="">All States</option>
                 {uniqueStates.map((state) => (
-                  <option key={state.id} value={state.id}>
+                  <option key={state.id} value={String(state.id)}>
                     {state.name}
                   </option>
                 ))}
@@ -449,7 +449,7 @@ export default function SubAccountsPage() {
                   {stateFilter ? 'All Cities' : 'Select State First'}
                 </option>
                 {uniqueCities.map((city) => (
-                  <option key={city.id} value={city.id}>
+                  <option key={city.id} value={String(city.id)}>
                     {city.name}
                   </option>
                 ))}
@@ -640,7 +640,7 @@ export default function SubAccountsPage() {
                     >
                       <option value="">Select State</option>
                       {states.map((state) => (
-                        <option key={state.id} value={state.id}>
+                        <option key={state.id} value={String(state.id)}>
                           {state.name}
                         </option>
                       ))}
@@ -662,7 +662,7 @@ export default function SubAccountsPage() {
                         {loadingCities ? 'Loading cities...' : formData.stateId ? 'Select City' : 'Select State first'}
                       </option>
                       {cities.map((city) => (
-                        <option key={city.id} value={city.id}>
+                        <option key={city.id} value={String(city.id)}>
                           {city.name}
                         </option>
                       ))}

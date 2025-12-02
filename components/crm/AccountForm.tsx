@@ -64,13 +64,11 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     companyStage: '',
     companyTag: '',
     assignedEmployee: '',
-    stateId: null,
-    cityId: null,
-    address: '',
     website: '',
     gstNumber: '',
     notes: '',
     industries: [],
+    industryProjects: {},
   });
   const [employeeOptions, setEmployeeOptions] = useState<string[]>(['Employee1', 'Employee2']);
   const [industryProjects, setIndustryProjects] = useState<Record<string, number>>({});
