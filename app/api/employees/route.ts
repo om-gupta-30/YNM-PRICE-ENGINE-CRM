@@ -49,10 +49,10 @@ export async function GET(request: NextRequest) {
       )].sort();
       
       if (uniqueEmployees.length > 0) {
-        return NextResponse.json({ 
-          success: true, 
+      return NextResponse.json({ 
+        success: true, 
           employees: uniqueEmployees
-        });
+      });
       }
     }
 
@@ -73,10 +73,10 @@ export async function GET(request: NextRequest) {
       )].sort();
       
       if (uniqueEmployees.length > 0) {
-        return NextResponse.json({ 
-          success: true, 
+      return NextResponse.json({ 
+        success: true, 
           employees: uniqueEmployees
-        });
+      });
       }
     }
 

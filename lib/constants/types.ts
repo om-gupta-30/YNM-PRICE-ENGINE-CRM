@@ -159,6 +159,8 @@ export interface Account {
   contact_person?: string | null;
   phone?: string | null;
   email?: string | null;
+  state_id?: number | null;
+  city_id?: number | null;
   address?: string | null;
   website?: string | null;
   gst_number?: string | null;
@@ -272,6 +274,7 @@ export interface SubAccount {
   updated_at?: string | null;
   state_id?: number | null;
   city_id?: number | null;
+  address?: string | null;
 }
 
 // Activity Log interface

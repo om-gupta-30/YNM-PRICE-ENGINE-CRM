@@ -120,17 +120,17 @@ export async function PUT(
 
       if (changes.length > 0) {
         try {
-          await supabase.from('activities').insert({
-            account_id: data.account_id,
-            contact_id: id,
-            employee_id: body.updated_by || 'Admin',
+      await supabase.from('activities').insert({
+        account_id: data.account_id,
+        contact_id: id,
+        employee_id: body.updated_by || 'Admin',
             activity_type: body.call_status ? 'call' : 'note',
             description: `Contact ${data.name} updated - ${changes.join(', ')}`,
             metadata: { 
               call_status: body.call_status || data.call_status,
               changes,
             },
-          });
+      });
         } catch (activityError) {
           console.warn('Failed to log contact update activity:', activityError);
         }

@@ -125,8 +125,8 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                   <p className="text-white font-semibold">{activity.description}</p>
                   <div className="flex items-center gap-3 mt-1">
                     <p className="text-slate-400 text-xs">
-                      By {activity.employee_id}
-                    </p>
+                    By {activity.employee_id}
+                  </p>
                   </div>
                 </div>
               </div>

@@ -48,8 +48,8 @@ export async function GET(
     } else {
       // Only account-specific activities
       query = supabase
-        .from('activities')
-        .select('*')
+      .from('activities')
+      .select('*')
         .eq('account_id', accountId);
     }
 

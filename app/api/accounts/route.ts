@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
               console.error(`Error fetching city for account ${account.id}:`, err);
             }
           }
-
+          
           // If sub_accounts table doesn't exist, just use empty array
           if (subAccountsError && (subAccountsError.code === '42P01' || subAccountsError.message?.includes('does not exist'))) {
             return {
