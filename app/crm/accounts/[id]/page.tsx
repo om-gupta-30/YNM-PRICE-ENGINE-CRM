@@ -40,22 +40,27 @@ export default function AccountDetailsPage() {
 
   // User info state - MUST be declared before useEffects that use them
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
   // Load user info on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      const adminValue = localStorage.getItem('isAdmin') === 'true';
+      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
+      // Data analysts should see all accounts like admins, but with restrictions
+      setIsAdmin(adminValue || dataAnalystValue);
+      setIsDataAnalyst(dataAnalystValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
 
   useEffect(() => {
-    if (accountId && (username || isAdmin)) {
+    if (accountId && (username || isAdmin || isDataAnalyst)) {
       loadAccount();
       loadRelatedData();
     }
-  }, [accountId, username, isAdmin]);
+  }, [accountId, username, isAdmin, isDataAnalyst]);
 
   // Update page title with account name
   useEffect(() => {
@@ -69,10 +74,12 @@ export default function AccountDetailsPage() {
   const loadAccount = async () => {
     try {
       const params = new URLSearchParams();
-      if (!isAdmin && username) {
+      // Data analysts should see all accounts like admins
+      const effectiveIsAdmin = isAdmin || isDataAnalyst;
+      if (!effectiveIsAdmin && username) {
         params.append('employee', username);
       }
-      if (isAdmin) {
+      if (effectiveIsAdmin) {
         params.append('isAdmin', 'true');
       }
       
@@ -658,7 +665,9 @@ export default function AccountDetailsPage() {
           onSubmit={async (formData: AccountFormData) => {
             try {
               // Admin can assign to any employee, employees cannot change assignment
-              const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : (account?.assigned_employee || null));
+              // Keep existing assignment if not admin, or allow admin to change it
+              // Note: AccountFormData doesn't include assignedEmployee, so we keep the existing value
+              const assignedEmployee = account?.assigned_employee || null;
               
               const response = await fetch(`/api/accounts/${accountId}`, {
                 method: 'PUT',
@@ -668,8 +677,6 @@ export default function AccountDetailsPage() {
                   companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
                   companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
                   assignedEmployee: assignedEmployee || null,
-                  website: formData.website || null,
-                  gstNumber: formData.gstNumber || null,
                   notes: formData.notes || null,
                   industries: formData.industries || [],
                   industryProjects: formData.industryProjects || {},
@@ -695,9 +702,6 @@ export default function AccountDetailsPage() {
             accountName: account?.account_name || '',
             companyStage: account?.company_stage || '',
             companyTag: account?.company_tag || '',
-            assignedEmployee: account?.assigned_employee || '',
-            website: account?.website || '',
-            gstNumber: account?.gst_number || '',
             notes: account?.notes || '',
             industries: account?.industries || [],
             industryProjects: account?.industry_projects || {},

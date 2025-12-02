@@ -42,7 +42,10 @@ export default function TasksPage() {
         router.replace('/login');
         return;
       }
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      const adminValue = localStorage.getItem('isAdmin') === 'true';
+      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
+      // Data analysts should be treated as employees, not admins
+      setIsAdmin(adminValue && !dataAnalystValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, [router]);

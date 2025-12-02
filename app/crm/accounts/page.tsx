@@ -31,6 +31,7 @@ interface Account {
 export default function AccountsPage() {
   const router = useRouter();
   
+  // ========== ALL STATE DECLARATIONS FIRST ==========
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
@@ -45,30 +46,61 @@ export default function AccountsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 30; // Render max 30 items at a time for performance
 
-  // User info state
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
-  const [username, setUsername] = useState('');
-
-  // Load user info on mount
-  useEffect(() => {
+  // User info state - initialize from localStorage immediately to avoid uninitialized variable errors
+  const [isAdmin, setIsAdmin] = useState(() => {
     if (typeof window !== 'undefined') {
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
-      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
-      setUsername(localStorage.getItem('username') || '');
+      return localStorage.getItem('isAdmin') === 'true';
     }
-  }, []);
+    return false;
+  });
+  const [isDataAnalyst, setIsDataAnalyst] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('isDataAnalyst') === 'true';
+    }
+    return false;
+  });
+  const [username, setUsername] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('username') || '';
+    }
+    return '';
+  });
 
+  // Filter states - MUST be declared before functions that use them
+  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
+  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
+  const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
+  const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
+
+  // Account details modal state
+  const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // Sort states
+  type SortField = 'accountName' | 'engagementScore' | null;
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // ========== FUNCTIONS AFTER STATE ==========
   // Fetch accounts from API
   const fetchAccounts = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (!isAdmin && username) {
-        params.append('employee', username);
-      }
-      if (isAdmin) {
-        params.append('isAdmin', 'true');
+      // Get current values from localStorage to avoid stale closure
+      if (typeof window !== 'undefined') {
+        const currentIsAdmin = localStorage.getItem('isAdmin') === 'true';
+        const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
+        const currentUsername = localStorage.getItem('username') || '';
+        // Data analysts should see all accounts like admins, but with restrictions
+        const effectiveIsAdmin = currentIsAdmin || currentIsDataAnalyst;
+        if (!effectiveIsAdmin && currentUsername) {
+          params.append('employee', currentUsername);
+        }
+        if (effectiveIsAdmin) {
+          params.append('isAdmin', 'true');
+        }
       }
       
       const response = await fetch(`/api/accounts?${params}`);
@@ -101,42 +133,6 @@ export default function AccountsPage() {
     }
   };
 
-  // Fetch accounts on mount and when user info changes
-  useEffect(() => {
-    if (username || isAdmin) {
-      fetchAccounts();
-      fetchIndustries();
-    }
-  }, [username, isAdmin]);
-
-  // Update sub-industries when industry filter changes
-  useEffect(() => {
-    if (filterIndustryId) {
-      const selectedIndustry = industries.find(ind => ind.id === filterIndustryId);
-      setSubIndustries(selectedIndustry?.subIndustries || []);
-    } else {
-      setSubIndustries([]);
-      setFilterSubIndustryId(null);
-    }
-  }, [filterIndustryId, industries]);
-
-  
-  // Account details modal state
-  const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
-  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-
-  // Sort states
-  type SortField = 'accountName' | 'engagementScore' | null;
-  type SortDirection = 'asc' | 'desc';
-  const [sortField, setSortField] = useState<SortField>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
-  // Filter states
-  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
-  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
-  const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
-  const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
-
   // Handle sort click
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -149,6 +145,155 @@ export default function AccountsPage() {
     }
   };
 
+  // Handle modal open for create
+  const handleOpenModal = () => {
+    setEditAccount(null);
+    setIsModalOpen(true);
+  };
+
+  // Handle modal open for edit
+  const handleEditAccount = (account: Account) => {
+    setEditAccount(account);
+    setIsModalOpen(true);
+  };
+
+  // Handle modal close
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditAccount(null);
+  };
+
+  // Handle form submit
+  const handleSubmit = async (formData: AccountFormData) => {
+    try {
+      setSubmitting(true);
+      
+      // Get current values to avoid stale closure
+      const currentIsAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
+      const currentIsDataAnalyst = typeof window !== 'undefined' ? localStorage.getItem('isDataAnalyst') === 'true' : false;
+      const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+      
+      if (editAccount) {
+        // Update account
+        try {
+          // Data analysts cannot assign accounts - keep existing assignment or set to null
+          // Admin can assign to any employee, employees cannot change assignment
+          const assignedEmployee = currentIsDataAnalyst ? (editAccount?.assignedEmployee || null) : (currentIsAdmin ? formData.assignedEmployee : (!currentIsAdmin && currentUsername ? currentUsername : formData.assignedEmployee));
+          const response = await fetch(`/api/accounts/${editAccount.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accountName: formData.accountName,
+              companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
+              companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
+              assignedEmployee: assignedEmployee || null,
+              notes: formData.notes || null,
+              industries: formData.industries || [],
+              industryProjects: formData.industryProjects || {},
+              updatedBy: currentUsername || 'System',
+            }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to update account');
+          }
+
+          setToast({ message: 'Account updated successfully', type: 'success' });
+          handleCloseModal();
+          await fetchAccounts(); // Refresh list
+          return;
+        } catch (error: any) {
+          console.error('Error updating account:', error);
+          setToast({ message: error.message || 'Failed to update account', type: 'error' });
+          return;
+        }
+      }
+
+      // For employees, always use their username as assignedEmployee (auto-assigned)
+      // For admin, use the selected employee from the form (or null if not selected)
+      // Data analysts cannot assign accounts - always set to null
+      const assignedEmployee = currentIsDataAnalyst ? null : (currentIsAdmin ? formData.assignedEmployee : (!currentIsAdmin && currentUsername ? currentUsername : null));
+      // Create new account
+      const response = await fetch('/api/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accountName: formData.accountName,
+            companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
+            companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
+            assignedEmployee: assignedEmployee || null,
+            notes: formData.notes || null,
+            industries: formData.industries || [],
+            industryProjects: formData.industryProjects || {},
+            createdBy: currentUsername || 'System',
+          }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create account');
+      }
+
+      setToast({ message: 'Account created successfully', type: 'success' });
+      handleCloseModal();
+      await fetchAccounts(); // Refresh list
+    } catch (error: any) {
+      console.error('Error creating account:', error);
+      setToast({ message: error.message || 'Failed to create account', type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Handle view sub-accounts
+  const handleViewSubAccounts = (accountId: number) => {
+    router.push(`/crm/accounts/${accountId}/sub-accounts`);
+  };
+  
+  // Handle delete account
+  const handleDeleteAccount = async (accountId: number) => {
+    // Data analysts cannot delete accounts
+    if (typeof window !== 'undefined') {
+      const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
+      if (currentIsDataAnalyst) {
+        setToast({ message: 'Data analysts cannot delete accounts', type: 'error' });
+        return;
+      }
+    }
+    
+    if (!confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      const params = new URLSearchParams();
+      const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+      if (currentUsername) {
+        params.append('deletedBy', currentUsername);
+      }
+      
+      const response = await fetch(`/api/accounts/${accountId}?${params}`, {
+        method: 'DELETE',
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to delete account');
+      }
+      
+      setToast({ message: 'Account deleted successfully', type: 'success' });
+      await fetchAccounts(); // Refresh list
+    } catch (error: any) {
+      console.error('Error deleting account:', error);
+      setToast({ message: error.message || 'Failed to delete account', type: 'error' });
+    }
+  };
+
+  // ========== COMPUTED VALUES ==========
   // Filtered and sorted accounts
   const filteredAndSortedAccounts = useMemo(() => {
     let filtered = [...accounts];
@@ -197,148 +342,52 @@ export default function AccountsPage() {
   }, [filteredAndSortedAccounts, currentPage, itemsPerPage]);
   
   const totalPages = Math.ceil(filteredAndSortedAccounts.length / itemsPerPage);
-  
+
+  // ========== EFFECTS ==========
+  // Load user info on mount (update if changed)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
+      setUsername(localStorage.getItem('username') || '');
+    }
+  }, []);
+
+  // Fetch accounts on mount and when user info changes
+  useEffect(() => {
+    // Wait for user info to be loaded before fetching
+    // Check localStorage directly to avoid uninitialized variable errors
+    if (typeof window === 'undefined') return;
+    
+    const currentUsername = localStorage.getItem('username') || '';
+    const currentIsAdmin = localStorage.getItem('isAdmin') === 'true';
+    const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
+    
+    // Always fetch if we have any user info (username, admin, or data analyst)
+    if (currentUsername || currentIsAdmin || currentIsDataAnalyst) {
+      fetchAccounts();
+      fetchIndustries();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [username, isAdmin, isDataAnalyst]);
+
+  // Update sub-industries when industry filter changes
+  useEffect(() => {
+    if (filterIndustryId) {
+      const selectedIndustry = industries.find(ind => ind.id === filterIndustryId);
+      setSubIndustries(selectedIndustry?.subIndustries || []);
+    } else {
+      setSubIndustries([]);
+      setFilterSubIndustryId(null);
+    }
+  }, [filterIndustryId, industries]);
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId]);
 
-  // Handle modal open for create
-  const handleOpenModal = () => {
-    setEditAccount(null);
-    setIsModalOpen(true);
-  };
-
-  // Handle modal open for edit
-  const handleEditAccount = (account: Account) => {
-    setEditAccount(account);
-    setIsModalOpen(true);
-  };
-
-  // Handle modal close
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditAccount(null);
-  };
-
-  // Handle form submit
-  const handleSubmit = async (formData: AccountFormData) => {
-    try {
-      setSubmitting(true);
-      
-      if (editAccount) {
-        // Update account
-        try {
-          // Data analysts cannot assign accounts - keep existing assignment or set to null
-          // Admin can assign to any employee, employees cannot change assignment
-          const assignedEmployee = isDataAnalyst ? (editAccount?.assignedEmployee || null) : (isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee));
-          const response = await fetch(`/api/accounts/${editAccount.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              accountName: formData.accountName,
-              companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
-              companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
-              assignedEmployee: assignedEmployee || null,
-              notes: formData.notes || null,
-              industries: formData.industries || [],
-              industryProjects: formData.industryProjects || {},
-              updatedBy: username || 'System',
-            }),
-          });
-
-          const data = await response.json();
-
-          if (!response.ok || !data.success) {
-            throw new Error(data.error || 'Failed to update account');
-          }
-
-          setToast({ message: 'Account updated successfully', type: 'success' });
-          handleCloseModal();
-          await fetchAccounts(); // Refresh list
-          return;
-        } catch (error: any) {
-          console.error('Error updating account:', error);
-          setToast({ message: error.message || 'Failed to update account', type: 'error' });
-          return;
-        }
-      }
-
-      // For employees, always use their username as assignedEmployee (auto-assigned)
-      // For admin, use the selected employee from the form (or null if not selected)
-      // The backend will handle auto-assignment if createdBy is an employee
-      // Data analysts cannot assign accounts - always set to null
-      // The backend will handle auto-assignment if createdBy is an employee
-      const assignedEmployee = isDataAnalyst ? null : (isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : null));
-      // Create new account
-      const response = await fetch('/api/accounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accountName: formData.accountName,
-            companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
-            companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
-            assignedEmployee: assignedEmployee || null,
-            notes: formData.notes || null,
-            industries: formData.industries || [],
-            industryProjects: formData.industryProjects || {},
-            createdBy: username || 'System',
-          }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create account');
-      }
-
-      setToast({ message: 'Account created successfully', type: 'success' });
-      handleCloseModal();
-      await fetchAccounts(); // Refresh list
-    } catch (error: any) {
-      console.error('Error creating account:', error);
-      setToast({ message: error.message || 'Failed to create account', type: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Handle view sub-accounts
-  const handleViewSubAccounts = (accountId: number) => {
-    router.push(`/crm/accounts/${accountId}/sub-accounts`);
-  };
-  
-  // Handle delete account
-  const handleDeleteAccount = async (accountId: number) => {
-    if (!confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
-      return;
-    }
-    
-    try {
-      const params = new URLSearchParams();
-      if (username) {
-        params.append('deletedBy', username);
-      }
-      
-      const response = await fetch(`/api/accounts/${accountId}?${params}`, {
-        method: 'DELETE',
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete account');
-      }
-      
-      setToast({ message: 'Account deleted successfully', type: 'success' });
-      await fetchAccounts(); // Refresh list
-    } catch (error: any) {
-      console.error('Error deleting account:', error);
-      setToast({ message: error.message || 'Failed to delete account', type: 'error' });
-    }
-  };
-
-
+  // ========== RENDER ==========
   return (
     <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
@@ -517,7 +566,7 @@ export default function AccountsPage() {
                           <button onClick={() => router.push(`/crm/accounts/${account.id}`)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-green-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Details</button>
                           <button onClick={() => handleViewSubAccounts(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-blue-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Sub-Accounts</button>
                           <button onClick={() => handleEditAccount(account)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-yellow-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Edit</button>
-                          {isAdmin && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}
+                          {isAdmin && !isDataAnalyst && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}
                         </div>
                       </td>
                     </tr>

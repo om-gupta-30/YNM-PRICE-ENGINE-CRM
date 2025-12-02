@@ -98,12 +98,17 @@ export default function SubAccountsPage() {
 
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
   // Load user info on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      const adminValue = localStorage.getItem('isAdmin') === 'true';
+      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
+      // Data analysts should see all accounts like admins, but with restrictions
+      setIsAdmin(adminValue || dataAnalystValue);
+      setIsDataAnalyst(dataAnalystValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
@@ -114,10 +119,12 @@ export default function SubAccountsPage() {
     
     try {
       const params = new URLSearchParams();
-      if (!isAdmin && username) {
+      // Data analysts should see all accounts like admins
+      const effectiveIsAdmin = isAdmin || isDataAnalyst;
+      if (!effectiveIsAdmin && username) {
         params.append('employee', username);
       }
-      if (isAdmin) {
+      if (effectiveIsAdmin) {
         params.append('isAdmin', 'true');
       }
       
@@ -225,12 +232,12 @@ export default function SubAccountsPage() {
   }, [subAccounts, stateFilter]);
 
   useEffect(() => {
-    if (accountId && (username || isAdmin)) {
+    if (accountId && (username || isAdmin || isDataAnalyst)) {
       fetchAccountInfo();
       fetchSubAccounts();
       fetchStates();
     }
-  }, [accountId, username, isAdmin]);
+  }, [accountId, username, isAdmin, isDataAnalyst]);
 
   // Fetch cities when state changes
   useEffect(() => {

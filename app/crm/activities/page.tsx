@@ -9,6 +9,7 @@ export default function ActivitiesPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
   const [filterEmployee, setFilterEmployee] = useState<string>('');
   const [filterDate, setFilterDate] = useState<string>('');
@@ -17,7 +18,11 @@ export default function ActivitiesPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      const adminValue = localStorage.getItem('isAdmin') === 'true';
+      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
+      // Data analysts should be treated as employees, not admins
+      setIsAdmin(adminValue && !dataAnalystValue);
+      setIsDataAnalyst(dataAnalystValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
