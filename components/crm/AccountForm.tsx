@@ -26,10 +26,11 @@ interface AccountFormProps {
   initialData?: AccountFormData | null;
   mode?: 'create' | 'edit';
   isAdmin?: boolean;
+  isDataAnalyst?: boolean;
   currentUser?: string;
 }
 
-export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, currentUser = '' }: AccountFormProps) {
+export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, isDataAnalyst = false, currentUser = '' }: AccountFormProps) {
   // Company Stage options (from enum)
   const companyStageOptions = [
     'Enterprise',

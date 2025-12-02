@@ -90,6 +90,7 @@ export default function LoginPage() {
       localStorage.setItem('userId', userDbId.toString());
       localStorage.setItem('department', data.department || 'Sales');
       localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
+      localStorage.setItem('isDataAnalyst', data.isDataAnalyst ? 'true' : 'false');
       // Update global username context
       setUsername(username);
       
@@ -106,8 +107,12 @@ export default function LoginPage() {
         // Clear auto-logout flag if it exists
         localStorage.removeItem('auto_logout');
         localStorage.removeItem('auto_logout_time');
-      // Redirect to landing page (use replace to prevent back button issues)
-      router.replace('/home');
+        // Redirect data analysts to CRM, others to home
+        if (data.isDataAnalyst) {
+          router.replace('/crm');
+        } else {
+          router.replace('/home');
+        }
       }
     } catch (err: any) {
       console.error('Login error:', err);

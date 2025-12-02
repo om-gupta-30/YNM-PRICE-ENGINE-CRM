@@ -45,22 +45,22 @@ export default function ThemeToggle() {
     setTheme(newTheme);
     // Force update immediately - apply to html element
     if (typeof document !== 'undefined') {
-      const root = document.documentElement;
-      if (newTheme === 'dark') {
-        root.classList.add('dark');
-        root.style.colorScheme = 'dark';
-      } else {
-        root.classList.remove('dark');
-        root.style.colorScheme = 'light';
-      }
-      // Also update body for immediate visual feedback
-      const body = document.body;
-      if (newTheme === 'dark') {
-        body.style.backgroundColor = '#0d0405';
-        body.style.color = '#F1F5F9';
-      } else {
-        body.style.backgroundColor = '#d4c4b0';
-        body.style.color = '#2a1a1a';
+    const root = document.documentElement;
+    if (newTheme === 'dark') {
+      root.classList.add('dark');
+      root.style.colorScheme = 'dark';
+    } else {
+      root.classList.remove('dark');
+      root.style.colorScheme = 'light';
+    }
+    // Also update body for immediate visual feedback
+    const body = document.body;
+    if (newTheme === 'dark') {
+      body.style.backgroundColor = '#0d0405';
+      body.style.color = '#F1F5F9';
+    } else {
+      body.style.backgroundColor = '#d4c4b0';
+      body.style.color = '#2a1a1a';
       }
     }
   };

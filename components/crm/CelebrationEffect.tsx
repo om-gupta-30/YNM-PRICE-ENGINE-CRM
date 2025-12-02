@@ -97,7 +97,7 @@ export default function CelebrationEffect() {
 
               setShowConfetti(true);
               if (typeof window !== 'undefined') {
-                sessionStorage.setItem(celebrationKey, 'true');
+              sessionStorage.setItem(celebrationKey, 'true');
               }
 
               // Hide confetti after 3 seconds

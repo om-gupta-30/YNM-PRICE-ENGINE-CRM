@@ -388,7 +388,7 @@ export default function AccountDetailsPage() {
                 </div>
               </div>
 
-              {/* Timeline */}
+                {/* Timeline */}
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">📅</span>
@@ -414,7 +414,6 @@ export default function AccountDetailsPage() {
                       <div className="flex-1">
                         <p className="text-slate-400 text-xs">Last Activity</p>
                         <p className="text-white font-medium text-sm">{account?.last_activity_at ? formatTimestamp(account.last_activity_at) : '—'}</p>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -443,15 +442,15 @@ export default function AccountDetailsPage() {
                       const projectCount = account?.industry_projects?.[projectKey] || 0;
                       return (
                         <div
-                          key={`industry-${item.industry_id}-${item.sub_industry_id}-${idx}`}
+                        key={`industry-${item.industry_id}-${item.sub_industry_id}-${idx}`}
                           className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-premium-gold/10 to-amber-600/10 text-premium-gold rounded-xl border border-premium-gold/20"
-                        >
-                          <span className="opacity-70">{item.industry_name}:</span>
-                          <span className="font-semibold">{item.sub_industry_name}</span>
+                      >
+                        <span className="opacity-70">{item.industry_name}:</span>
+                        <span className="font-semibold">{item.sub_industry_name}</span>
                           {projectCount > 0 && (
                             <span className="ml-2 px-2 py-0.5 bg-premium-gold/20 text-premium-gold rounded-md text-xs font-bold">
                               {projectCount} {projectCount === 1 ? 'Project' : 'Projects'}
-                            </span>
+                      </span>
                           )}
                         </div>
                       );

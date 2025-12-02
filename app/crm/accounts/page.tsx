@@ -40,7 +40,6 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [bulkAdding, setBulkAdding] = useState(false);
   
   // Pagination for performance on large lists
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,6 +47,7 @@ export default function AccountsPage() {
 
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
   // Load user info on mount
@@ -87,12 +87,37 @@ export default function AccountsPage() {
     }
   };
 
+  // Fetch industries
+  const fetchIndustries = async () => {
+    try {
+      const response = await fetch('/api/industries');
+      const data = await response.json();
+      if (data.success) {
+        setIndustries(data.industries || []);
+      }
+    } catch (error) {
+      console.error('Error fetching industries:', error);
+    }
+  };
+
   // Fetch accounts on mount and when user info changes
   useEffect(() => {
     if (username || isAdmin) {
       fetchAccounts();
+      fetchIndustries();
     }
   }, [username, isAdmin]);
+
+  // Update sub-industries when industry filter changes
+  useEffect(() => {
+    if (filterIndustryId) {
+      const selectedIndustry = industries.find(ind => ind.id === filterIndustryId);
+      setSubIndustries(selectedIndustry?.subIndustries || []);
+    } else {
+      setSubIndustries([]);
+      setFilterSubIndustryId(null);
+    }
+  }, [filterIndustryId, industries]);
 
   
   // Account details modal state
@@ -104,6 +129,12 @@ export default function AccountsPage() {
   type SortDirection = 'asc' | 'desc';
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Filter states
+  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
+  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
+  const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
+  const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
 
   // Handle sort click
   const handleSort = (field: SortField) => {
@@ -121,6 +152,24 @@ export default function AccountsPage() {
   const filteredAndSortedAccounts = useMemo(() => {
     let filtered = [...accounts];
     
+    // Apply industry filter
+    if (filterIndustryId) {
+      filtered = filtered.filter(account => {
+        if (!account.industries || account.industries.length === 0) return false;
+        return account.industries.some((ind: any) => ind.industry_id === filterIndustryId);
+      });
+    }
+    
+    // Apply sub-industry filter
+    if (filterSubIndustryId) {
+      filtered = filtered.filter(account => {
+        if (!account.industries || account.industries.length === 0) return false;
+        return account.industries.some((ind: any) => 
+          ind.industry_id === filterIndustryId && ind.sub_industry_id === filterSubIndustryId
+        );
+      });
+    }
+    
     // Apply sorting
     if (sortField) {
       filtered.sort((a, b) => {
@@ -137,7 +186,7 @@ export default function AccountsPage() {
     }
     
     return filtered;
-  }, [accounts, sortField, sortDirection]);
+  }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId]);
   
   // Paginated accounts for performance (only render visible items)
   const paginatedAccounts = useMemo(() => {
@@ -151,7 +200,7 @@ export default function AccountsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [sortField, sortDirection]);
+  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId]);
 
   // Handle modal open for create
   const handleOpenModal = () => {
@@ -181,7 +230,8 @@ export default function AccountsPage() {
         try {
           // Admin can assign to any employee, employees cannot change assignment
           const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee);
-          
+          // Data analysts cannot assign accounts - keep existing assignment or set to null
+          const assignedEmployee = isDataAnalyst ? (editAccount?.assignedEmployee || null) : (isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee));
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -219,8 +269,9 @@ export default function AccountsPage() {
       // For employees, always use their username as assignedEmployee (auto-assigned)
       // For admin, use the selected employee from the form (or null if not selected)
       // The backend will handle auto-assignment if createdBy is an employee
-      const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : null);
-
+      // Data analysts cannot assign accounts - always set to null
+      // The backend will handle auto-assignment if createdBy is an employee
+      const assignedEmployee = isDataAnalyst ? null : (isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : null));
       // Create new account
       const response = await fetch('/api/accounts', {
         method: 'POST',
@@ -291,40 +342,6 @@ export default function AccountsPage() {
     }
   };
 
-  // Handle bulk add accounts
-  const handleBulkAddAccounts = async () => {
-    if (!confirm('This will add 89 pre-configured accounts:\n\n- Company Tag: "New"\n- Company Stage: "Enterprise"\n- Assigned Employee: Unassigned\n\nContinue?')) {
-      return;
-    }
-
-    try {
-      setBulkAdding(true);
-      const params = new URLSearchParams();
-      params.append('isAdmin', 'true');
-
-      const response = await fetch(`/api/admin/bulk-add-accounts?${params}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to bulk add accounts');
-      }
-
-      setToast({ 
-        message: `Successfully added ${data.added} account(s). ${data.skipped > 0 ? `${data.skipped} account(s) already existed.` : ''}`, 
-        type: 'success' 
-      });
-      await fetchAccounts(); // Refresh list
-    } catch (error: any) {
-      console.error('Error bulk adding accounts:', error);
-      setToast({ message: error.message || 'Failed to bulk add accounts', type: 'error' });
-    } finally {
-      setBulkAdding(false);
-    }
-  };
 
   return (
     <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
@@ -342,22 +359,9 @@ export default function AccountsPage() {
               Accounts
             </h1>
             <div className="absolute right-0 flex items-center gap-2 sm:gap-3">
-              {isAdmin && (
-                <button 
-                  onClick={handleBulkAddAccounts}
-                  disabled={bulkAdding || submitting}
-                  className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-blue-500/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
-                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                  title="Bulk add 14 pre-configured accounts"
-                >
-                  <span>📦</span>
-                  <span className="hidden sm:inline">{bulkAdding ? 'Adding...' : 'Bulk Add'}</span>
-                  <span className="sm:hidden">{bulkAdding ? '...' : 'Bulk'}</span>
-                </button>
-              )}
               <button 
                 onClick={handleOpenModal}
-                disabled={submitting || bulkAdding}
+                disabled={submitting}
                 className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
@@ -370,6 +374,65 @@ export default function AccountsPage() {
         <div className="gold-divider w-full"></div>
       </div>
 
+
+        {/* Filters */}
+        <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+          <h3 className="text-sm font-semibold text-white mb-3">Filters</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Industry Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-2">Industry</label>
+              <select
+                value={filterIndustryId || ''}
+                onChange={(e) => {
+                  setFilterIndustryId(e.target.value ? parseInt(e.target.value) : null);
+                  setFilterSubIndustryId(null);
+                }}
+                className="input-premium w-full px-3 py-2 text-sm text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+              >
+                <option value="">All Industries</option>
+                {industries.map((industry) => (
+                  <option key={industry.id} value={industry.id}>
+                    {industry.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sub-Industry Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-2">Sub-Industry</label>
+              <select
+                value={filterSubIndustryId || ''}
+                onChange={(e) => setFilterSubIndustryId(e.target.value ? parseInt(e.target.value) : null)}
+                disabled={!filterIndustryId}
+                className="input-premium w-full px-3 py-2 text-sm text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">All Sub-Industries</option>
+                {subIndustries.map((subIndustry) => (
+                  <option key={subIndustry.id} value={subIndustry.id}>
+                    {subIndustry.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Clear Filters */}
+            {(filterIndustryId || filterSubIndustryId) && (
+              <div className="flex items-end">
+                <button
+                  onClick={() => {
+                    setFilterIndustryId(null);
+                    setFilterSubIndustryId(null);
+                  }}
+                  className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Accounts Table */}
         <div className="rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/20 border border-premium-gold/20 shadow-md overflow-x-auto w-full -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -505,6 +568,9 @@ export default function AccountsPage() {
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
         initialData={editAccount ? {
+        isAdmin={isAdmin}
+        isDataAnalyst={isDataAnalyst}
+        currentUser={username}
           accountName: editAccount.accountName || '',
           companyStage: editAccount.companyStage || '',
           companyTag: editAccount.companyTag || '',

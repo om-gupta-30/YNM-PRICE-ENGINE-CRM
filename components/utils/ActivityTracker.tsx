@@ -161,7 +161,7 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
       }
     };
     if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
@@ -169,7 +169,7 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
         window.removeEventListener(event, throttledHandleActivity);
       });
       if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
       if (throttleTimer) {
         clearTimeout(throttleTimer);

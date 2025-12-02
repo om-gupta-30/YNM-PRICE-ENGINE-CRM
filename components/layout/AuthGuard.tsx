@@ -85,6 +85,22 @@ export default function AuthGuard({ children }: AuthGuardProps) {
         setIsChecking(false);
         return;
       }
+
+      // Block data analysts from accessing price engine routes
+      const isDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
+      const priceEngineRoutes = ['/mbcb', '/paint', '/signages', '/home'];
+      const isPriceEngineRoute = priceEngineRoutes.some(route => pathname.startsWith(route));
+      
+      if (isDataAnalyst && isPriceEngineRoute) {
+        // Redirect data analysts to CRM if they try to access price engine
+        if (!hasRedirected.current) {
+          hasRedirected.current = true;
+          router.replace('/crm');
+        }
+        setIsAuthenticated(false);
+        setIsChecking(false);
+        return;
+      }
       
       // Authenticated - allow access
       setIsAuthenticated(true);

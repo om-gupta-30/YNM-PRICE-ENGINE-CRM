@@ -298,7 +298,10 @@ export default function SubAccountDetailsPage() {
                         <p className="text-3xl font-bold text-white">{quotations.length}</p>
                       </div>
                     </div>
-                    <div className="group relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 border border-slate-700/50 overflow-hidden hover:border-slate-600 transition-all">
+                    <button
+                      onClick={() => setActiveTab('contacts')}
+                      className="group relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 border border-slate-700/50 overflow-hidden hover:border-slate-600 transition-all cursor-pointer text-left w-full"
+                    >
                       <div className="relative">
                         <div className="flex items-center gap-2 mb-3">
                           <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
@@ -306,9 +309,12 @@ export default function SubAccountDetailsPage() {
                           </div>
                           <p className="text-slate-400 text-sm font-medium">Contacts</p>
                         </div>
-                        <p className="text-3xl font-bold text-white">{contacts.length}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-3xl font-bold text-white">{contacts.length}</p>
+                          <span className="text-xs text-premium-gold opacity-0 group-hover:opacity-100 transition-opacity">View →</span>
+                        </div>
                       </div>
-                    </div>
+                    </button>
                     <div className="group relative bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 border border-slate-700/50 overflow-hidden hover:border-slate-600 transition-all">
                       <div className="relative">
                         <div className="flex items-center gap-2 mb-3">

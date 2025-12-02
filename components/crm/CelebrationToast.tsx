@@ -79,7 +79,7 @@ export default function CelebrationToast() {
 
               setShowToast(true);
               if (typeof window !== 'undefined') {
-                sessionStorage.setItem(celebrationKey, 'true');
+              sessionStorage.setItem(celebrationKey, 'true');
               }
 
               // Hide toast after 5 seconds

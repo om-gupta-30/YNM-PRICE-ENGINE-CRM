@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import CRMLayout from '@/components/layout/CRMLayout';
 import LeadForm, { LeadFormData } from '@/components/crm/LeadForm';
 import LeadDetailsModal from '@/components/crm/LeadDetailsModal';
@@ -37,9 +38,20 @@ type ViewMode = 'table' | 'pipeline';
 type Priority = 'High Priority' | 'Medium Priority' | 'Low Priority' | null;
 
 export default function LeadsPage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // Block data analysts from accessing leads
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
+      if (isDataAnalyst) {
+        router.replace('/crm');
+      }
+    }
+  }, [router]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);

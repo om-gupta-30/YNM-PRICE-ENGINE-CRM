@@ -115,11 +115,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Detect department and admin status from username
-    // Admin = admin user
+    // Detect user role from username
+    // Admin and Mahesh = full admin users
+    // swamymahesh and mahesh = data analyst users (restricted admin)
     // Employee1, Employee2, Employee3 = sales employees
-    const isAdmin = user.username === 'Admin';
-    const department = isAdmin ? 'Sales' : 'Sales'; // All users are in Sales department for now
+    const isDataAnalyst = user.username === 'swamymahesh' || user.username === 'mahesh';
+    const isAdmin = user.username === 'Admin' || user.username === 'Mahesh';
+    const department = isAdmin || isDataAnalyst ? 'Sales' : 'Sales'; // All users are in Sales department for now
 
     // Return success with EXACT format as required
     // NEVER return undefined userId - always return user.username
@@ -132,7 +134,8 @@ export async function POST(request: NextRequest) {
       userId: user.username, // Keep for backward compatibility
       id: user.id, // Keep for backward compatibility
       department, // Add department
-      isAdmin, // Add isAdmin
+      isAdmin: isAdmin || isDataAnalyst, // Data analysts see admin portal but with restrictions
+      isDataAnalyst, // Flag for data analyst role
     };
 
     // Ensure userId is NEVER undefined

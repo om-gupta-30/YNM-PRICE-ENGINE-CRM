@@ -12,11 +12,13 @@ interface CRMLayoutProps {
 export default function CRMLayout({ children }: CRMLayoutProps) {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
 
-  // Check if user is admin
+  // Check if user is admin or data analyst
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
     }
   }, []);
 
@@ -26,6 +28,10 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
     }
     return pathname === path || pathname?.startsWith(path + '/');
   };
+
+  // Data analysts cannot see Leads, All Sub-Accounts, or All Contacts
+  const showLeads = !isDataAnalyst;
+  const showAdminSections = isAdmin && !isDataAnalyst; // Full admin only, not data analysts
 
   const menuItems = [
     {
@@ -38,11 +44,13 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
       href: '/crm/accounts',
       icon: '🏢',
     },
-    {
-      title: 'Leads',
-      href: '/crm/leads',
-      icon: '🎯',
-    },
+    ...(showLeads ? [
+      {
+        title: 'Leads',
+        href: '/crm/leads',
+        icon: '🎯',
+      },
+    ] : []),
     {
       title: 'Tasks',
       href: '/crm/tasks',
@@ -53,7 +61,7 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
       href: '/crm/activities',
       icon: '📝',
     },
-    ...(isAdmin ? [
+    ...(showAdminSections ? [
       {
         title: 'All Sub-Accounts',
         href: '/crm/admin/subaccounts',
