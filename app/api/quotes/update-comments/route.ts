@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     // Get current quote to append to history
     const { data: currentQuote, error: fetchError } = await supabase
       .from(tableName)
-      .select('comments, comments_history')
+      .select('comments, comments_history, sub_account_id, final_total_cost, created_by')
       .eq('id', quoteId)
       .single();
 
@@ -97,6 +97,34 @@ export async function POST(request: NextRequest) {
         { error: 'Failed to update quotation comments' },
         { status: 500 }
       );
+    }
+
+    // Log activity for comment updates
+    if (comments && comments.trim() && currentQuote.sub_account_id) {
+      try {
+        // Get account_id from sub_account
+        const { data: subAccount } = await supabase
+          .from('sub_accounts')
+          .select('account_id, sub_account_name')
+          .eq('id', currentQuote.sub_account_id)
+          .single();
+
+        if (subAccount?.account_id) {
+          await supabase.from('activities').insert({
+            account_id: subAccount.account_id,
+            employee_id: updatedBy,
+            activity_type: 'note',
+            description: `Comment added to Quotation #${quoteId}${subAccount.sub_account_name ? ` (${subAccount.sub_account_name})` : ''}`,
+            metadata: {
+              quotation_id: quoteId,
+              comment: comments.trim(),
+              section: section,
+            },
+          });
+        }
+      } catch (activityError) {
+        console.warn('Failed to log comment activity:', activityError);
+      }
     }
 
     return NextResponse.json({

@@ -106,25 +106,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If status is "closed_won", create activity and update engagement score
-    if (status === 'closed_won' && currentQuote && accountId) {
+    // Log activity for all status changes (not just closed_won)
+    if (accountId && currentQuote.status !== status) {
       try {
-        // Create activity for the account
+        // Get sub-account name for better description
+        let subAccountName = 'Unknown';
+        if (currentQuote.sub_account_id) {
+          const { data: subAccount } = await supabase
+            .from('sub_accounts')
+            .select('sub_account_name')
+            .eq('id', currentQuote.sub_account_id)
+            .single();
+          subAccountName = subAccount?.sub_account_name || 'Unknown';
+        }
+
         await supabase.from('activities').insert({
           account_id: accountId,
           employee_id: updatedBy,
           activity_type: 'quotation',
-          description: `Quotation #${quoteId} marked as Closed Won`,
+          description: `Quotation #${quoteId} status changed: ${currentQuote.status || 'draft'} → ${status}${subAccountName !== 'Unknown' ? ` (${subAccountName})` : ''}`,
           metadata: {
             quotation_id: quoteId,
-            quotation_status: 'closed_won',
+            old_status: currentQuote.status,
+            new_status: status,
             section: section,
             value: currentQuote.final_total_cost || 0,
           },
         });
       } catch (activityError) {
         // Log error but don't fail the status update
-        console.error('Error creating activity for closed_won:', activityError);
+        console.error('Error creating activity for status change:', activityError);
       }
     }
 

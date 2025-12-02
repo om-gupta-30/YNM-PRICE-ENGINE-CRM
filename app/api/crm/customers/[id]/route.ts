@@ -119,6 +119,30 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Log activity for customer update
+    try {
+      const changes: string[] = [];
+      if (body.name !== undefined) changes.push(`Name: ${body.name.trim()}`);
+      if (body.gst_number !== undefined) changes.push(`GST: ${body.gst_number || 'None'}`);
+      if (body.sales_employee !== undefined) changes.push(`Assigned: ${body.sales_employee || 'Unassigned'}`);
+      if (body.notes !== undefined) changes.push('Notes updated');
+
+      if (changes.length > 0) {
+        await supabase.from('activities').insert({
+          account_id: data.id,
+          employee_id: body.sales_employee || data.assigned_employee || 'System',
+          activity_type: 'note',
+          description: `Customer updated: ${data.account_name} - ${changes.join(', ')}`,
+          metadata: {
+            changes,
+            account_name: data.account_name,
+          },
+        });
+      }
+    } catch (activityError) {
+      console.warn('Failed to log customer update activity:', activityError);
+    }
+
     // Map to customer-like structure
     const customerData = {
       id: data.id,

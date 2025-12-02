@@ -109,16 +109,32 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Create activity for call status change
-    if (body.call_status && data) {
-      await supabase.from('activities').insert({
-        account_id: data.account_id,
-        contact_id: id,
-        employee_id: body.updated_by || 'Admin',
-        activity_type: 'call',
-        description: `Call status updated to ${body.call_status}`,
-        metadata: { call_status: body.call_status },
-      });
+    // Log activity for contact updates
+    if (data) {
+      const changes: string[] = [];
+      if (body.call_status !== undefined) changes.push(`Call status: ${body.call_status}`);
+      if (body.notes !== undefined) changes.push('Notes updated');
+      if (body.follow_up_date !== undefined) {
+        changes.push(`Follow-up date: ${body.follow_up_date || 'Removed'}`);
+      }
+
+      if (changes.length > 0) {
+        try {
+          await supabase.from('activities').insert({
+            account_id: data.account_id,
+            contact_id: id,
+            employee_id: body.updated_by || 'Admin',
+            activity_type: body.call_status ? 'call' : 'note',
+            description: `Contact ${data.name} updated - ${changes.join(', ')}`,
+            metadata: { 
+              call_status: body.call_status || data.call_status,
+              changes,
+            },
+          });
+        } catch (activityError) {
+          console.warn('Failed to log contact update activity:', activityError);
+        }
+      }
     }
 
     // Sync notification when follow-up date or call status changes
@@ -180,6 +196,13 @@ export async function DELETE(
       );
     }
 
+    // Get contact info before deletion for activity logging
+    const { data: contactData } = await supabase
+      .from('contacts')
+      .select('account_id, name, created_by')
+      .eq('id', id)
+      .single();
+
     const { error } = await supabase
       .from('contacts')
       .delete()
@@ -188,6 +211,21 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting contact:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Log activity for contact deletion
+    if (contactData) {
+      try {
+        await supabase.from('activities').insert({
+          account_id: contactData.account_id,
+          employee_id: contactData.created_by || 'Admin',
+          activity_type: 'note',
+          description: `Contact deleted: ${contactData.name}`,
+          metadata: { action: 'contact_deleted' },
+        });
+      } catch (activityError) {
+        console.warn('Failed to log contact deletion activity:', activityError);
+      }
     }
 
     return NextResponse.json({ success: true });

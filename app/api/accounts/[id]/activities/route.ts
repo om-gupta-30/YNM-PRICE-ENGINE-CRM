@@ -29,10 +29,31 @@ export async function GET(
       );
     }
 
-    const { data, error } = await supabase
-      .from('activities')
-      .select('*')
-      .eq('account_id', accountId)
+    // Fetch activities for this account
+    // Also include status changes and inactivity reasons for employees assigned to this account
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('assigned_employee')
+      .eq('id', accountId)
+      .single();
+
+    let query;
+    
+    // If account has an assigned employee, include their status changes and inactivity reasons
+    if (accountData?.assigned_employee) {
+      query = supabase
+        .from('activities')
+        .select('*')
+        .or(`account_id.eq.${accountId},and(account_id.is.null,employee_id.eq.${accountData.assigned_employee})`);
+    } else {
+      // Only account-specific activities
+      query = supabase
+        .from('activities')
+        .select('*')
+        .eq('account_id', accountId);
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false });
 
     if (error) {

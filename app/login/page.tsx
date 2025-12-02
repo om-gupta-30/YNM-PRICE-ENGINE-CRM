@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useUser } from '@/contexts/UserContext';
+import InactivityReasonModal from '@/components/modals/InactivityReasonModal';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +14,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showInactivityModal, setShowInactivityModal] = useState(false);
+  const [loggedInUsername, setLoggedInUsername] = useState('');
 
   // Redirect if already logged in (handled by AuthGuard, but keep for safety)
   useEffect(() => {
@@ -89,8 +92,23 @@ export default function LoginPage() {
       localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
       // Update global username context
       setUsername(username);
-      // Redirect to landing page (use replace to prevent back button issues)
-      router.replace('/home');
+      
+      // Check if this was an auto-logout (only for employees, not admin)
+      const wasAutoLogout = localStorage.getItem('auto_logout') === 'true';
+      const isEmployee = !data.isAdmin;
+      
+      if (wasAutoLogout && isEmployee) {
+        // Show inactivity reason modal before redirecting
+        setLoggedInUsername(username);
+        setShowInactivityModal(true);
+        // Don't redirect yet - wait for user to submit reason
+      } else {
+        // Clear auto-logout flag if it exists
+        localStorage.removeItem('auto_logout');
+        localStorage.removeItem('auto_logout_time');
+        // Redirect to landing page (use replace to prevent back button issues)
+        router.replace('/home');
+      }
     } catch (err: any) {
       console.error('Login error:', err);
       const errorMsg = err?.message || 'An error occurred. Please try again.';
@@ -228,6 +246,52 @@ export default function LoginPage() {
           </form>
         </div>
       </div>
+
+      {/* Inactivity Reason Modal */}
+      <InactivityReasonModal
+        isOpen={showInactivityModal}
+        onClose={() => {
+          // Modal should not be closable without submitting - this is just for safety
+          // In practice, user must submit reason to continue
+        }}
+        onSubmit={async (reason: string) => {
+          try {
+            // Submit inactivity reason to API
+            const response = await fetch('/api/auth/log-inactivity-reason', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                username: loggedInUsername,
+                reason,
+              }),
+            });
+
+            if (response.ok) {
+              // Clear auto-logout flag
+              localStorage.removeItem('auto_logout');
+              localStorage.removeItem('auto_logout_time');
+              setShowInactivityModal(false);
+              // Redirect to home
+              router.replace('/home');
+            } else {
+              console.error('Failed to submit inactivity reason');
+              // Still redirect even if logging fails
+              localStorage.removeItem('auto_logout');
+              localStorage.removeItem('auto_logout_time');
+              setShowInactivityModal(false);
+              router.replace('/home');
+            }
+          } catch (error) {
+            console.error('Error submitting inactivity reason:', error);
+            // Still redirect even if there's an error
+            localStorage.removeItem('auto_logout');
+            localStorage.removeItem('auto_logout_time');
+            setShowInactivityModal(false);
+            router.replace('/home');
+          }
+        }}
+        username={loggedInUsername}
+      />
     </div>
   );
 }

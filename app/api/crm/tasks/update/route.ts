@@ -176,6 +176,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log activity for task update
+    try {
+      const changes: string[] = [];
+      if (title !== undefined) changes.push(`Title: ${title.trim()}`);
+      if (status !== undefined) changes.push(`Status: ${status}`);
+      if (assigned_to !== undefined) changes.push(`Assigned: ${assigned_to.trim()}`);
+      if (due_date !== undefined) changes.push(`Due date: ${due_date}`);
+
+      if (changes.length > 0 && task.account_id) {
+        await supabase.from('activities').insert({
+          account_id: task.account_id,
+          employee_id: task.assigned_employee || task.created_by || 'System',
+          activity_type: 'task',
+          description: `Task updated: ${task.title} - ${changes.join(', ')}`,
+          metadata: {
+            task_id: task.id,
+            changes,
+            status: task.status,
+            task_type: task.task_type,
+          },
+        });
+      }
+    } catch (activityError) {
+      console.warn('Failed to log task update activity:', activityError);
+    }
+
     return NextResponse.json({ success: true, task });
   } catch (error: any) {
     console.error('Update task API error:', error);

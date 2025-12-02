@@ -93,6 +93,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Log activity for lead update
+    try {
+      const changes: string[] = [];
+      if (lead_name !== undefined) changes.push(`Name: ${lead_name.trim()}`);
+      if (status !== undefined) changes.push(`Status: ${status}`);
+      if (assigned_employee !== undefined) changes.push(`Assigned: ${assigned_employee || 'Unassigned'}`);
+      if (priority !== undefined) changes.push(`Priority: ${priority || 'None'}`);
+
+      if (changes.length > 0) {
+        await supabase.from('activities').insert({
+          account_id: data.account_id || null,
+          employee_id: data.assigned_employee || 'System',
+          activity_type: 'note',
+          description: `Lead updated: ${data.lead_name} - ${changes.join(', ')}`,
+          metadata: {
+            lead_id: data.id,
+            changes,
+            status: data.status,
+          },
+        });
+      }
+    } catch (activityError) {
+      console.warn('Failed to log lead update activity:', activityError);
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('Update lead error:', error);

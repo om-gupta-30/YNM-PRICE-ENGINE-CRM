@@ -100,6 +100,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Log activity for lead creation
+    try {
+      await supabase.from('activities').insert({
+        account_id: account_id,
+        employee_id: created_by || assigned_employee || 'System',
+        activity_type: 'note',
+        description: `Lead created: ${lead_name.trim()}`,
+        metadata: {
+          lead_id: data.id,
+          lead_name: lead_name.trim(),
+          status: data.status,
+          lead_source: lead_source || null,
+        },
+      });
+    } catch (activityError) {
+      console.warn('Failed to log lead creation activity:', activityError);
+    }
+
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
     console.error('Create lead error:', error);

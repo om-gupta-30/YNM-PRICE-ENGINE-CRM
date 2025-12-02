@@ -102,6 +102,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Log activity for customer creation
+    try {
+      await supabase.from('activities').insert({
+        account_id: data.id,
+        employee_id: created_by || assignedEmployee || 'System',
+        activity_type: 'note',
+        description: `Customer created: ${name.trim()}`,
+        metadata: {
+          account_name: name.trim(),
+          assigned_employee: assignedEmployee,
+        },
+      });
+    } catch (activityError) {
+      console.warn('Failed to log customer creation activity:', activityError);
+    }
+
     // Return customer-like structure
     return NextResponse.json({ 
       data: {
