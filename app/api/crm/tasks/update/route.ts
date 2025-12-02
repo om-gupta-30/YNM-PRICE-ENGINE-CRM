@@ -176,25 +176,64 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Get old task data for comparison
+    const { data: oldTask } = await supabase
+      .from('tasks')
+      .select('title, description, task_type, due_date, assigned_employee, customer_id, customer_name, account_id, sub_account_id, status, reminder_enabled, reminder_value, reminder_unit')
+      .eq('id', id)
+      .single();
+
     // Log activity for task update
     try {
       const changes: string[] = [];
-      if (title !== undefined) changes.push(`Title: ${title.trim()}`);
-      if (status !== undefined) changes.push(`Status: ${status}`);
-      if (assigned_to !== undefined) changes.push(`Assigned: ${assigned_to.trim()}`);
-      if (due_date !== undefined) changes.push(`Due date: ${due_date}`);
+      if (title !== undefined && title.trim() !== oldTask?.title) {
+        changes.push(`Title: "${oldTask?.title}" → "${title.trim()}"`);
+      }
+      if (description !== undefined && description?.trim() !== oldTask?.description?.trim()) {
+        changes.push('Description updated');
+      }
+      if (task_type !== undefined && task_type !== oldTask?.task_type) {
+        changes.push(`Type: "${oldTask?.task_type}" → "${task_type}"`);
+      }
+      if (status !== undefined && status !== oldTask?.status) {
+        changes.push(`Status: "${oldTask?.status}" → "${status}"`);
+      }
+      if (assigned_to !== undefined && assigned_to.trim() !== oldTask?.assigned_employee) {
+        changes.push(`Assigned: "${oldTask?.assigned_employee || 'Unassigned'}" → "${assigned_to.trim()}"`);
+      }
+      if (due_date !== undefined && due_date !== oldTask?.due_date) {
+        changes.push(`Due date: ${oldTask?.due_date || 'None'} → ${due_date || 'None'}`);
+      }
+      if (customer_id !== undefined && customer_id !== oldTask?.customer_id) {
+        changes.push(`Customer ID: ${oldTask?.customer_id || 'None'} → ${customer_id || 'None'}`);
+      }
+      if (customer_name !== undefined && customer_name !== oldTask?.customer_name) {
+        changes.push(`Customer: "${oldTask?.customer_name || 'None'}" → "${customer_name || 'None'}"`);
+      }
+      if (account_id !== undefined && account_id !== oldTask?.account_id) {
+        changes.push(`Account: ${oldTask?.account_id || 'None'} → ${account_id || 'None'}`);
+      }
+      if (sub_account_id !== undefined && sub_account_id !== oldTask?.sub_account_id) {
+        changes.push(`Sub-Account: ${oldTask?.sub_account_id || 'None'} → ${sub_account_id || 'None'}`);
+      }
+      if (reminder_enabled !== undefined && reminder_enabled !== oldTask?.reminder_enabled) {
+        changes.push(`Reminder: ${oldTask?.reminder_enabled ? 'Enabled' : 'Disabled'} → ${reminder_enabled ? 'Enabled' : 'Disabled'}`);
+      }
 
-      if (changes.length > 0 && task.account_id) {
+      if (changes.length > 0 && (task.account_id || oldTask?.account_id)) {
         await supabase.from('activities').insert({
-          account_id: task.account_id,
+          account_id: task.account_id || oldTask?.account_id,
+          task_id: task.id,
           employee_id: task.assigned_employee || task.created_by || 'System',
           activity_type: 'task',
-          description: `Task updated: ${task.title} - ${changes.join(', ')}`,
+          description: `Task "${task.title}" edited - ${changes.join(', ')}`,
           metadata: {
             task_id: task.id,
             changes,
             status: task.status,
             task_type: task.task_type,
+            old_data: oldTask,
+            new_data: task,
           },
         });
       }

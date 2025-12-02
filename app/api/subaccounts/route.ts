@@ -227,10 +227,19 @@ export async function PUT(request: NextRequest) {
       updateData.office_type = officeType && officeType.trim() !== '' ? officeType.trim() : null;
     }
 
-    const { error } = await supabase
+    // Get old sub-account data for activity logging
+    const { data: oldSubAccount } = await supabase
+      .from('sub_accounts')
+      .select('account_id, sub_account_name, state_id, city_id, address, pincode, is_headquarter, office_type')
+      .eq('id', parseInt(id))
+      .single();
+
+    const { data: updatedSubAccount, error } = await supabase
       .from('sub_accounts')
       .update(updateData)
-      .eq('id', parseInt(id));
+      .eq('id', parseInt(id))
+      .select()
+      .single();
 
     if (error) {
       console.error('Error updating sub-account:', error);
@@ -238,6 +247,50 @@ export async function PUT(request: NextRequest) {
         { error: `Failed to update sub-account: ${error.message}` },
         { status: 500 }
       );
+    }
+
+    // Log activity for sub-account update
+    try {
+      const changes: string[] = [];
+      if (subAccountName !== undefined && subAccountName !== oldSubAccount?.sub_account_name) {
+        changes.push(`Name: "${oldSubAccount?.sub_account_name}" → "${subAccountName}"`);
+      }
+      if (stateId !== undefined && stateId !== oldSubAccount?.state_id) {
+        changes.push(`State updated`);
+      }
+      if (cityId !== undefined && cityId !== oldSubAccount?.city_id) {
+        changes.push(`City updated`);
+      }
+      if (address !== undefined && address !== oldSubAccount?.address) {
+        changes.push(`Address updated`);
+      }
+      if (pincode !== undefined && pincode !== oldSubAccount?.pincode) {
+        changes.push(`Pincode updated`);
+      }
+      if (isHeadquarter !== undefined && isHeadquarter !== oldSubAccount?.is_headquarter) {
+        changes.push(`Headquarter: ${isHeadquarter ? 'Yes' : 'No'}`);
+      }
+      if (officeType !== undefined && officeType !== oldSubAccount?.office_type) {
+        changes.push(`Office Type: ${officeType || 'None'}`);
+      }
+
+      if (changes.length > 0 && oldSubAccount?.account_id) {
+        const updatedBy = body.updated_by || body.updatedBy || 'System';
+        await supabase.from('activities').insert({
+          account_id: oldSubAccount.account_id,
+          employee_id: updatedBy,
+          activity_type: 'note',
+          description: `Sub-account "${updatedSubAccount?.sub_account_name || oldSubAccount?.sub_account_name}" updated: ${changes.join(', ')}`,
+          metadata: {
+            sub_account_id: parseInt(id),
+            changes,
+            old_data: oldSubAccount,
+            new_data: updatedSubAccount,
+          },
+        });
+      }
+    } catch (activityError) {
+      console.warn('Failed to log sub-account update activity:', activityError);
     }
 
     return NextResponse.json({ success: true });

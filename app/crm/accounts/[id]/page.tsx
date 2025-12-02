@@ -474,16 +474,25 @@ export default function AccountDetailsPage() {
                   Industries & Sub-Industries
                 </h3>
                 {account?.industries && account.industries.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {account.industries.map((item: any, idx: number) => (
-                      <span
-                        key={`industry-${item.industry_id}-${item.sub_industry_id}-${idx}`}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-gradient-to-r from-premium-gold/10 to-amber-600/10 text-premium-gold rounded-xl border border-premium-gold/20"
-                      >
-                        <span className="opacity-70">{item.industry_name}:</span>
-                        <span className="font-semibold">{item.sub_industry_name}</span>
-                      </span>
-                    ))}
+                  <div className="space-y-3">
+                    {account.industries.map((item: any, idx: number) => {
+                      const projectKey = `${item.industry_id}-${item.sub_industry_id}`;
+                      const projectCount = account?.industry_projects?.[projectKey] || 0;
+                      return (
+                        <div
+                          key={`industry-${item.industry_id}-${item.sub_industry_id}-${idx}`}
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-premium-gold/10 to-amber-600/10 text-premium-gold rounded-xl border border-premium-gold/20"
+                        >
+                          <span className="opacity-70">{item.industry_name}:</span>
+                          <span className="font-semibold">{item.sub_industry_name}</span>
+                          {projectCount > 0 && (
+                            <span className="ml-2 px-2 py-0.5 bg-premium-gold/20 text-premium-gold rounded-md text-xs font-bold">
+                              {projectCount} {projectCount === 1 ? 'Project' : 'Projects'}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <span className="text-slate-500">—</span>

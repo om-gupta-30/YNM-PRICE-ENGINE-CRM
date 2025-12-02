@@ -318,12 +318,14 @@ export async function PUT(
         await supabase.from('activities').insert({
           account_id: existingContact.account_id,
           contact_id,
-          employee_id: created_by || 'System',
+          employee_id: created_by || body.updated_by || 'System',
           activity_type: 'note',
-          description: `Contact "${displayName}" updated`,
+          description: `Contact "${displayName}" edited - ${changes.join(', ')}`,
           metadata: {
             contact_id,
             changes,
+            old_data: existingContact,
+            new_data: updatedContact,
           },
         });
       } catch (activityError) {

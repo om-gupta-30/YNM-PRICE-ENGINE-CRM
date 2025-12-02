@@ -93,24 +93,69 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Get old lead data for comparison
+    const { data: oldLead } = await supabase
+      .from('leads')
+      .select('lead_name, contact_person, phone, email, requirements, lead_source, status, priority, assigned_employee, account_id, sub_account_id, contact_id, follow_up_date')
+      .eq('id', id)
+      .single();
+
     // Log activity for lead update
     try {
       const changes: string[] = [];
-      if (lead_name !== undefined) changes.push(`Name: ${lead_name.trim()}`);
-      if (status !== undefined) changes.push(`Status: ${status}`);
-      if (assigned_employee !== undefined) changes.push(`Assigned: ${assigned_employee || 'Unassigned'}`);
-      if (priority !== undefined) changes.push(`Priority: ${priority || 'None'}`);
+      if (lead_name !== undefined && lead_name.trim() !== oldLead?.lead_name) {
+        changes.push(`Name: "${oldLead?.lead_name}" → "${lead_name.trim()}"`);
+      }
+      if (contact_person !== undefined && contact_person !== oldLead?.contact_person) {
+        changes.push(`Contact Person: "${oldLead?.contact_person || 'None'}" → "${contact_person || 'None'}"`);
+      }
+      if (phone !== undefined && phone !== oldLead?.phone) {
+        changes.push(`Phone: "${oldLead?.phone}" → "${phone}"`);
+      }
+      if (email !== undefined && email !== oldLead?.email) {
+        changes.push(`Email: "${oldLead?.email || 'None'}" → "${email || 'None'}"`);
+      }
+      if (requirements !== undefined && requirements !== oldLead?.requirements) {
+        changes.push('Requirements updated');
+      }
+      if (lead_source !== undefined && lead_source !== oldLead?.lead_source) {
+        changes.push(`Source: "${oldLead?.lead_source || 'None'}" → "${lead_source || 'None'}"`);
+      }
+      if (status !== undefined && status !== oldLead?.status) {
+        changes.push(`Status: "${oldLead?.status}" → "${status}"`);
+      }
+      if (priority !== undefined && priority !== oldLead?.priority) {
+        changes.push(`Priority: "${oldLead?.priority || 'None'}" → "${priority || 'None'}"`);
+      }
+      if (assigned_employee !== undefined && assigned_employee !== oldLead?.assigned_employee) {
+        changes.push(`Assigned: "${oldLead?.assigned_employee || 'Unassigned'}" → "${assigned_employee || 'Unassigned'}"`);
+      }
+      if (account_id !== undefined && account_id !== oldLead?.account_id) {
+        changes.push(`Account: ${oldLead?.account_id || 'None'} → ${account_id || 'None'}`);
+      }
+      if (sub_account_id !== undefined && sub_account_id !== oldLead?.sub_account_id) {
+        changes.push(`Sub-Account: ${oldLead?.sub_account_id || 'None'} → ${sub_account_id || 'None'}`);
+      }
+      if (contact_id !== undefined && contact_id !== oldLead?.contact_id) {
+        changes.push(`Contact: ${oldLead?.contact_id || 'None'} → ${contact_id || 'None'}`);
+      }
+      if (follow_up_date !== undefined && follow_up_date !== oldLead?.follow_up_date) {
+        changes.push(`Follow-up: ${oldLead?.follow_up_date || 'None'} → ${follow_up_date || 'None'}`);
+      }
 
       if (changes.length > 0) {
         await supabase.from('activities').insert({
-          account_id: data.account_id || null,
-          employee_id: data.assigned_employee || 'System',
+          account_id: data.account_id || oldLead?.account_id || null,
+          lead_id: data.id,
+          employee_id: data.assigned_employee || body.assigned_employee || 'System',
           activity_type: 'note',
-          description: `Lead updated: ${data.lead_name} - ${changes.join(', ')}`,
+          description: `Lead "${data.lead_name}" edited - ${changes.join(', ')}`,
           metadata: {
             lead_id: data.id,
             changes,
             status: data.status,
+            old_data: oldLead,
+            new_data: data,
           },
         });
       }

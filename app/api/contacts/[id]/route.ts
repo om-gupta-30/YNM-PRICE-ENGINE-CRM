@@ -109,28 +109,58 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Get old contact data for comparison
+    const { data: oldContact } = await supabase
+      .from('contacts')
+      .select('name, designation, email, phone, call_status, notes, follow_up_date')
+      .eq('id', id)
+      .single();
+
     // Log activity for contact updates
     if (data) {
       const changes: string[] = [];
-      if (body.call_status !== undefined) changes.push(`Call status: ${body.call_status}`);
-      if (body.notes !== undefined) changes.push('Notes updated');
+      if (body.call_status !== undefined && body.call_status !== oldContact?.call_status) {
+        changes.push(`Call status: "${oldContact?.call_status || 'None'}" → "${body.call_status || 'None'}"`);
+      }
+      if (body.notes !== undefined && body.notes?.trim() !== oldContact?.notes?.trim()) {
+        changes.push('Notes updated');
+      }
       if (body.follow_up_date !== undefined) {
-        changes.push(`Follow-up date: ${body.follow_up_date || 'Removed'}`);
+        const oldDate = oldContact?.follow_up_date || 'None';
+        const newDate = body.follow_up_date || 'Removed';
+        if (oldDate !== newDate) {
+          changes.push(`Follow-up date: ${oldDate} → ${newDate}`);
+        }
+      }
+      // Track other fields if they're being updated (for future extensibility)
+      if (body.name !== undefined && body.name !== oldContact?.name) {
+        changes.push(`Name: "${oldContact?.name}" → "${body.name}"`);
+      }
+      if (body.designation !== undefined && body.designation !== oldContact?.designation) {
+        changes.push(`Designation: "${oldContact?.designation || 'None'}" → "${body.designation || 'None'}"`);
+      }
+      if (body.email !== undefined && body.email !== oldContact?.email) {
+        changes.push(`Email: "${oldContact?.email || 'None'}" → "${body.email || 'None'}"`);
+      }
+      if (body.phone !== undefined && body.phone !== oldContact?.phone) {
+        changes.push(`Phone: "${oldContact?.phone || 'None'}" → "${body.phone || 'None'}"`);
       }
 
       if (changes.length > 0) {
         try {
-      await supabase.from('activities').insert({
-        account_id: data.account_id,
-        contact_id: id,
-        employee_id: body.updated_by || 'Admin',
+          await supabase.from('activities').insert({
+            account_id: data.account_id,
+            contact_id: id,
+            employee_id: body.updated_by || 'Admin',
             activity_type: body.call_status ? 'call' : 'note',
-            description: `Contact ${data.name} updated - ${changes.join(', ')}`,
+            description: `Contact "${data.name}" edited - ${changes.join(', ')}`,
             metadata: { 
               call_status: body.call_status || data.call_status,
               changes,
+              old_data: oldContact,
+              new_data: data,
             },
-      });
+          });
         } catch (activityError) {
           console.warn('Failed to log contact update activity:', activityError);
         }
