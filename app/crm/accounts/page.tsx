@@ -54,6 +54,7 @@ export default function AccountsPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
@@ -567,10 +568,10 @@ export default function AccountsPage() {
         isOpen={isModalOpen}
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
-        initialData={editAccount ? {
         isAdmin={isAdmin}
         isDataAnalyst={isDataAnalyst}
         currentUser={username}
+        initialData={editAccount ? {
           accountName: editAccount.accountName || '',
           companyStage: editAccount.companyStage || '',
           companyTag: editAccount.companyTag || '',
@@ -581,8 +582,6 @@ export default function AccountsPage() {
           industries: editAccount.industries || [],
         } : null}
         mode={editAccount ? 'edit' : 'create'}
-        isAdmin={isAdmin}
-        currentUser={username}
       />
 
       {/* Toast Notification */}
