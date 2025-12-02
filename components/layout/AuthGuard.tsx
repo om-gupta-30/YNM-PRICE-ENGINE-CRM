@@ -24,7 +24,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       if (pathname === '/login' || pathname === '/change-password') {
         // If already authenticated on login page, redirect to home
         if (pathname === '/login' && isAuth) {
-          router.replace('/');
+          router.replace('/home');
           setIsAuthenticated(true);
         } else {
           setIsAuthenticated(true); // Allow public pages to render
@@ -34,12 +34,18 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       }
 
       // Protected route - require authentication
-      // This includes: /, /mbcb, /mbcb/*, /paint, /signages
+      // This includes: /, /home, /mbcb, /mbcb/*, /paint, /signages, /crm, etc.
       if (!isAuth) {
         // Redirect to login immediately
         router.replace('/login');
         setIsAuthenticated(false);
         setIsChecking(false);
+        return;
+      }
+      
+      // If user visits root path while authenticated, redirect to home
+      if (pathname === '/') {
+        router.replace('/home');
         return;
       }
       

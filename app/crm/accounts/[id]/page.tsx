@@ -257,30 +257,30 @@ export default function AccountDetailsPage() {
                           </span>
                         </div>
                         <div>
-                          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">{account.account_name}</h1>
+                          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">{account?.account_name || 'Account'}</h1>
                           <p className="text-slate-400 text-sm mt-1">
-                            {account.assigned_employee ? `Managed by ${account.assigned_employee}` : 'Unassigned'}
+                            {account?.assigned_employee ? `Managed by ${account.assigned_employee}` : 'Unassigned'}
                           </p>
                         </div>
                       </div>
                       
                       {/* Tags */}
                       <div className="flex flex-wrap gap-2 mt-4">
-                        {account.company_stage && (
+                        {account?.company_stage && (
                           <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${getStageColor(account.company_stage)} border border-current/20`}>
                             {account.company_stage}
                           </span>
                         )}
-                        {account.company_tag && (
+                        {account?.company_tag && (
                           <span className={`px-4 py-1.5 rounded-full text-xs font-bold ${getTagColor(account.company_tag)} border border-current/20`}>
                             {account.company_tag}
                           </span>
                         )}
                         <span className={`px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${
-                          account.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
+                          account?.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'
                         }`}>
-                          <span className={`w-2 h-2 rounded-full ${account.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
-                          {account.is_active ? 'Active' : 'Inactive'}
+                          <span className={`w-2 h-2 rounded-full ${account?.is_active ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
+                          {account?.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
                     </div>
@@ -398,11 +398,11 @@ export default function AccountDetailsPage() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
                       <span className="text-slate-400 text-sm">GST Number</span>
-                      <span className="text-white font-medium">{account.gst_number || '—'}</span>
+                      <span className="text-white font-medium">{account?.gst_number || '—'}</span>
                     </div>
                     <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
                       <span className="text-slate-400 text-sm">Website</span>
-                      {account.website ? (
+                      {account?.website ? (
                         <a href={account.website} target="_blank" rel="noopener noreferrer" className="text-premium-gold hover:underline font-medium">
                           {account.website.replace(/^https?:\/\//, '')}
                         </a>
@@ -411,7 +411,7 @@ export default function AccountDetailsPage() {
                     <div className="py-2">
                       <span className="text-slate-400 text-sm block mb-2">Related Products</span>
                       <div className="flex flex-wrap gap-2">
-                        {account.related_products && account.related_products.length > 0 ? (
+                        {account?.related_products && account.related_products.length > 0 ? (
                           account.related_products.map((product, idx) => (
                             <span key={`${product}-${idx}`} className="px-3 py-1 bg-slate-700/70 rounded-full text-xs text-white font-medium">
                               {product}
@@ -436,28 +436,28 @@ export default function AccountDetailsPage() {
                       <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
                       <div className="flex-1">
                         <p className="text-slate-400 text-xs">Created</p>
-                        <p className="text-white font-medium text-sm">{formatTimestamp(account.created_at)}</p>
+                        <p className="text-white font-medium text-sm">{account?.created_at ? formatTimestamp(account.created_at) : '—'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 py-2 border-b border-slate-700/50">
                       <div className="w-2 h-2 rounded-full bg-blue-400"></div>
                       <div className="flex-1">
                         <p className="text-slate-400 text-xs">Last Updated</p>
-                        <p className="text-white font-medium text-sm">{formatTimestamp(account.updated_at)}</p>
+                        <p className="text-white font-medium text-sm">{account?.updated_at ? formatTimestamp(account.updated_at) : '—'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4 py-2">
                       <div className="w-2 h-2 rounded-full bg-premium-gold"></div>
                       <div className="flex-1">
                         <p className="text-slate-400 text-xs">Last Activity</p>
-                        <p className="text-white font-medium text-sm">{formatTimestamp(account.last_activity_at)}</p>
+                        <p className="text-white font-medium text-sm">{account?.last_activity_at ? formatTimestamp(account.last_activity_at) : '—'}</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {account.address && (
+              {account?.address && (
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                   <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                     <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">📍</span>
@@ -467,7 +467,7 @@ export default function AccountDetailsPage() {
                 </div>
               )}
 
-              {account.notes && (
+              {account?.notes && (
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                   <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                     <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">📝</span>
@@ -483,9 +483,9 @@ export default function AccountDetailsPage() {
                   <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">🏭</span>
                   Industries & Sub-Industries
                 </h3>
-                {(account as any).industries && (account as any).industries.length > 0 ? (
+                {account?.industries && account.industries.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
-                    {(account as any).industries.map((item: any, idx: number) => (
+                    {account.industries.map((item: any, idx: number) => (
                       <span
                         key={`industry-${item.industry_id}-${item.sub_industry_id}-${idx}`}
                         className="inline-flex items-center gap-1.5 px-4 py-2 text-sm bg-gradient-to-r from-premium-gold/10 to-amber-600/10 text-premium-gold rounded-xl border border-premium-gold/20"
@@ -697,7 +697,7 @@ export default function AccountDetailsPage() {
           onSubmit={async (formData: AccountFormData) => {
             try {
               // Admin can assign to any employee, employees cannot change assignment
-              const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : account?.assigned_employee || null);
+              const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : (account?.assigned_employee || null));
               
               const response = await fetch(`/api/accounts/${accountId}`, {
                 method: 'PUT',
@@ -733,17 +733,17 @@ export default function AccountDetailsPage() {
             }
           }}
           initialData={{
-            accountName: account.account_name || '',
-            companyStage: account.company_stage || '',
-            companyTag: account.company_tag || '',
-            assignedEmployee: account.assigned_employee || '',
-            stateId: account.state_id || null,
-            cityId: account.city_id || null,
-            address: account.address || '',
-            website: account.website || '',
-            gstNumber: account.gst_number || '',
-            notes: account.notes || '',
-            industries: account.industries || [],
+            accountName: account?.account_name || '',
+            companyStage: account?.company_stage || '',
+            companyTag: account?.company_tag || '',
+            assignedEmployee: account?.assigned_employee || '',
+            stateId: account?.state_id || null,
+            cityId: account?.city_id || null,
+            address: account?.address || '',
+            website: account?.website || '',
+            gstNumber: account?.gst_number || '',
+            notes: account?.notes || '',
+            industries: account?.industries || [],
           }}
           mode="edit"
           isAdmin={isAdmin}

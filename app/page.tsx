@@ -7,8 +7,18 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirect to the new landing page
-    router.replace('/home');
+    if (typeof window !== 'undefined') {
+      // Check if user is authenticated
+      const auth = localStorage.getItem('auth');
+      
+      if (auth === 'true') {
+        // User is authenticated - redirect to home page
+        router.replace('/home');
+      } else {
+        // User is not authenticated - redirect to login page
+        router.replace('/login');
+      }
+    }
   }, [router]);
 
   return null;
