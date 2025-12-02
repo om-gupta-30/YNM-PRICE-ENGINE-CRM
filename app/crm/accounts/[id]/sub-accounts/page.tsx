@@ -13,6 +13,7 @@ interface SubAccount {
   cityId: number | null;
   stateName: string | null;
   cityName: string | null;
+  address: string | null;
   engagementScore: number;
   isActive: boolean;
   createdAt: string;
@@ -42,6 +43,7 @@ export default function SubAccountsPage() {
     subAccountName: '',
     stateId: null as number | null,
     cityId: null as number | null,
+    address: '',
   });
 
   // Fetch sub-accounts
@@ -196,6 +198,7 @@ export default function SubAccountsPage() {
             subAccountName: formData.subAccountName,
             stateId: formData.stateId,
             cityId: formData.cityId,
+            address: formData.address || null,
           }),
         });
 
@@ -216,6 +219,7 @@ export default function SubAccountsPage() {
             subAccountName: formData.subAccountName,
             stateId: formData.stateId,
             cityId: formData.cityId,
+            address: formData.address || null,
           }),
         });
 
@@ -229,7 +233,7 @@ export default function SubAccountsPage() {
       }
 
       setIsModalOpen(false);
-      setFormData({ subAccountName: '', stateId: null, cityId: null });
+      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
       setEditSubAccount(null);
       setCities([]);
       await fetchSubAccounts();
@@ -244,7 +248,7 @@ export default function SubAccountsPage() {
   // Handle open modal
   const handleOpenModal = () => {
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
     setCities([]);
     setIsModalOpen(true);
   };
@@ -256,6 +260,7 @@ export default function SubAccountsPage() {
       subAccountName: subAccount.subAccountName,
       stateId: subAccount.stateId || null,
       cityId: subAccount.cityId || null,
+      address: subAccount.address || '',
     });
     // Fetch cities if state is set
     if (subAccount.stateId) {
@@ -270,7 +275,7 @@ export default function SubAccountsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
     setCities([]);
   };
 
@@ -507,6 +512,20 @@ export default function SubAccountsPage() {
                       ))}
                     </select>
                   </div>
+                </div>
+
+                {/* Address */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Address
+                  </label>
+                  <textarea
+                    value={formData.address}
+                    onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                    className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent min-h-[100px] resize-y"
+                    placeholder="Enter full address..."
+                    rows={3}
+                  />
                 </div>
 
                 {/* Form Buttons */}

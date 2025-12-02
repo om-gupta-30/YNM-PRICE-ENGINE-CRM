@@ -25,6 +25,9 @@ export async function GET(request: NextRequest) {
         notes,
         industries,
         assigned_employee,
+        state_id,
+        city_id,
+        address,
         created_at,
         updated_at
       `)
@@ -67,6 +70,36 @@ export async function GET(request: NextRequest) {
             .eq('is_active', true)
             .order('engagement_score', { ascending: false });
           
+          // Fetch state and city names if they exist
+          let stateName = null;
+          let cityName = null;
+          
+          if (account.state_id) {
+            try {
+              const { data: stateData } = await supabase
+                .from('states')
+                .select('state_name')
+                .eq('id', account.state_id)
+                .single();
+              stateName = stateData?.state_name || null;
+            } catch (err) {
+              console.error(`Error fetching state for account ${account.id}:`, err);
+            }
+          }
+          
+          if (account.city_id) {
+            try {
+              const { data: cityData } = await supabase
+                .from('cities')
+                .select('city_name')
+                .eq('id', account.city_id)
+                .single();
+              cityName = cityData?.city_name || null;
+            } catch (err) {
+              console.error(`Error fetching city for account ${account.id}:`, err);
+            }
+          }
+
           // If sub_accounts table doesn't exist, just use empty array
           if (subAccountsError && (subAccountsError.code === '42P01' || subAccountsError.message?.includes('does not exist'))) {
             return {
@@ -80,6 +113,11 @@ export async function GET(request: NextRequest) {
               notes: account.notes || null,
               industries: account.industries || [],
               assignedEmployee: account.assigned_employee || null,
+              stateId: account.state_id || null,
+              cityId: account.city_id || null,
+              stateName,
+              cityName,
+              address: account.address || null,
               createdAt: formatTimestampIST(account.created_at),
               updatedAt: formatTimestampIST(account.updated_at),
             };
@@ -101,6 +139,11 @@ export async function GET(request: NextRequest) {
             notes: account.notes || null,
             industries: account.industries || [],
             assignedEmployee: account.assigned_employee || null,
+            stateId: account.state_id || null,
+            cityId: account.city_id || null,
+            stateName,
+            cityName,
+            address: account.address || null,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };
@@ -118,6 +161,11 @@ export async function GET(request: NextRequest) {
             notes: account.notes || null,
             industries: account.industries || [],
             assignedEmployee: account.assigned_employee || null,
+            stateId: account.state_id || null,
+            cityId: account.city_id || null,
+            stateName: null,
+            cityName: null,
+            address: account.address || null,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };
@@ -143,6 +191,9 @@ export async function POST(request: NextRequest) {
       companyStage,
       companyTag,
       assignedEmployee,
+      stateId,
+      cityId,
+      address,
       website,
       gstNumber,
       notes,
@@ -170,7 +221,7 @@ export async function POST(request: NextRequest) {
       finalAssignedEmployee = createdBy;
     }
 
-    // Insert account (parent accounts don't have state/city - only sub-accounts do)
+    // Insert account
     // Stage, Tag, and Employee are optional - admin can assign later
     // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)
     // assigned_to is an alias for assigned_employee (both columns updated for compatibility)
@@ -182,6 +233,9 @@ export async function POST(request: NextRequest) {
         company_tag: (companyTag && companyTag.trim() !== '') ? companyTag : null,
         assigned_employee: finalAssignedEmployee,
         assigned_to: finalAssignedEmployee, // Also update assigned_to column
+        state_id: stateId || null,
+        city_id: cityId || null,
+        address: address && address.trim() !== '' ? address.trim() : null,
         website: website || null,
         gst_number: gstNumber || null,
         notes: notes || null,

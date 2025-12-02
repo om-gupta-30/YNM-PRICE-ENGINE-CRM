@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { data: subAccounts, error } = await supabase
       .from('sub_accounts')
-      .select('id, account_id, sub_account_name, state_id, city_id, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
+      .select('id, account_id, sub_account_name, state_id, city_id, address, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
       .eq('account_id', parseInt(accountId))
       .eq('is_active', true)
       .order('sub_account_name', { ascending: true });
@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
           cityId: sub.city_id || null,
           stateName,
           cityName,
+          address: sub.address || null,
           engagementScore: parseFloat(sub.engagement_score?.toString() || '0') || 0,
           isActive: sub.is_active,
           createdAt: formatTimestampIST(sub.created_at),
@@ -113,6 +114,7 @@ export async function POST(request: NextRequest) {
       subAccountName,
       stateId,
       cityId,
+      address,
     } = body;
 
     // Validation
@@ -133,6 +135,7 @@ export async function POST(request: NextRequest) {
         sub_account_name: subAccountName,
         state_id: parseInt(stateId),
         city_id: parseInt(cityId),
+        address: address && address.trim() !== '' ? address.trim() : null,
         engagement_score: 0,
         is_active: true,
       })
@@ -172,6 +175,7 @@ export async function PUT(request: NextRequest) {
       subAccountName,
       stateId,
       cityId,
+      address,
     } = body;
 
     // Validation
@@ -197,6 +201,9 @@ export async function PUT(request: NextRequest) {
     }
     if (cityId !== undefined && cityId !== null) {
       updateData.city_id = parseInt(cityId);
+    }
+    if (address !== undefined) {
+      updateData.address = address && address.trim() !== '' ? address.trim() : null;
     }
 
     const { error } = await supabase

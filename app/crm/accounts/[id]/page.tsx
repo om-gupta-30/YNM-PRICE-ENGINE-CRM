@@ -14,7 +14,7 @@ import CelebrationToast from '@/components/crm/CelebrationToast';
 import QuotationDetailsModal from '@/components/modals/QuotationDetailsModal';
 import { formatTimestampIST, formatDateIST } from '@/lib/utils/dateFormatters';
 
-type TabType = 'overview' | 'contacts' | 'leads' | 'quotations' | 'tasks' | 'activities';
+type TabType = 'overview' | 'contacts' | 'leads' | 'quotations';
 
 export default function AccountDetailsPage() {
   const params = useParams();
@@ -305,14 +305,12 @@ export default function AccountDetailsPage() {
             {/* Navigation Tabs - Floating Style */}
             <div className="mb-8">
               <div className="inline-flex bg-slate-800/50 backdrop-blur-sm rounded-2xl p-1.5 border border-slate-700/50">
-                {(['overview', 'contacts', 'leads', 'quotations', 'tasks', 'activities'] as TabType[]).map((tab) => {
+                {(['overview', 'contacts', 'leads', 'quotations'] as TabType[]).map((tab) => {
                   const icons: Record<TabType, string> = {
                     overview: '📊',
                     contacts: '👥',
                     leads: '🎯',
                     quotations: '📋',
-                    tasks: '✅',
-                    activities: '📝'
                   };
                   return (
                     <button
@@ -686,64 +684,6 @@ export default function AccountDetailsPage() {
             </div>
           )}
 
-          {activeTab === 'activities' && (
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4">Activity History</h2>
-              <ActivityTimeline activities={activities} />
-            </div>
-          )}
-
-          {activeTab === 'tasks' && (
-            <div>
-              <h2 className="text-xl font-bold text-white mb-4">Tasks & Follow-ups</h2>
-              {tasks.length === 0 ? (
-                <div className="text-center py-10">
-                  <p className="text-slate-300">No tasks found for this account</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {tasks.map((task, idx) => (
-                    <div key={`account-task-${task.id}-${idx}`} className="glassmorphic-premium rounded-xl p-4 border border-white/10">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-lg font-bold text-white">{task.title}</h3>
-                            <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                              task.task_type === 'Follow-up' ? 'bg-purple-500/20 text-purple-300' :
-                              task.task_type === 'Meeting' ? 'bg-blue-500/20 text-blue-300' :
-                              'bg-green-500/20 text-green-300'
-                            }`}>
-                              {task.task_type}
-                            </span>
-                            <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                              task.status === 'Completed' ? 'bg-green-500/20 text-green-300' :
-                              task.status === 'In Progress' ? 'bg-blue-500/20 text-blue-300' :
-                              'bg-yellow-500/20 text-yellow-300'
-                            }`}>
-                              {task.status}
-                            </span>
-                          </div>
-                          {task.description && (
-                            <p className="text-slate-300 text-sm mb-2">{task.description}</p>
-                          )}
-                          <div className="flex items-center gap-4 text-xs text-slate-400">
-                            <span>Due: {formatDate(task.due_date)}</span>
-                            <span>Assigned: {task.assigned_to}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => router.push(`/crm/tasks`)}
-                          className="px-3 py-1 text-xs font-semibold text-white bg-brand-primary hover:bg-brand-accent rounded-lg"
-                        >
-                          View
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
           </div>
         </div>
@@ -767,6 +707,9 @@ export default function AccountDetailsPage() {
                   companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
                   companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
                   assignedEmployee: assignedEmployee || null,
+                  stateId: formData.stateId || null,
+                  cityId: formData.cityId || null,
+                  address: formData.address || null,
                   website: formData.website || null,
                   gstNumber: formData.gstNumber || null,
                   notes: formData.notes || null,
@@ -794,6 +737,9 @@ export default function AccountDetailsPage() {
             companyStage: account.company_stage || '',
             companyTag: account.company_tag || '',
             assignedEmployee: account.assigned_employee || '',
+            stateId: account.state_id || null,
+            cityId: account.city_id || null,
+            address: account.address || '',
             website: account.website || '',
             gstNumber: account.gst_number || '',
             notes: account.notes || '',

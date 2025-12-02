@@ -25,11 +25,11 @@ interface Account {
   cityId: number | null;
   stateName: string | null;
   cityName: string | null;
+  address: string | null;
   engagementScore: number;
   contactPerson: string | null;
   phone: string | null;
   email: string | null;
-  address: string | null;
   gstNumber: string | null;
   website: string | null;
   notes: string | null;
@@ -236,6 +236,9 @@ export default function AccountsPage() {
               companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
               companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
               assignedEmployee: assignedEmployee || null,
+              stateId: formData.stateId || null,
+              cityId: formData.cityId || null,
+              address: formData.address || null,
               website: formData.website || null,
               gstNumber: formData.gstNumber || null,
               notes: formData.notes || null,
@@ -275,6 +278,9 @@ export default function AccountsPage() {
             companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
             companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
             assignedEmployee: assignedEmployee || null,
+            stateId: formData.stateId || null,
+            cityId: formData.cityId || null,
+            address: formData.address || null,
             website: formData.website || null,
             gstNumber: formData.gstNumber || null,
             notes: formData.notes || null,

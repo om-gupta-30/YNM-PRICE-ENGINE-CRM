@@ -110,13 +110,37 @@ export async function syncContactNotification(
       }
     } else {
       // Create new notification
-      const { error: insertError } = await supabase
+      const { data: newNotification, error: insertError } = await supabase
         .from('notifications')
-        .insert(notificationData);
+        .insert(notificationData)
+        .select()
+        .single();
       
       if (insertError) {
         console.error('Error creating notification:', insertError);
         return { success: false, error: insertError.message };
+      }
+
+      // Log activity for notification creation
+      if (newNotification) {
+        try {
+          await supabase.from('activities').insert({
+            account_id: accountId || null,
+            contact_id: contactId,
+            employee_id: userId,
+            activity_type: 'followup',
+            description: `Follow-up notification created: ${message}`,
+            metadata: {
+              notification_id: newNotification.id,
+              notification_type: 'followup_due',
+              contact_name: contactName,
+              follow_up_date: followUpDate,
+              action: 'notification_created',
+            },
+          });
+        } catch (activityError) {
+          console.warn('Failed to log notification creation activity:', activityError);
+        }
       }
     }
     

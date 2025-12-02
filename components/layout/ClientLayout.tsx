@@ -6,6 +6,7 @@ import Breadcrumbs from '@/components/ui/Breadcrumbs';
 import LogoutButton from '@/components/layout/LogoutButton';
 import ActivityTracker from '@/components/utils/ActivityTracker';
 import UserStatusIndicator from '@/components/ui/UserStatusIndicator';
+import NotificationBell from '@/components/ui/NotificationBell';
 import { ReactNode } from 'react';
 
 interface ClientLayoutProps {
@@ -16,10 +17,12 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   // Memoize children to prevent unnecessary re-renders
   const memoizedChildren = useMemo(() => children, [children]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [username, setUsername] = useState('');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      setUsername(localStorage.getItem('username') || '');
     }
   }, []);
 
@@ -36,6 +39,9 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
             <UserStatusIndicator isAdmin={isAdmin} />
           </div>
           <Breadcrumbs />
+          <div className="absolute right-2 sm:right-4 md:right-8 top-3 sm:top-4 md:top-6">
+            {username && <NotificationBell userId={username} isAdmin={isAdmin} />}
+          </div>
         </div>
         {memoizedChildren}
       </div>

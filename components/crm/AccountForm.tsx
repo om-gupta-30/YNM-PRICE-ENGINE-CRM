@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import IndustrySelector from './IndustrySelector';
+import StateCitySelect from '@/components/forms/StateCitySelect';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -15,6 +16,9 @@ export interface AccountFormData {
   companyStage: string;
   companyTag: string;
   assignedEmployee: string;
+  stateId?: number | null;
+  cityId?: number | null;
+  address?: string;
   website?: string;
   gstNumber?: string;
   notes?: string;
@@ -63,12 +67,17 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     companyStage: '',
     companyTag: '',
     assignedEmployee: '',
+    stateId: null,
+    cityId: null,
+    address: '',
     website: '',
     gstNumber: '',
     notes: '',
     industries: [],
   });
   const [employeeOptions, setEmployeeOptions] = useState<string[]>(['Employee1', 'Employee2']);
+  const [stateName, setStateName] = useState<string>('');
+  const [cityName, setCityName] = useState<string>('');
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -76,6 +85,9 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
       setFormData({
         ...initialData,
         industries: initialData.industries || [],
+        stateId: initialData.stateId || null,
+        cityId: initialData.cityId || null,
+        address: initialData.address || '',
       });
     } else {
       // Auto-assign to current user if employee (not admin)
@@ -85,6 +97,9 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         companyStage: '',
         companyTag: '',
         assignedEmployee: defaultAssignedEmployee,
+        stateId: null,
+        cityId: null,
+        address: '',
         website: '',
         gstNumber: '',
         notes: '',
@@ -253,6 +268,40 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                 <p className="text-xs text-slate-400 mt-1">This account will be automatically assigned to you when created</p>
               </div>
             )}
+
+            {/* State and City - Side by Side */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
+                Location
+              </label>
+              <StateCitySelect
+                stateId={formData.stateId || null}
+                cityId={formData.cityId || null}
+                onStateChange={(stateId, stateName) => {
+                  setFormData(prev => ({ ...prev, stateId }));
+                  setStateName(stateName);
+                }}
+                onCityChange={(cityId, cityName) => {
+                  setFormData(prev => ({ ...prev, cityId }));
+                  setCityName(cityName);
+                }}
+                required={false}
+              />
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
+                Address
+              </label>
+              <textarea
+                value={formData.address || ''}
+                onChange={(e) => handleInputChange('address', e.target.value)}
+                className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent min-h-[100px] resize-y"
+                placeholder="Enter full address..."
+                rows={3}
+              />
+            </div>
 
             {/* Website and GST Number - Side by Side */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

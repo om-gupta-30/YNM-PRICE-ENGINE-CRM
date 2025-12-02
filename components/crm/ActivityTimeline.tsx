@@ -8,6 +8,11 @@ interface ActivityTimelineProps {
 
 export default function ActivityTimeline({ activities }: ActivityTimelineProps) {
   const getActivityIcon = (type: string, description?: string, metadata?: any) => {
+    // Check if this is a notification activity
+    if (metadata?.action === 'notification_created' || metadata?.action === 'notification_completed') {
+      return '🔔';
+    }
+    
     // Check if this is an inactivity reason activity
     if (metadata?.type === 'inactivity_reason' || (description && description.includes('Logged back in after auto-logout'))) {
       return '⏸️';
@@ -46,6 +51,11 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
   };
 
   const getActivityColor = (type: string, description?: string, metadata?: any) => {
+    // Check if this is a notification activity
+    if (metadata?.action === 'notification_created' || metadata?.action === 'notification_completed') {
+      return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+    }
+    
     // Check if this is an inactivity reason activity
     if (metadata?.type === 'inactivity_reason' || (description && description.includes('Logged back in after auto-logout'))) {
       return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
@@ -84,24 +94,6 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    });
-  };
 
   if (activities.length === 0) {
     return (
@@ -135,19 +127,7 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                     <p className="text-slate-400 text-xs">
                       By {activity.employee_id}
                     </p>
-                    <span className="text-slate-500">•</span>
-                    <p className="text-slate-400 text-xs">
-                      {formatDate(activity.created_at)}
-                    </p>
                   </div>
-                </div>
-                <div className="text-right ml-4">
-                  <p className="text-premium-gold text-sm font-semibold">
-                    {formatTime(activity.created_at)}
-                  </p>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    {formatDate(activity.created_at)}
-                  </p>
                 </div>
               </div>
               {activity.metadata && Object.keys(activity.metadata).length > 0 && (

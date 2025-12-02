@@ -111,11 +111,14 @@ export async function PUT(
       last_activity_at: getCurrentISTTime(),
     };
 
-    // Update only provided fields (removed contact_person, phone, email, address, state_id, city_id - not needed for parent accounts)
+    // Update only provided fields
     if (body.accountName !== undefined) updateData.account_name = body.accountName.trim();
     // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)
     if (body.companyStage !== undefined) updateData.company_stage = (body.companyStage && body.companyStage.trim() !== '') ? body.companyStage : null;
     if (body.companyTag !== undefined) updateData.company_tag = (body.companyTag && body.companyTag.trim() !== '') ? body.companyTag : null;
+    if (body.stateId !== undefined) updateData.state_id = body.stateId || null;
+    if (body.cityId !== undefined) updateData.city_id = body.cityId || null;
+    if (body.address !== undefined) updateData.address = body.address && body.address.trim() !== '' ? body.address.trim() : null;
     if (body.website !== undefined) updateData.website = body.website?.trim() || null;
     if (body.gstNumber !== undefined) updateData.gst_number = body.gstNumber?.trim() || null;
     if (body.relatedProducts !== undefined) updateData.related_products = body.relatedProducts || [];
@@ -132,7 +135,7 @@ export async function PUT(
     // Get old account data for activity logging
     const { data: oldAccount } = await supabase
       .from('accounts')
-      .select('account_name, assigned_employee, website, gst_number, notes, industries')
+      .select('account_name, assigned_employee, website, gst_number, notes, industries, address')
       .eq('id', id)
       .single();
 
@@ -174,6 +177,11 @@ export async function PUT(
       }
       if (body.assignedEmployee && body.assignedEmployee !== oldAccount?.assigned_employee) {
         changes.push(`Assigned: "${oldAccount?.assigned_employee}" → "${body.assignedEmployee}"`);
+      }
+      if (body.stateId !== undefined) changes.push(`State updated`);
+      if (body.cityId !== undefined) changes.push(`City updated`);
+      if (body.address !== undefined && body.address !== oldAccount?.address) {
+        changes.push(`Address updated`);
       }
       if (body.is_active !== undefined) {
         changes.push(`Status: ${body.is_active ? 'Activated' : 'Deactivated'}`);
