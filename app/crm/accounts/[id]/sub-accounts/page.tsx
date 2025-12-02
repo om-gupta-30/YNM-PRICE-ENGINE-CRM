@@ -16,6 +16,7 @@ interface SubAccount {
   address: string | null;
   pincode: string | null;
   isHeadquarter: boolean;
+  officeType: 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office' | null;
   engagementScore: number;
   isActive: boolean;
   createdAt: string;
@@ -29,7 +30,9 @@ export default function SubAccountsPage() {
 
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
   const [filteredSubAccounts, setFilteredSubAccounts] = useState<SubAccount[]>([]);
-  const [headquarterFilter, setHeadquarterFilter] = useState<'all' | 'headquarter' | 'non-headquarter'>('all');
+  const [officeTypeFilter, setOfficeTypeFilter] = useState<'all' | 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office'>('all');
+  const [stateFilter, setStateFilter] = useState<number | null>(null);
+  const [cityFilter, setCityFilter] = useState<number | null>(null);
   const [accountInfo, setAccountInfo] = useState<{ accountName: string; stateName: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -50,6 +53,7 @@ export default function SubAccountsPage() {
     address: '',
     pincode: '',
     isHeadquarter: false,
+    officeType: null as 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office' | null,
   });
 
   // Fetch sub-accounts
@@ -64,7 +68,7 @@ export default function SubAccountsPage() {
       if (data.success) {
         const accounts = data.subAccounts || [];
         setSubAccounts(accounts);
-        applyFilter(accounts, headquarterFilter);
+        applyFilters(accounts, officeTypeFilter, stateFilter, cityFilter);
         // Only show error toast if there's a critical error, not for empty results
         if (data.error && !data.subAccounts) {
           console.error('Sub-accounts API error:', data.error);
@@ -142,21 +146,53 @@ export default function SubAccountsPage() {
     }
   };
 
-  // Apply headquarter filter
-  const applyFilter = (accounts: SubAccount[], filter: 'all' | 'headquarter' | 'non-headquarter') => {
-    if (filter === 'all') {
-      setFilteredSubAccounts(accounts);
-    } else if (filter === 'headquarter') {
-      setFilteredSubAccounts(accounts.filter(acc => acc.isHeadquarter));
-    } else {
-      setFilteredSubAccounts(accounts.filter(acc => !acc.isHeadquarter));
+  // Apply all filters (office type, state, city)
+  const applyFilters = (
+    accounts: SubAccount[], 
+    officeType: 'all' | 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office',
+    stateId: number | null,
+    cityId: number | null
+  ) => {
+    let filtered = [...accounts];
+    
+    // Filter by office type
+    if (officeType !== 'all') {
+      filtered = filtered.filter(acc => acc.officeType === officeType);
     }
+    
+    // Filter by state
+    if (stateId) {
+      filtered = filtered.filter(acc => acc.stateId === stateId);
+    }
+    
+    // Filter by city
+    if (cityId) {
+      filtered = filtered.filter(acc => acc.cityId === cityId);
+    }
+    
+    setFilteredSubAccounts(filtered);
   };
 
-  // Update filtered list when filter changes
+  // Update filtered list when filters change
   useEffect(() => {
-    applyFilter(subAccounts, headquarterFilter);
-  }, [headquarterFilter, subAccounts]);
+    applyFilters(subAccounts, officeTypeFilter, stateFilter, cityFilter);
+  }, [officeTypeFilter, stateFilter, cityFilter, subAccounts]);
+  
+  // Get unique states and cities for filters
+  const uniqueStates = Array.from(new Map(subAccounts
+    .filter(acc => acc.stateId && acc.stateName)
+    .map(acc => [acc.stateId, { id: acc.stateId, name: acc.stateName }]))
+    .values())
+    .sort((a, b) => a.name!.localeCompare(b.name!));
+  
+  const uniqueCities = Array.from(new Map(subAccounts
+    .filter(acc => {
+      if (!stateFilter) return acc.cityId && acc.cityName;
+      return acc.stateId === stateFilter && acc.cityId && acc.cityName;
+    })
+    .map(acc => [acc.cityId, { id: acc.cityId, name: acc.cityName }]))
+    .values())
+    .sort((a, b) => a.name!.localeCompare(b.name!));
 
   useEffect(() => {
     if (accountId && (username || isAdmin)) {
@@ -226,6 +262,7 @@ export default function SubAccountsPage() {
             address: formData.address || null,
             pincode: formData.pincode || null,
             isHeadquarter: formData.isHeadquarter,
+            officeType: formData.officeType || null,
           }),
         });
 
@@ -249,6 +286,7 @@ export default function SubAccountsPage() {
             address: formData.address || null,
             pincode: formData.pincode || null,
             isHeadquarter: formData.isHeadquarter,
+            officeType: formData.officeType || null,
           }),
         });
 
@@ -262,7 +300,7 @@ export default function SubAccountsPage() {
       }
 
       setIsModalOpen(false);
-      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
+      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
       setEditSubAccount(null);
       setCities([]);
       await fetchSubAccounts();
@@ -277,7 +315,7 @@ export default function SubAccountsPage() {
   // Handle open modal
   const handleOpenModal = () => {
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
     setCities([]);
     setIsModalOpen(true);
   };
@@ -292,6 +330,7 @@ export default function SubAccountsPage() {
       address: subAccount.address || '',
       pincode: subAccount.pincode || '',
       isHeadquarter: subAccount.isHeadquarter || false,
+      officeType: subAccount.officeType || null,
     });
     // Fetch cities if state is set
     if (subAccount.stateId) {
@@ -306,9 +345,16 @@ export default function SubAccountsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
     setCities([]);
   };
+  
+  // Reset city filter when state filter changes
+  useEffect(() => {
+    if (stateFilter) {
+      setCityFilter(null);
+    }
+  }, [stateFilter]);
 
   if (!accountId) {
     return (
@@ -361,17 +407,68 @@ export default function SubAccountsPage() {
         {/* Sub-Accounts Table */}
         <div className="glassmorphic-premium rounded-3xl p-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
           {/* Filter Section */}
-          <div className="mb-6 flex items-center gap-4">
-            <label className="text-sm font-semibold text-slate-200">Filter by:</label>
-            <select
-              value={headquarterFilter}
-              onChange={(e) => setHeadquarterFilter(e.target.value as 'all' | 'headquarter' | 'non-headquarter')}
-              className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
-            >
-              <option value="all">All Sub-Accounts</option>
-              <option value="headquarter">Headquarters Only</option>
-              <option value="non-headquarter">Non-Headquarters Only</option>
-            </select>
+          <div className="mb-6 space-y-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="text-sm font-semibold text-slate-200">Filters:</label>
+              
+              {/* Office Type Filter */}
+              <select
+                value={officeTypeFilter}
+                onChange={(e) => setOfficeTypeFilter(e.target.value as typeof officeTypeFilter)}
+                className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+              >
+                <option value="all">All Office Types</option>
+                <option value="Headquarter">Headquarter</option>
+                <option value="Zonal Office">Zonal Office</option>
+                <option value="Regional Office">Regional Office</option>
+                <option value="Site Office">Site Office</option>
+              </select>
+              
+              {/* State Filter */}
+              <select
+                value={stateFilter || ''}
+                onChange={(e) => setStateFilter(e.target.value ? parseInt(e.target.value) : null)}
+                className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+              >
+                <option value="">All States</option>
+                {uniqueStates.map((state) => (
+                  <option key={state.id} value={state.id}>
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+              
+              {/* City Filter */}
+              <select
+                value={cityFilter || ''}
+                onChange={(e) => setCityFilter(e.target.value ? parseInt(e.target.value) : null)}
+                disabled={!stateFilter}
+                className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">
+                  {stateFilter ? 'All Cities' : 'Select State First'}
+                </option>
+                {uniqueCities.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+              
+              {/* Clear Filters Button */}
+              {(officeTypeFilter !== 'all' || stateFilter || cityFilter) && (
+                <button
+                  onClick={() => {
+                    setOfficeTypeFilter('all');
+                    setStateFilter(null);
+                    setCityFilter(null);
+                  }}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
+                >
+                  Clear Filters
+                </button>
+              )}
+            </div>
           </div>
 
           {loading ? (
@@ -415,7 +512,11 @@ export default function SubAccountsPage() {
                         )}
                       </td>
                       <td className="py-4 px-4">
-                        {subAccount.isHeadquarter ? (
+                        {subAccount.officeType ? (
+                          <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
+                            {subAccount.officeType}
+                          </span>
+                        ) : subAccount.isHeadquarter ? (
                           <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
                             ✓ HQ
                           </span>
@@ -598,18 +699,32 @@ export default function SubAccountsPage() {
                   />
                 </div>
 
-                {/* Is Headquarter Checkbox */}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="isHeadquarter"
-                    checked={formData.isHeadquarter}
-                    onChange={(e) => setFormData(prev => ({ ...prev, isHeadquarter: e.target.checked }))}
-                    className="w-5 h-5 rounded border-white/30 bg-white/10 text-premium-gold focus:ring-premium-gold/50 cursor-pointer"
-                  />
-                  <label htmlFor="isHeadquarter" className="text-sm font-semibold text-slate-200 cursor-pointer">
-                    This is a headquarter
+                {/* Office Type Selection */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Office Type
                   </label>
+                  <select
+                    value={formData.officeType || ''}
+                    onChange={(e) => {
+                      const value = e.target.value as typeof formData.officeType;
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        officeType: value || null,
+                        isHeadquarter: value === 'Headquarter' // Auto-set isHeadquarter if Headquarter is selected
+                      }));
+                    }}
+                    className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                  >
+                    <option value="">Select Office Type (Optional)</option>
+                    <option value="Headquarter">Headquarter</option>
+                    <option value="Zonal Office">Zonal Office</option>
+                    <option value="Regional Office">Regional Office</option>
+                    <option value="Site Office">Site Office</option>
+                  </select>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Select the type of office for this sub-account location
+                  </p>
                 </div>
 
                 {/* Form Buttons */}

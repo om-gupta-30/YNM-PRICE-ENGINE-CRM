@@ -275,6 +275,7 @@ export interface SubAccount {
   address?: string | null;
   pincode?: string | null;
   is_headquarter?: boolean | null;
+  office_type?: 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office' | null;
 }
 
 // Activity Log interface

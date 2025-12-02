@@ -725,7 +725,6 @@ export default function AccountDetailsPage() {
             companyStage: account?.company_stage || '',
             companyTag: account?.company_tag || '',
             assignedEmployee: account?.assigned_employee || '',
-            industryProjects: account?.industry_projects || {},
             website: account?.website || '',
             gstNumber: account?.gst_number || '',
             notes: account?.notes || '',
