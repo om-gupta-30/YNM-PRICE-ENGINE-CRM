@@ -159,9 +159,6 @@ export interface Account {
   contact_person?: string | null;
   phone?: string | null;
   email?: string | null;
-  state_id?: number | null;
-  city_id?: number | null;
-  address?: string | null;
   website?: string | null;
   gst_number?: string | null;
   related_products?: string[] | null;
@@ -170,6 +167,7 @@ export interface Account {
   is_active?: boolean;
   engagement_score?: number | null;
   industries?: Array<{ industry_id: number; industry_name: string; sub_industry_id: number; sub_industry_name: string }> | null;
+  industry_projects?: Record<string, number> | null; // JSONB: {"industry_id-sub_industry_id": number_of_projects}
   created_at: string;
   updated_at?: string | null;
   last_activity_at?: string | null;
@@ -275,6 +273,8 @@ export interface SubAccount {
   state_id?: number | null;
   city_id?: number | null;
   address?: string | null;
+  pincode?: string | null;
+  is_headquarter?: boolean | null;
 }
 
 // Activity Log interface
