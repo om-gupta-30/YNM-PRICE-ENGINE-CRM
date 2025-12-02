@@ -254,6 +254,20 @@ export async function DELETE(
       );
     }
 
+    // Get old account data for activity logging
+    const { data: oldAccount } = await supabase
+      .from('accounts')
+      .select('account_name, assigned_employee, is_active')
+      .eq('id', id)
+      .single();
+
+    if (!oldAccount) {
+      return NextResponse.json(
+        { error: 'Account not found' },
+        { status: 404 }
+      );
+    }
+
     // Soft delete - set is_active to false
     const { data, error } = await supabase
       .from('accounts')
@@ -269,6 +283,27 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting account:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Log activity for account deletion
+    try {
+      const { searchParams } = new URL(request.url);
+      const deletedBy = searchParams.get('deletedBy') || searchParams.get('updatedBy') || 'System';
+      
+      await supabase.from('activities').insert({
+        account_id: id,
+        employee_id: deletedBy,
+        activity_type: 'note',
+        description: `Account "${oldAccount.account_name}" deleted`,
+        metadata: {
+          changes: ['Account deleted'],
+          old_data: oldAccount,
+          new_data: { ...oldAccount, is_active: false },
+          deleted_by: deletedBy,
+        },
+      });
+    } catch (activityError) {
+      console.warn('Failed to log account deletion activity:', activityError);
     }
 
     // Format timestamps in IST

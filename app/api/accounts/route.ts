@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseServerClient();
 
     // Fetch accounts with all required fields
-    // Try to query with is_active filter, but fallback if column doesn't exist
+    // Filter by is_active to exclude deleted accounts
     let query = supabase
       .from('accounts')
       .select(`
@@ -26,18 +26,19 @@ export async function GET(request: NextRequest) {
         industries,
         industry_projects,
         assigned_employee,
+        is_active,
         created_at,
         updated_at
       `)
       .order('account_name', { ascending: true });
     
+    // Filter by is_active to only show active accounts (exclude deleted ones)
+    query = query.eq('is_active', true);
+    
     // Filter by assigned_employee if not admin
     if (!isAdmin && employeeUsername) {
       query = query.eq('assigned_employee', employeeUsername);
     }
-    
-    // Note: We removed is_active filter to avoid errors if column doesn't exist
-    // The query will work regardless of whether is_active column exists
 
     const { data: accounts, error } = await query;
 

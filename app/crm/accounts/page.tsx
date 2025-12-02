@@ -272,7 +272,12 @@ export default function AccountsPage() {
     }
     
     try {
-      const response = await fetch(`/api/accounts/${accountId}`, {
+      const params = new URLSearchParams();
+      if (username) {
+        params.append('deletedBy', username);
+      }
+      
+      const response = await fetch(`/api/accounts/${accountId}?${params}`, {
         method: 'DELETE',
       });
       
