@@ -28,11 +28,6 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
     }
   }, []);
 
-  // Only track for employees, not admin - but after mount check
-  if (!mounted || isAdmin || !username) {
-    return null;
-  }
-
   // Update status on server (throttled to avoid too many API calls)
   const updateStatus = useCallback(async (status: UserStatus, reason?: string) => {
     if (!username || statusRef.current === status) return;
@@ -187,6 +182,12 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
       }
     };
   }, [username, isAdmin, handleActivity]);
+
+  // Only track for employees, not admin - but after mount check
+  // This check must come AFTER all hooks are declared
+  if (!mounted || isAdmin || !username) {
+    return null;
+  }
 
   return null; // This component doesn't render anything
 }

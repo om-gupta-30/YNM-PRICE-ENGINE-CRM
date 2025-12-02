@@ -23,11 +23,6 @@ export default function UserStatusIndicator({ username, isAdmin = false }: UserS
     setLastUpdate(new Date());
   }, []);
 
-  // Only show for employees, not admin
-  if (!mounted || isAdmin || !displayUsername) {
-    return null;
-  }
-
   // Fetch user status periodically (every 30 seconds)
   useEffect(() => {
     if (!displayUsername) return;
@@ -57,6 +52,12 @@ export default function UserStatusIndicator({ username, isAdmin = false }: UserS
 
     return () => clearInterval(interval);
   }, [displayUsername]);
+
+  // Only show for employees, not admin
+  // This check must come AFTER all hooks are declared
+  if (!mounted || isAdmin || !displayUsername) {
+    return null;
+  }
 
   const getStatusColor = () => {
     switch (status) {
