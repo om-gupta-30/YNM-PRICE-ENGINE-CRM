@@ -12,34 +12,47 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   const pathname = usePathname();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const lastPathname = useRef<string>('');
+  const hasRedirected = useRef(false);
+
+  // Mount guard - only run on client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
-    // Check authentication on mount and route change
-    if (typeof window === 'undefined') {
+    // Only run on client after mount
+    if (!mounted || typeof window === 'undefined') {
       return;
     }
 
     // Prevent re-running for the same pathname
-    if (lastPathname.current === pathname) {
+    if (lastPathname.current === pathname && hasRedirected.current) {
       return;
+    }
+    
+    // Reset redirect flag when pathname actually changes
+    if (lastPathname.current !== pathname) {
+      hasRedirected.current = false;
     }
     lastPathname.current = pathname;
 
-    setIsChecking(true);
-    const auth = localStorage.getItem('auth');
-    const isAuth = auth === 'true';
-    
-    // Public routes - allow access
-    if (pathname === '/login' || pathname === '/change-password') {
-      // If already authenticated on login page, redirect to home
-      if (pathname === '/login' && isAuth) {
+      setIsChecking(true);
+      const auth = localStorage.getItem('auth');
+      const isAuth = auth === 'true';
+      
+      // Public routes - allow access
+      if (pathname === '/login' || pathname === '/change-password') {
+        // If already authenticated on login page, redirect to home
+      if (pathname === '/login' && isAuth && !hasRedirected.current) {
+        hasRedirected.current = true;
         router.replace('/home');
-        setIsAuthenticated(true);
+          setIsAuthenticated(true);
         setIsChecking(false);
         return;
-      } else {
-        setIsAuthenticated(true); // Allow public pages to render
+        } else {
+          setIsAuthenticated(true); // Allow public pages to render
         setIsChecking(false);
         return;
       }
@@ -47,30 +60,36 @@ export default function AuthGuard({ children }: AuthGuardProps) {
 
     // If user visits root path, redirect based on auth status
     if (pathname === '/') {
-      if (isAuth) {
-        router.replace('/home');
-      } else {
-        router.replace('/login');
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        if (isAuth) {
+          router.replace('/home');
+        } else {
+          router.replace('/login');
+        }
       }
       setIsAuthenticated(true);
-      setIsChecking(false);
-      return;
-    }
+        setIsChecking(false);
+        return;
+      }
 
-    // Protected route - require authentication
+      // Protected route - require authentication
     // This includes: /home, /mbcb, /mbcb/*, /paint, /signages, /crm, etc.
-    if (!isAuth) {
-      // Redirect to login immediately
-      router.replace('/login');
-      setIsAuthenticated(false);
+      if (!isAuth) {
+      // Redirect to login immediately (only once)
+      if (!hasRedirected.current) {
+        hasRedirected.current = true;
+        router.replace('/login');
+      }
+        setIsAuthenticated(false);
+        setIsChecking(false);
+        return;
+      }
+      
+      // Authenticated - allow access
+      setIsAuthenticated(true);
       setIsChecking(false);
-      return;
-    }
-    
-    // Authenticated - allow access
-    setIsAuthenticated(true);
-    setIsChecking(false);
-  }, [pathname]); // Removed router from dependencies as it's stable
+  }, [pathname, mounted, router]);
 
   // Show nothing while checking auth (prevents flash)
   if (isChecking || isAuthenticated === null) {

@@ -24,10 +24,8 @@ export async function GET(request: NextRequest) {
         website,
         notes,
         industries,
+        industry_projects,
         assigned_employee,
-        state_id,
-        city_id,
-        address,
         created_at,
         updated_at
       `)
@@ -58,7 +56,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Calculate total engagement score and fetch state/city names for each account
+          // Calculate total engagement score for each account
     const accountsWithScores = await Promise.all(
       (accounts || []).map(async (account) => {
         try {
@@ -69,36 +67,6 @@ export async function GET(request: NextRequest) {
             .eq('account_id', account.id)
             .eq('is_active', true)
             .order('engagement_score', { ascending: false });
-          
-          // Fetch state and city names if they exist
-          let stateName = null;
-          let cityName = null;
-          
-          if (account.state_id) {
-            try {
-              const { data: stateData } = await supabase
-                .from('states')
-                .select('state_name')
-                .eq('id', account.state_id)
-                .single();
-              stateName = stateData?.state_name || null;
-            } catch (err) {
-              console.error(`Error fetching state for account ${account.id}:`, err);
-            }
-          }
-          
-          if (account.city_id) {
-            try {
-              const { data: cityData } = await supabase
-                .from('cities')
-                .select('city_name')
-                .eq('id', account.city_id)
-                .single();
-              cityName = cityData?.city_name || null;
-            } catch (err) {
-              console.error(`Error fetching city for account ${account.id}:`, err);
-            }
-          }
           
           // If sub_accounts table doesn't exist, just use empty array
           if (subAccountsError && (subAccountsError.code === '42P01' || subAccountsError.message?.includes('does not exist'))) {
@@ -112,12 +80,8 @@ export async function GET(request: NextRequest) {
               website: account.website || null,
               notes: account.notes || null,
               industries: account.industries || [],
+              industryProjects: account.industry_projects || {},
               assignedEmployee: account.assigned_employee || null,
-              stateId: account.state_id || null,
-              cityId: account.city_id || null,
-              stateName,
-              cityName,
-              address: account.address || null,
               createdAt: formatTimestampIST(account.created_at),
               updatedAt: formatTimestampIST(account.updated_at),
             };
@@ -138,12 +102,8 @@ export async function GET(request: NextRequest) {
             website: account.website || null,
             notes: account.notes || null,
             industries: account.industries || [],
+            industryProjects: account.industry_projects || {},
             assignedEmployee: account.assigned_employee || null,
-            stateId: account.state_id || null,
-            cityId: account.city_id || null,
-            stateName,
-            cityName,
-            address: account.address || null,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };
@@ -160,12 +120,8 @@ export async function GET(request: NextRequest) {
             website: account.website || null,
             notes: account.notes || null,
             industries: account.industries || [],
+            industryProjects: account.industry_projects || {},
             assignedEmployee: account.assigned_employee || null,
-            stateId: account.state_id || null,
-            cityId: account.city_id || null,
-            stateName: null,
-            cityName: null,
-            address: account.address || null,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };
@@ -191,13 +147,11 @@ export async function POST(request: NextRequest) {
       companyStage,
       companyTag,
       assignedEmployee,
-      stateId,
-      cityId,
-      address,
       website,
       gstNumber,
       notes,
       industries,
+      industryProjects,
       createdBy,
     } = body;
 
@@ -233,13 +187,11 @@ export async function POST(request: NextRequest) {
         company_tag: (companyTag && companyTag.trim() !== '') ? companyTag : null,
         assigned_employee: finalAssignedEmployee,
         assigned_to: finalAssignedEmployee, // Also update assigned_to column
-        state_id: stateId || null,
-        city_id: cityId || null,
-        address: address && address.trim() !== '' ? address.trim() : null,
         website: website || null,
         gst_number: gstNumber || null,
         notes: notes || null,
         industries: industries || [],
+        industry_projects: industryProjects || {},
         engagement_score: 0,
       })
       .select('id')

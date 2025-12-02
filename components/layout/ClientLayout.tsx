@@ -18,8 +18,10 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   const memoizedChildren = useMemo(() => children, [children]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState('');
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
       setUsername(localStorage.getItem('username') || '');
@@ -40,7 +42,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
           </div>
           <Breadcrumbs />
           <div className="absolute right-2 sm:right-4 md:right-8 top-3 sm:top-4 md:top-6">
-            {username && <NotificationBell userId={username} isAdmin={isAdmin} />}
+            {mounted && username && <NotificationBell userId={username} isAdmin={isAdmin} />}
           </div>
         </div>
         {memoizedChildren}

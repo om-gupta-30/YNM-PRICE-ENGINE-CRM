@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@/contexts/UserContext';
 
@@ -13,14 +13,23 @@ interface ActivityTrackerProps {
 export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProps) {
   const router = useRouter();
   const { username } = useUser();
-  const lastActivityRef = useRef<number>(Date.now());
+  const [mounted, setMounted] = useState(false);
+  const lastActivityRef = useRef<number>(0);
   const statusRef = useRef<UserStatus>('online');
   const awayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const updateStatusTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Only track for employees, not admin
-  if (isAdmin || !username) {
+  // Initialize on mount only (client-side)
+  useEffect(() => {
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      lastActivityRef.current = Date.now();
+    }
+  }, []);
+
+  // Only track for employees, not admin - but after mount check
+  if (!mounted || isAdmin || !username) {
     return null;
   }
 

@@ -14,10 +14,17 @@ export default function UserStatusIndicator({ username, isAdmin = false }: UserS
   const { username: contextUsername } = useUser();
   const displayUsername = username || contextUsername;
   const [status, setStatus] = useState<UserStatus>('online');
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Mount guard to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+    setLastUpdate(new Date());
+  }, []);
 
   // Only show for employees, not admin
-  if (isAdmin || !displayUsername) {
+  if (!mounted || isAdmin || !displayUsername) {
     return null;
   }
 
@@ -32,7 +39,9 @@ export default function UserStatusIndicator({ username, isAdmin = false }: UserS
           const data = await response.json();
           if (data.status) {
             setStatus(data.status);
-            setLastUpdate(new Date());
+            if (typeof window !== 'undefined') {
+              setLastUpdate(new Date());
+            }
           }
         }
       } catch (error) {

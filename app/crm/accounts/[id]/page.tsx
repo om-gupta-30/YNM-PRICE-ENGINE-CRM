@@ -457,16 +457,6 @@ export default function AccountDetailsPage() {
                 </div>
               </div>
 
-              {account?.address && (
-                <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
-                  <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">📍</span>
-                    Address
-                  </h3>
-                  <p className="text-slate-300 whitespace-pre-wrap">{account.address}</p>
-                </div>
-              )}
-
               {account?.notes && (
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                   <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
@@ -707,13 +697,11 @@ export default function AccountDetailsPage() {
                   companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
                   companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
                   assignedEmployee: assignedEmployee || null,
-                  stateId: formData.stateId || null,
-                  cityId: formData.cityId || null,
-                  address: formData.address || null,
                   website: formData.website || null,
                   gstNumber: formData.gstNumber || null,
                   notes: formData.notes || null,
                   industries: formData.industries || [],
+                  industryProjects: formData.industryProjects || {},
                   updatedBy: username || 'System',
                 }),
               });
@@ -737,13 +725,12 @@ export default function AccountDetailsPage() {
             companyStage: account?.company_stage || '',
             companyTag: account?.company_tag || '',
             assignedEmployee: account?.assigned_employee || '',
-            stateId: account?.state_id || null,
-            cityId: account?.city_id || null,
-            address: account?.address || '',
+            industryProjects: account?.industry_projects || {},
             website: account?.website || '',
             gstNumber: account?.gst_number || '',
             notes: account?.notes || '',
             industries: account?.industries || [],
+            industryProjects: account?.industry_projects || {},
           }}
           mode="edit"
           isAdmin={isAdmin}

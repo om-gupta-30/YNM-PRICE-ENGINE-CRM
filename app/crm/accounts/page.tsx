@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
-import StateCitySelect from '@/components/forms/StateCitySelect';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -21,11 +20,6 @@ interface Account {
   companyStage: string;
   companyTag: string;
   assignedEmployee?: string | null;
-  stateId: number | null;
-  cityId: number | null;
-  stateName: string | null;
-  cityName: string | null;
-  address: string | null;
   engagementScore: number;
   contactPerson: string | null;
   phone: string | null;
@@ -34,6 +28,7 @@ interface Account {
   website: string | null;
   notes: string | null;
   industries?: SelectedIndustry[];
+  industryProjects?: Record<string, number>;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,11 +98,6 @@ export default function AccountsPage() {
     }
   }, [username, isAdmin]);
 
-  // Filter states
-  const [filterStateId, setFilterStateId] = useState<number | null>(null);
-  const [filterStateName, setFilterStateName] = useState<string>('');
-  const [filterCityId, setFilterCityId] = useState<number | null>(null);
-  const [filterCityName, setFilterCityName] = useState<string>('');
   
   // Account details modal state
   const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
@@ -135,14 +125,6 @@ export default function AccountsPage() {
   const filteredAndSortedAccounts = useMemo(() => {
     let filtered = [...accounts];
     
-    if (filterStateId) {
-      filtered = filtered.filter(acc => acc.stateId === filterStateId);
-    }
-    
-    if (filterCityId) {
-      filtered = filtered.filter(acc => acc.cityId === filterCityId);
-    }
-    
     // Apply sorting
     if (sortField) {
       filtered.sort((a, b) => {
@@ -159,7 +141,7 @@ export default function AccountsPage() {
     }
     
     return filtered;
-  }, [accounts, filterStateId, filterCityId, sortField, sortDirection]);
+  }, [accounts, sortField, sortDirection]);
   
   // Paginated accounts for performance (only render visible items)
   const paginatedAccounts = useMemo(() => {
@@ -173,31 +155,7 @@ export default function AccountsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterStateId, filterCityId, sortField, sortDirection]);
-  
-  // Get unique states and cities for filters
-  const uniqueStates = useMemo(() => {
-    const stateMap = new Map<number, { id: number; name: string }>();
-    accounts.forEach(acc => {
-      if (acc.stateId && acc.stateName) {
-        stateMap.set(acc.stateId, { id: acc.stateId, name: acc.stateName });
-      }
-    });
-    return Array.from(stateMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [accounts]);
-  
-  const uniqueCities = useMemo(() => {
-    if (!filterStateId) return [];
-    const cityMap = new Map<number, { id: number; name: string }>();
-    accounts
-      .filter(acc => acc.stateId === filterStateId && acc.cityId && acc.cityName)
-      .forEach(acc => {
-        if (acc.cityId && acc.cityName) {
-          cityMap.set(acc.cityId, { id: acc.cityId, name: acc.cityName });
-        }
-      });
-    return Array.from(cityMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [accounts, filterStateId]);
+  }, [sortField, sortDirection]);
 
   // Handle modal open for create
   const handleOpenModal = () => {
@@ -236,13 +194,11 @@ export default function AccountsPage() {
               companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
               companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
               assignedEmployee: assignedEmployee || null,
-              stateId: formData.stateId || null,
-              cityId: formData.cityId || null,
-              address: formData.address || null,
               website: formData.website || null,
               gstNumber: formData.gstNumber || null,
               notes: formData.notes || null,
               industries: formData.industries || [],
+              industryProjects: formData.industryProjects || {},
               updatedBy: username || 'System',
             }),
           });
@@ -278,13 +234,11 @@ export default function AccountsPage() {
             companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
             companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
             assignedEmployee: assignedEmployee || null,
-            stateId: formData.stateId || null,
-            cityId: formData.cityId || null,
-            address: formData.address || null,
             website: formData.website || null,
             gstNumber: formData.gstNumber || null,
             notes: formData.notes || null,
             industries: formData.industries || [],
+            industryProjects: formData.industryProjects || {},
             createdBy: username || 'System',
           }),
       });
@@ -365,66 +319,6 @@ export default function AccountsPage() {
         <div className="gold-divider w-full"></div>
       </div>
 
-        {/* Filters - More Prominent */}
-        <div className="glassmorphic-premium rounded-xl sm:rounded-2xl md:rounded-3xl p-3 sm:p-4 md:p-6 mb-4 sm:mb-5 md:mb-6 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-md">
-          <div className="mb-4">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="text-2xl">🔍</div>
-              <h2 className="text-xl font-bold text-white">Filter Accounts</h2>
-              {(filterStateId || filterCityId) && (
-                <span className="px-3 py-1 bg-premium-gold/20 text-premium-gold text-xs font-semibold rounded-full animate-pulse">
-                  Active Filters
-                </span>
-              )}
-            </div>
-            <p className="text-sm text-slate-400 ml-10">Select State and City to filter the accounts list</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <StateCitySelect
-                stateId={filterStateId}
-                cityId={filterCityId}
-                onStateChange={(newStateId, newStateName) => {
-                  setFilterStateId(newStateId);
-                  setFilterStateName(newStateName);
-                  setFilterCityId(null); // Reset city when state changes
-                  setFilterCityName('');
-                }}
-                onCityChange={(newCityId, newCityName) => {
-                  setFilterCityId(newCityId);
-                  setFilterCityName(newCityName);
-                }}
-                required={false}
-              />
-            </div>
-            <div className="md:col-span-2 flex justify-between items-center">
-              {(filterStateId || filterCityId) && (
-                <div className="flex items-center gap-2 text-sm text-slate-300">
-                  <span className="font-semibold">Current filters:</span>
-                  {filterStateName && (
-                    <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded">State: {filterStateName}</span>
-                  )}
-                  {filterCityName && (
-                    <span className="px-2 py-1 bg-green-500/20 text-green-300 rounded">City: {filterCityName}</span>
-                  )}
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  setFilterStateId(null);
-                  setFilterStateName('');
-                  setFilterCityId(null);
-                  setFilterCityName('');
-                }}
-                disabled={!filterStateId && !filterCityId}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 disabled:bg-slate-600/50 disabled:text-slate-400 disabled:cursor-not-allowed rounded-lg transition-all duration-200 flex items-center gap-2"
-              >
-                <span>✕</span>
-                <span>Clear Filters</span>
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* Accounts Table */}
         <div className="rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/20 border border-premium-gold/20 shadow-md overflow-x-auto w-full -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>

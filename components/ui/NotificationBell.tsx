@@ -29,7 +29,13 @@ export default function NotificationBell({ userId, isAdmin }: NotificationBellPr
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Mount guard to prevent hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Fetch notifications
   const fetchNotifications = async () => {
@@ -132,8 +138,8 @@ export default function NotificationBell({ userId, isAdmin }: NotificationBellPr
 
   const unreadCount = notifications.filter(n => !n.isSeen).length;
 
-  // Don't show for Admin user
-  if (!userId || userId === 'Admin') {
+  // Don't show until mounted or for Admin user
+  if (!mounted || !userId || userId === 'Admin') {
     return null;
   }
 
@@ -201,11 +207,11 @@ export default function NotificationBell({ userId, isAdmin }: NotificationBellPr
                       </p>
                       {notification.followUpDate && (
                         <p className="text-premium-gold text-xs">
-                          Follow-up: {new Date(notification.followUpDate).toLocaleDateString('en-IN', {
+                          Follow-up: {mounted ? new Date(notification.followUpDate).toLocaleDateString('en-IN', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
-                          })}
+                          }) : notification.followUpDate}
                         </p>
                       )}
                     </div>

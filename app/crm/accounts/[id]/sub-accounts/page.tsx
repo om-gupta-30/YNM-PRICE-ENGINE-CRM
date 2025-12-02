@@ -14,6 +14,8 @@ interface SubAccount {
   stateName: string | null;
   cityName: string | null;
   address: string | null;
+  pincode: string | null;
+  isHeadquarter: boolean;
   engagementScore: number;
   isActive: boolean;
   createdAt: string;
@@ -26,6 +28,8 @@ export default function SubAccountsPage() {
   const accountId = params?.id ? parseInt(params.id as string) : null;
 
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
+  const [filteredSubAccounts, setFilteredSubAccounts] = useState<SubAccount[]>([]);
+  const [headquarterFilter, setHeadquarterFilter] = useState<'all' | 'headquarter' | 'non-headquarter'>('all');
   const [accountInfo, setAccountInfo] = useState<{ accountName: string; stateName: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +48,8 @@ export default function SubAccountsPage() {
     stateId: null as number | null,
     cityId: null as number | null,
     address: '',
+    pincode: '',
+    isHeadquarter: false,
   });
 
   // Fetch sub-accounts
@@ -56,7 +62,9 @@ export default function SubAccountsPage() {
       const data = await response.json();
       
       if (data.success) {
-        setSubAccounts(data.subAccounts || []);
+        const accounts = data.subAccounts || [];
+        setSubAccounts(accounts);
+        applyFilter(accounts, headquarterFilter);
         // Only show error toast if there's a critical error, not for empty results
         if (data.error && !data.subAccounts) {
           console.error('Sub-accounts API error:', data.error);
@@ -65,6 +73,7 @@ export default function SubAccountsPage() {
       } else {
         // If not successful but no error thrown, still set empty array
         setSubAccounts([]);
+        setFilteredSubAccounts([]);
         // Only show error if it's a critical failure, not just empty results
         if (data.error && !data.error.includes('does not exist')) {
           console.error('Sub-accounts fetch failed:', data.error);
@@ -133,6 +142,22 @@ export default function SubAccountsPage() {
     }
   };
 
+  // Apply headquarter filter
+  const applyFilter = (accounts: SubAccount[], filter: 'all' | 'headquarter' | 'non-headquarter') => {
+    if (filter === 'all') {
+      setFilteredSubAccounts(accounts);
+    } else if (filter === 'headquarter') {
+      setFilteredSubAccounts(accounts.filter(acc => acc.isHeadquarter));
+    } else {
+      setFilteredSubAccounts(accounts.filter(acc => !acc.isHeadquarter));
+    }
+  };
+
+  // Update filtered list when filter changes
+  useEffect(() => {
+    applyFilter(subAccounts, headquarterFilter);
+  }, [headquarterFilter, subAccounts]);
+
   useEffect(() => {
     if (accountId && (username || isAdmin)) {
       fetchAccountInfo();
@@ -199,6 +224,8 @@ export default function SubAccountsPage() {
             stateId: formData.stateId,
             cityId: formData.cityId,
             address: formData.address || null,
+            pincode: formData.pincode || null,
+            isHeadquarter: formData.isHeadquarter,
           }),
         });
 
@@ -220,6 +247,8 @@ export default function SubAccountsPage() {
             stateId: formData.stateId,
             cityId: formData.cityId,
             address: formData.address || null,
+            pincode: formData.pincode || null,
+            isHeadquarter: formData.isHeadquarter,
           }),
         });
 
@@ -233,7 +262,7 @@ export default function SubAccountsPage() {
       }
 
       setIsModalOpen(false);
-      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
+      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
       setEditSubAccount(null);
       setCities([]);
       await fetchSubAccounts();
@@ -248,7 +277,7 @@ export default function SubAccountsPage() {
   // Handle open modal
   const handleOpenModal = () => {
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
     setCities([]);
     setIsModalOpen(true);
   };
@@ -261,6 +290,8 @@ export default function SubAccountsPage() {
       stateId: subAccount.stateId || null,
       cityId: subAccount.cityId || null,
       address: subAccount.address || '',
+      pincode: subAccount.pincode || '',
+      isHeadquarter: subAccount.isHeadquarter || false,
     });
     // Fetch cities if state is set
     if (subAccount.stateId) {
@@ -275,7 +306,7 @@ export default function SubAccountsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '' });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false });
     setCities([]);
   };
 
@@ -329,12 +360,26 @@ export default function SubAccountsPage() {
 
         {/* Sub-Accounts Table */}
         <div className="glassmorphic-premium rounded-3xl p-8 slide-up card-hover-gold border-2 border-premium-gold/30 shadow-2xl">
+          {/* Filter Section */}
+          <div className="mb-6 flex items-center gap-4">
+            <label className="text-sm font-semibold text-slate-200">Filter by:</label>
+            <select
+              value={headquarterFilter}
+              onChange={(e) => setHeadquarterFilter(e.target.value as 'all' | 'headquarter' | 'non-headquarter')}
+              className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+            >
+              <option value="all">All Sub-Accounts</option>
+              <option value="headquarter">Headquarters Only</option>
+              <option value="non-headquarter">Non-Headquarters Only</option>
+            </select>
+          </div>
+
           {loading ? (
             <div className="text-center py-20">
               <div className="text-4xl text-slate-400 mb-4 animate-pulse">⏳</div>
               <p className="text-slate-300">Loading sub-accounts...</p>
             </div>
-          ) : subAccounts.length === 0 ? (
+          ) : filteredSubAccounts.length === 0 ? (
             <div className="text-center py-20">
               <div className="text-4xl text-slate-400 mb-4">📋</div>
               <p className="text-slate-300">No sub-accounts found</p>
@@ -346,12 +391,13 @@ export default function SubAccountsPage() {
                   <tr className="border-b border-white/20">
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Sub-Account Name</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">City + State</th>
+                    <th className="text-left py-4 px-4 text-sm font-bold text-white">Headquarter</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Engagement Score</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {subAccounts.map((subAccount) => (
+                  {filteredSubAccounts.map((subAccount) => (
                     <tr 
                       key={subAccount.id} 
                       className="border-b border-white/10 hover:bg-white/5 transition-all duration-200"
@@ -366,6 +412,15 @@ export default function SubAccountsPage() {
                           <span>{subAccount.stateName}</span>
                         ) : (
                           <span className="text-slate-500 italic">Not set</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-4">
+                        {subAccount.isHeadquarter ? (
+                          <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
+                            ✓ HQ
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-sm">-</span>
                         )}
                       </td>
                       <td className="py-4 px-4">
@@ -526,6 +581,35 @@ export default function SubAccountsPage() {
                     placeholder="Enter full address..."
                     rows={3}
                   />
+                </div>
+
+                {/* Pincode */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Pincode
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pincode}
+                    onChange={(e) => setFormData(prev => ({ ...prev, pincode: e.target.value }))}
+                    className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                    placeholder="Enter pincode"
+                    maxLength={10}
+                  />
+                </div>
+
+                {/* Is Headquarter Checkbox */}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="isHeadquarter"
+                    checked={formData.isHeadquarter}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isHeadquarter: e.target.checked }))}
+                    className="w-5 h-5 rounded border-white/30 bg-white/10 text-premium-gold focus:ring-premium-gold/50 cursor-pointer"
+                  />
+                  <label htmlFor="isHeadquarter" className="text-sm font-semibold text-slate-200 cursor-pointer">
+                    This is a headquarter
+                  </label>
                 </div>
 
                 {/* Form Buttons */}

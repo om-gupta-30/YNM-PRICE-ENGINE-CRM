@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import IndustrySelector from './IndustrySelector';
-import StateCitySelect from '@/components/forms/StateCitySelect';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -16,13 +15,11 @@ export interface AccountFormData {
   companyStage: string;
   companyTag: string;
   assignedEmployee: string;
-  stateId?: number | null;
-  cityId?: number | null;
-  address?: string;
   website?: string;
   gstNumber?: string;
   notes?: string;
   industries?: SelectedIndustry[];
+  industryProjects?: Record<string, number>; // Key: "industry_id-sub_industry_id", Value: number of projects
 }
 
 interface AccountFormProps {
@@ -76,8 +73,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     industries: [],
   });
   const [employeeOptions, setEmployeeOptions] = useState<string[]>(['Employee1', 'Employee2']);
-  const [stateName, setStateName] = useState<string>('');
-  const [cityName, setCityName] = useState<string>('');
+  const [industryProjects, setIndustryProjects] = useState<Record<string, number>>({});
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -85,10 +81,9 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
       setFormData({
         ...initialData,
         industries: initialData.industries || [],
-        stateId: initialData.stateId || null,
-        cityId: initialData.cityId || null,
-        address: initialData.address || '',
+        industryProjects: initialData.industryProjects || {},
       });
+      setIndustryProjects(initialData.industryProjects || {});
     } else {
       // Auto-assign to current user if employee (not admin)
       const defaultAssignedEmployee = !isAdmin && currentUser ? currentUser : '';
@@ -97,14 +92,13 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         companyStage: '',
         companyTag: '',
         assignedEmployee: defaultAssignedEmployee,
-        stateId: null,
-        cityId: null,
-        address: '',
         website: '',
         gstNumber: '',
         notes: '',
         industries: [],
+        industryProjects: {},
       });
+      setIndustryProjects({});
     }
   }, [initialData, isOpen, isAdmin, currentUser]);
 
@@ -138,7 +132,29 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    onSubmit({ ...formData, industryProjects });
+  };
+
+  // Handle industry selection change - show project input when selected
+  const handleIndustryChange = (selected: SelectedIndustry[]) => {
+    setFormData(prev => ({ ...prev, industries: selected }));
+    
+    // Update industryProjects to match selected industries
+    const newProjects: Record<string, number> = {};
+    selected.forEach(item => {
+      const key = `${item.industry_id}-${item.sub_industry_id}`;
+      newProjects[key] = industryProjects[key] || 0;
+    });
+    setIndustryProjects(newProjects);
+  };
+
+  // Handle project count change
+  const handleProjectCountChange = (industryId: number, subIndustryId: number, count: number) => {
+    const key = `${industryId}-${subIndustryId}`;
+    setIndustryProjects(prev => ({
+      ...prev,
+      [key]: count || 0,
+    }));
   };
 
   if (!isOpen) return null;
@@ -269,39 +285,6 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
               </div>
             )}
 
-            {/* State and City - Side by Side */}
-            <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Location
-              </label>
-              <StateCitySelect
-                stateId={formData.stateId || null}
-                cityId={formData.cityId || null}
-                onStateChange={(stateId, stateName) => {
-                  setFormData(prev => ({ ...prev, stateId }));
-                  setStateName(stateName);
-                }}
-                onCityChange={(cityId, cityName) => {
-                  setFormData(prev => ({ ...prev, cityId }));
-                  setCityName(cityName);
-                }}
-                required={false}
-              />
-            </div>
-
-            {/* Address */}
-            <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Address
-              </label>
-              <textarea
-                value={formData.address || ''}
-                onChange={(e) => handleInputChange('address', e.target.value)}
-                className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent min-h-[100px] resize-y"
-                placeholder="Enter full address..."
-                rows={3}
-              />
-            </div>
 
             {/* Website and GST Number - Side by Side */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -359,8 +342,43 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
             </p>
             <IndustrySelector
               value={formData.industries || []}
-              onChange={(selected) => setFormData(prev => ({ ...prev, industries: selected }))}
+              onChange={handleIndustryChange}
             />
+            
+            {/* Number of Projects for Selected Industries */}
+            {formData.industries && formData.industries.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <h4 className="text-lg font-semibold text-white">Number of Projects</h4>
+                <p className="text-xs text-slate-400">
+                  Enter the number of projects for each selected industry/sub-industry combination.
+                </p>
+                <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
+                  {formData.industries.map((item) => {
+                    const key = `${item.industry_id}-${item.sub_industry_id}`;
+                    const projectCount = industryProjects[key] || 0;
+                    return (
+                      <div key={key} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+                        <div className="flex-1">
+                          <p className="text-sm text-white font-medium">
+                            {item.industry_name} - {item.sub_industry_name}
+                          </p>
+                        </div>
+                        <div className="w-32">
+                          <input
+                            type="number"
+                            min="0"
+                            value={projectCount}
+                            onChange={(e) => handleProjectCountChange(item.industry_id, item.sub_industry_id, parseInt(e.target.value) || 0)}
+                            className="input-premium w-full px-3 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                            placeholder="0"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
             {/* Form Buttons */}

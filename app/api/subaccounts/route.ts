@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { data: subAccounts, error } = await supabase
       .from('sub_accounts')
-      .select('id, account_id, sub_account_name, state_id, city_id, address, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
+      .select('id, account_id, sub_account_name, state_id, city_id, address, pincode, is_headquarter, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
       .eq('account_id', parseInt(accountId))
       .eq('is_active', true)
       .order('sub_account_name', { ascending: true });
@@ -88,6 +88,8 @@ export async function GET(request: NextRequest) {
           stateName,
           cityName,
           address: sub.address || null,
+          pincode: sub.pincode || null,
+          isHeadquarter: sub.is_headquarter || false,
           engagementScore: parseFloat(sub.engagement_score?.toString() || '0') || 0,
           isActive: sub.is_active,
           createdAt: formatTimestampIST(sub.created_at),
@@ -115,6 +117,8 @@ export async function POST(request: NextRequest) {
       stateId,
       cityId,
       address,
+      pincode,
+      isHeadquarter,
     } = body;
 
     // Validation
@@ -136,6 +140,8 @@ export async function POST(request: NextRequest) {
         state_id: parseInt(stateId),
         city_id: parseInt(cityId),
         address: address && address.trim() !== '' ? address.trim() : null,
+        pincode: pincode && pincode.trim() !== '' ? pincode.trim() : null,
+        is_headquarter: isHeadquarter || false,
         engagement_score: 0,
         is_active: true,
       })
@@ -176,6 +182,8 @@ export async function PUT(request: NextRequest) {
       stateId,
       cityId,
       address,
+      pincode,
+      isHeadquarter,
     } = body;
 
     // Validation
@@ -204,6 +212,12 @@ export async function PUT(request: NextRequest) {
     }
     if (address !== undefined) {
       updateData.address = address && address.trim() !== '' ? address.trim() : null;
+    }
+    if (pincode !== undefined) {
+      updateData.pincode = pincode && pincode.trim() !== '' ? pincode.trim() : null;
+    }
+    if (isHeadquarter !== undefined) {
+      updateData.is_headquarter = isHeadquarter || false;
     }
 
     const { error } = await supabase
