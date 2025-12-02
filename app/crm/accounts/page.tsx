@@ -229,9 +229,8 @@ export default function AccountsPage() {
       if (editAccount) {
         // Update account
         try {
-          // Admin can assign to any employee, employees cannot change assignment
-          const assignedEmployee = isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee);
           // Data analysts cannot assign accounts - keep existing assignment or set to null
+          // Admin can assign to any employee, employees cannot change assignment
           const assignedEmployee = isDataAnalyst ? (editAccount?.assignedEmployee || null) : (isAdmin ? formData.assignedEmployee : (!isAdmin && username ? username : formData.assignedEmployee));
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
