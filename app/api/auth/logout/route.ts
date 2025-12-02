@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logLogoutActivity } from '@/lib/utils/activityLogger';
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, reason, otherNote, isAdmin } = await request.json();
+    const { username, reason, otherNote, isAdmin, isDataAnalyst } = await request.json();
 
     if (!username) {
       return NextResponse.json(
@@ -13,10 +14,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reason is only required for employees, not admins
-    if (!isAdmin && !reason) {
+    // Reason is required for employees and data analysts, not full admins
+    const isFullAdmin = isAdmin && !isDataAnalyst;
+    if (!isFullAdmin && !reason) {
       return NextResponse.json(
-        { error: 'Reason is required for employees' },
+        { error: 'Reason is required for employees and data analysts' },
         { status: 400 }
       );
     }
@@ -36,8 +38,8 @@ export async function POST(request: NextRequest) {
       console.error('Error updating logout_time in users table:', error);
     }
     
-    // Only log activity and create tasks for employees (not admins)
-    if (!isAdmin && reason) {
+    // Only log activity and create tasks for employees and data analysts (not full admins)
+    if (!isFullAdmin && reason) {
       // Save to logout_reasons table
       try {
         const reasonTag = reason === 'Meeting / Field Visit' ? 'Meeting' : reason;
@@ -60,11 +62,12 @@ export async function POST(request: NextRequest) {
         metadata.custom_reason = otherNote;
       }
 
-      await supabase.from('activities').insert({
-        account_id: null,
+      // Log logout activity with reason
+      const logoutReason = reason === 'Other' && otherNote ? otherNote : reason;
+      await logLogoutActivity({
         employee_id: username,
-        activity_type: 'logout',
-        description: `${username} logged out (${reason})`,
+        logoutTime: logoutTime,
+        reason: logoutReason,
         metadata,
       });
 

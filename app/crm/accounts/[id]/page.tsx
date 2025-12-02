@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { Account, Quote, Lead, Task, Contact, Activity } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
 import ActivityTimeline from '@/components/crm/ActivityTimeline';
-import QuotationStatusChart from '@/components/crm/QuotationStatusChart';
 import ContactFormModal from '@/components/crm/ContactFormModal';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
 import CRMLayout from '@/components/layout/CRMLayout';

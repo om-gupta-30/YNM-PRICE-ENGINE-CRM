@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logEditActivity, logDeleteActivity } from '@/lib/utils/activityLogger';
 
 // GET - Fetch single account by ID
 export async function GET(
@@ -130,7 +131,7 @@ export async function PUT(
     // Get old account data for activity logging
     const { data: oldAccount } = await supabase
       .from('accounts')
-      .select('account_name, assigned_employee, notes, industries, industry_projects')
+      .select('account_name, company_stage, company_tag, assigned_employee, notes, industries, industry_projects, is_active')
       .eq('id', id)
       .single();
 
@@ -146,55 +147,35 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity for account update
-    try {
-      const changes: string[] = [];
-      if (body.accountName && body.accountName !== oldAccount?.account_name) {
-        changes.push(`Name: "${oldAccount?.account_name}" → "${body.accountName}"`);
-      }
-      if (body.companyStage) changes.push(`Stage: ${body.companyStage}`);
-      if (body.companyTag) changes.push(`Tag: ${body.companyTag}`);
-      if (body.notes !== undefined && body.notes !== oldAccount?.notes) {
-        changes.push(`Notes updated`);
-      }
-      if (body.industries !== undefined) {
-        const oldIndustryCount = oldAccount?.industries?.length || 0;
-        const newIndustryCount = body.industries?.length || 0;
-        if (oldIndustryCount !== newIndustryCount) {
-          changes.push(`Industries: ${oldIndustryCount} → ${newIndustryCount} selections`);
-        }
-      }
-      if (body.assignedEmployee && body.assignedEmployee !== oldAccount?.assigned_employee) {
-        changes.push(`Assigned: "${oldAccount?.assigned_employee}" → "${body.assignedEmployee}"`);
-      }
-      if (body.industryProjects !== undefined) {
-        const oldProjectCount = Object.keys(oldAccount?.industry_projects || {}).length;
-        const newProjectCount = Object.keys(body.industryProjects || {}).length;
-        if (oldProjectCount !== newProjectCount) {
-          changes.push(`Industry projects: ${oldProjectCount} → ${newProjectCount} entries`);
-        }
-      }
-      if (body.is_active !== undefined) {
-        changes.push(`Status: ${body.is_active ? 'Activated' : 'Deactivated'}`);
-      }
-
-      if (changes.length > 0) {
-        const updatedBy = body.updatedBy || 'System';
-        await supabase.from('activities').insert({
-          account_id: id,
-          employee_id: updatedBy,
-          activity_type: 'note',
-          description: `Account "${data.account_name}" updated: ${changes.join(', ')}`,
-          metadata: {
-            changes,
-            old_data: oldAccount,
-            new_data: data,
-          },
-        });
-      }
-    } catch (activityError) {
-      console.warn('Failed to log account update activity:', activityError);
-    }
+    // Log activity for account update with change detection
+    const updatedBy = body.updatedBy || 'System';
+    await logEditActivity({
+      account_id: id,
+      employee_id: updatedBy,
+      entityName: data.account_name,
+      entityType: 'account',
+      oldData: oldAccount,
+      newData: {
+        account_name: body.accountName,
+        company_stage: body.companyStage,
+        company_tag: body.companyTag,
+        assigned_employee: body.assignedEmployee,
+        notes: body.notes,
+        industries: body.industries,
+        industry_projects: body.industryProjects,
+        is_active: body.is_active,
+      },
+      fieldLabels: {
+        account_name: 'Account Name',
+        company_stage: 'Company Stage',
+        company_tag: 'Company Tag',
+        assigned_employee: 'Assigned Employee',
+        notes: 'Notes',
+        industries: 'Industries',
+        industry_projects: 'Industry Projects',
+        is_active: 'Status',
+      },
+    });
 
     // Format timestamps in IST
     const formattedData = {
@@ -277,25 +258,16 @@ export async function DELETE(
     }
 
     // Log activity for account deletion
-    try {
-      const { searchParams } = new URL(request.url);
-      const deletedBy = searchParams.get('deletedBy') || searchParams.get('updatedBy') || 'System';
-      
-      await supabase.from('activities').insert({
-        account_id: id,
-        employee_id: deletedBy,
-        activity_type: 'note',
-        description: `Account "${oldAccount.account_name}" deleted`,
-        metadata: {
-          changes: ['Account deleted'],
-          old_data: oldAccount,
-          new_data: { ...oldAccount, is_active: false },
-          deleted_by: deletedBy,
-        },
-      });
-    } catch (activityError) {
-      console.warn('Failed to log account deletion activity:', activityError);
-    }
+    const { searchParams } = new URL(request.url);
+    const deletedBy = searchParams.get('deletedBy') || searchParams.get('updatedBy') || 'System';
+    
+    await logDeleteActivity({
+      account_id: id,
+      employee_id: deletedBy,
+      entityName: oldAccount.account_name,
+      entityType: 'account',
+      deletedData: oldAccount,
+    });
 
     // Format timestamps in IST
     const formattedData = {

@@ -14,11 +14,20 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
   const router = useRouter();
   const { username } = useUser();
   const [mounted, setMounted] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const lastActivityRef = useRef<number>(0);
   const statusRef = useRef<UserStatus>('online');
   const awayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const logoutTimerRef = useRef<NodeJS.Timeout | null>(null);
   const updateStatusTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Check if user is data analyst
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dataAnalystStatus = localStorage.getItem('isDataAnalyst');
+      setIsDataAnalyst(dataAnalystStatus === 'true');
+    }
+  }, []);
 
   // Initialize on mount only (client-side)
   useEffect(() => {
@@ -108,8 +117,10 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
   }, [updateStatus, router]);
 
   // Periodic status update (every 2 minutes) - lightweight check
+  // Track status for employees and data analysts, but not full admins
   useEffect(() => {
-    if (!username || isAdmin) return;
+    const isFullAdmin = isAdmin && !isDataAnalyst;
+    if (!username || isFullAdmin) return;
 
     updateStatusTimerRef.current = setInterval(() => {
       const timeSinceActivity = Date.now() - lastActivityRef.current;
@@ -128,11 +139,13 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
         clearInterval(updateStatusTimerRef.current);
       }
     };
-  }, [username, isAdmin, updateStatus]);
+  }, [username, isAdmin, isDataAnalyst, updateStatus]);
 
   // Set up activity listeners (throttled for performance)
+  // Track activity for employees and data analysts, but not full admins
   useEffect(() => {
-    if (!username || isAdmin || typeof window === 'undefined') return;
+    const isFullAdmin = isAdmin && !isDataAnalyst;
+    if (!username || isFullAdmin || typeof window === 'undefined') return;
 
     // Throttle activity handler to avoid too many calls
     let throttleTimer: NodeJS.Timeout | null = null;
@@ -181,11 +194,12 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
         clearTimeout(logoutTimerRef.current);
       }
     };
-  }, [username, isAdmin, handleActivity]);
+  }, [username, isAdmin, isDataAnalyst, handleActivity]);
 
-  // Only track for employees, not admin - but after mount check
+  // Only track for employees and data analysts, not full admin - but after mount check
   // This check must come AFTER all hooks are declared
-  if (!mounted || isAdmin || !username) {
+  const isFullAdmin = isAdmin && !isDataAnalyst;
+  if (!mounted || isFullAdmin || !username) {
     return null;
   }
 

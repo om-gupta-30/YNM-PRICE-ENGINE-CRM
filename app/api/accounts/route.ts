@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
+import { logCreateActivity } from '@/lib/utils/activityLogger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -196,19 +197,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Log activity for account creation
-    try {
-      await supabase.from('activities').insert({
-        account_id: account.id,
-        employee_id: createdBy || finalAssignedEmployee || 'System',
-        activity_type: 'note',
-        description: `Account "${accountName}" created${finalAssignedEmployee ? ` and assigned to ${finalAssignedEmployee}` : ''}`,
-        metadata: {
-          assigned_employee: finalAssignedEmployee,
-        },
-      });
-    } catch (activityError) {
-      console.warn('Failed to log activity:', activityError);
-    }
+    await logCreateActivity({
+      account_id: account.id,
+      employee_id: createdBy || finalAssignedEmployee || 'System',
+      entityName: accountName,
+      entityType: 'account',
+      createdData: {
+        account_name: accountName,
+        company_stage: companyStage,
+        company_tag: companyTag,
+        assigned_employee: finalAssignedEmployee,
+      },
+    });
 
     return NextResponse.json({ success: true, accountId: account.id }, { status: 201 });
   } catch (error: any) {

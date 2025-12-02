@@ -18,9 +18,7 @@ This application serves as a centralized platform for:
 - **Supabase** - Backend database and authentication
 - **Framer Motion** - Animation library
 - **next-themes** - Dark/light mode support
-- **pdfmake** - PDF generation for quotations
 - **xlsx** - Excel file processing
-- **Recharts** - Data visualization and charts
 
 ## 📁 Project Structure
 
@@ -29,6 +27,8 @@ This application serves as a centralized platform for:
 ├── app/                          # Next.js App Router
 │   ├── api/                      # API routes
 │   │   ├── accounts/             # Accounts CRUD & related data
+│   │   ├── admin/                # Admin utilities (normalize IDs, reset sequences)
+│   │   ├── ai/                   # AI endpoints (insights, summaries)
 │   │   ├── auth/                 # Authentication (login, password reset)
 │   │   ├── crm/                  # CRM modules (customers, leads, tasks, dashboard)
 │   │   ├── contacts/             # Contacts management
@@ -60,22 +60,30 @@ This application serves as a centralized platform for:
 │   └── page.tsx                  # Homepage
 │
 ├── components/                   # React components
-│   ├── animations/                # Animation components
+│   ├── animations/               # Animation components
 │   │   ├── FloatingMascot.tsx
 │   │   ├── GlobalLoader.tsx
 │   │   ├── LandingAnimation.tsx
-│   │   └── PageTransition.tsx
+│   │   ├── PageTransition.tsx
+│   │   └── ParticleBackground.tsx
 │   ├── crm/                      # CRM-specific components
-│   │   ├── ActivityTimeline.tsx  # Activity history timeline
-│   │   ├── ContactFormModal.tsx  # Contact add/edit modal
-│   │   ├── NotificationsBell.tsx # Notifications bell icon
-│   │   └── QuotationStatusChart.tsx # Pie chart component
+│   │   ├── activities/           # Activity components
+│   │   ├── tasks/                # Task components
+│   │   ├── ActivityTimeline.tsx
+│   │   ├── ContactFormModal.tsx
+│   │   └── NotificationsBell.tsx
 │   ├── forms/                    # Form components
-│   │   ├── CustomerSelect.tsx    # Customer dropdown (read-only)
-│   │   └── SmartDropdown.tsx     # Smart autocomplete dropdown
+│   │   ├── AccountSelect.tsx
+│   │   ├── ContactSelect.tsx
+│   │   ├── CustomerSelect.tsx
+│   │   ├── PlaceOfSupplySelect.tsx
+│   │   ├── SmartDropdown.tsx
+│   │   └── StateCitySelect.tsx
 │   ├── layout/                   # Layout components
 │   │   ├── AuthGuard.tsx
 │   │   ├── ClientLayout.tsx
+│   │   ├── CRMLayout.tsx
+│   │   ├── CRMSidebar.tsx
 │   │   ├── Footer.tsx
 │   │   ├── GlobalBackground.tsx
 │   │   ├── LogoutButton.tsx
@@ -84,7 +92,7 @@ This application serves as a centralized platform for:
 │   ├── modals/                   # Modal components
 │   │   ├── DeleteConfirmationModal.tsx
 │   │   ├── QuotationDetailsModal.tsx
-│   │   └── StatusHistoryModal.tsx
+│   │   └── PdfPreviewModal.tsx
 │   ├── ui/                       # UI components
 │   │   ├── BackButton.tsx
 │   │   ├── ButtonCard.tsx
@@ -92,37 +100,59 @@ This application serves as a centralized platform for:
 │   │   ├── ThemeToggle.tsx
 │   │   └── Toast.tsx
 │   └── utils/                    # Utility components
+│       └── ActivityTracker.tsx
 │
 ├── contexts/                     # React contexts
 │   └── UserContext.tsx           # User context provider
 │
 ├── data/                         # Data files
-│   ├── config/                   # Configuration data
-│   │   ├── msAngleOptions.ts
-│   │   └── msPipeOptions.ts
+│   └── config/                   # Configuration data
+│       ├── msAngleOptions.ts
+│       └── msPipeOptions.ts
 │
 ├── docs/                         # Documentation & SQL scripts
-│   ├── COMPLETE_DATABASE_SETUP.sql  # Complete database setup (run this first!)
-│   ├── ACCOUNTS_DATABASE_SCHEMA.sql  # Accounts module schema
-│   ├── ACCOUNTS_EXTENDED_SCHEMA.sql  # Accounts extended (contacts, activities, notifications)
-│   ├── CRM_DATABASE_SCHEMA.sql       # CRM module schema
-│   ├── ADD_QUOTATION_STATUS.sql      # Quotation status fields
-│   ├── ADD_COMMENTS_TO_QUOTATIONS.sql # Comments fields
-│   ├── ADD_QUOTATION_HISTORY.sql     # History tracking
-│   ├── ADD_SALES_EMPLOYEE_TO_CUSTOMERS.sql # Sales employee assignment
-│   ├── CREATE_SIMPLE_USERS.sql       # User creation
-│   ├── UPDATE_TO_SIMPLE_USERS.sql    # User migration
-│   └── UPDATE_SUPABASE_TABLES_COMPLETE.sql # Complete table updates
+│   ├── COMPLETE_DATABASE_SETUP.sql  # ⭐ Complete database setup (run this first!)
+│   ├── README.md                     # Documentation index
+│   ├── DATABASE_SETUP_GUIDE.md       # Setup instructions
+│   ├── API_DOCUMENTATION.md          # API reference
+│   └── [Other SQL scripts for migrations and updates]
+│
+├── hooks/                        # Custom React hooks
+│   ├── useDebounce.ts
+│   └── useFollowUpNotifications.ts
 │
 ├── lib/                          # Library code
+│   ├── ai/                       # AI utilities
+│   │   ├── engagement.ts
+│   │   └── engagementGuard.ts
+│   ├── calculations/             # Calculation utilities
+│   │   ├── areaCalculations.ts
+│   │   ├── postCalculations.ts
+│   │   ├── spacerCalculations.ts
+│   │   ├── thrieBeamCalculations.ts
+│   │   └── wBeamCalculations.ts
 │   ├── constants/                # Constants and types
 │   │   └── types.ts              # TypeScript type definitions
 │   └── utils/                    # Utility functions
-│       ├── pdfGeneratorYNMEST.ts # YNM Estimate PDF generator
-│       └── supabaseClient.ts     # Supabase client
+│       ├── supabaseClient.ts     # Supabase client
+│       └── [other utilities]
+│
+├── scripts/                      # Build and utility scripts
+│   └── convert/                  # Data conversion scripts
+│
+├── src/                          # Source files
+│   └── pdf/                      # PDF templates
+│       └── templates.ts          # Template images and data
+│
+├── utils/                        # Root-level utilities
+│   └── ai.ts                     # AI helper functions
 │
 ├── public/                       # Static assets
+│   └── pdf-templates/            # PDF template images
 │
+├── package.json                  # Dependencies
+├── next.config.js                # Next.js configuration
+├── tsconfig.json                 # TypeScript configuration
 └── README.md                     # This file
 ```
 
@@ -195,27 +225,45 @@ This application serves as a centralized platform for:
 6. **Open the application**
    - Navigate to `http://localhost:3000`
    - Login with:
-     - Admin: `Admin` / `Admin@123`
-     - Employee1: `Employee1` / `Employee1@123`
-     - Employee2: `Employee2` / `Employee2@123`
-     - Employee3: `Employee3` / `Employee3@123`
+     - **Admin Users** (Full Access):
+       - `Admin` / `Admin@123`
+     - **Data Analyst Users** (Restricted Admin):
+       - `swamymahesh` / `swamymahesh@123`
+       - `mahesh` / `mahesh@123`
+     - **Sales Employees**:
+       - `Employee1` / `Employee1@123`
+       - `Employee2` / `Employee2@123`
+       - `Employee3` / `Employee3@123`
 
 ## 👥 User Roles & Permissions
 
-### Admin
+### Admin (Admin)
 - Full access to all accounts, customers, leads, and quotations
 - Can view all employee data
-- Can delete accounts
+- Can delete accounts and sub-accounts
 - Can assign customers to employees
+- Can access all CRM features including Leads
 - Dashboard shows company-wide metrics
+- Full access to Price Engine modules
 
-### Employee (Employee1, Employee2, Employee3)
+### Data Analyst (swamymahesh, mahesh)
+- **Restricted Admin Access** - Can view all accounts like admins but with limitations
+- Can view all accounts, customers, and quotations
+- **Cannot** delete accounts or sub-accounts
+- **Cannot** assign customers to employees
+- **Cannot** access Leads section
+- **Cannot** access Price Engine modules (redirected to CRM)
+- Dashboard shows company-wide metrics
+- Access to Accounts, Customers, Tasks, Notifications, and Activities
+
+### Sales Employee (Employee1, Employee2, Employee3)
 - Access only to assigned customers and accounts
 - Can create quotations for assigned customers
 - Can update quotation status and comments
 - Can view own quotation history
 - Cannot delete accounts
 - Dashboard shows personal metrics
+- Full access to Price Engine modules
 
 ## 📊 Features
 
@@ -331,7 +379,6 @@ This application serves as a centralized platform for:
 - Audit trail with timestamps and user info
 
 #### Quotation Analytics
-- Status breakdown pie chart
 - Total value tracking
 - Conversion metrics
 - Per-account quotation analytics
@@ -345,19 +392,15 @@ This application serves as a centralized platform for:
 - Session management via localStorage
 
 ### Password Reset
-- Reset code: `YNMSafety@reset`
-- New password and captcha required
-- No old password needed
+- Requires current password (old password)
+- New password must meet requirements:
+  - Minimum 6 characters
+  - At least one uppercase letter (A-Z)
+  - At least one number (0-9)
+  - At least one special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
+- Captcha verification required
+- New password must be different from current password
 
-## 📄 PDF Generation
-
-### YNM Estimate PDF
-- Professional PDF generation using pdfmake
-- Absolute positioning for precise alignment
-- Background template images
-- Multi-page support
-- Currency formatting
-- Tax calculation (IGST/CGST+SGST based on state)
 
 ## 🎨 Design System
 
@@ -423,15 +466,17 @@ This application serves as a centralized platform for:
 
 ### Test Users
 
-**Admin:**
-- Username: `Admin`
-- Password: `Admin@123`
-- Access: Full system access
+**Admin Users:**
+- Username: `Admin` / Password: `Admin@123` - Full system access
 
-**Employees:**
-- Username: `Employee1`, `Employee2`, `Employee3`
-- Passwords: `Employee1@123`, `Employee2@123`, `Employee3@123`
-- Access: Limited to assigned customers
+**Data Analyst Users:**
+- Username: `swamymahesh` / Password: `swamymahesh@123` - Restricted admin access
+- Username: `mahesh` / Password: `mahesh@123` - Restricted admin access
+
+**Sales Employees:**
+- Username: `Employee1` / Password: `Employee1@123` - Limited to assigned customers
+- Username: `Employee2` / Password: `Employee2@123` - Limited to assigned customers
+- Username: `Employee3` / Password: `Employee3@123` - Limited to assigned customers
 
 ### Test Data
 
@@ -452,14 +497,25 @@ npm start
 
 ### Environment Variables
 
-Required environment variables:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+Required environment variables (create `.env.local`):
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+Optional environment variables (for AI features):
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+```
 
 ## 📚 Documentation
 
-- **Database Setup**: See `docs/COMPLETE_DATABASE_SETUP.sql`
-- **API Documentation**: See individual API route files
+- **Database Setup**: See `docs/COMPLETE_DATABASE_SETUP.sql` (main setup script)
+- **Documentation Index**: See `docs/README.md` for complete documentation list
+- **API Documentation**: See `docs/API_DOCUMENTATION.md`
+- **Database Guide**: See `docs/DATABASE_SETUP_GUIDE.md`
+- **Features Overview**: See `docs/FEATURES_OVERVIEW.md`
 - **Component Documentation**: See component files with JSDoc comments
 
 ## 🔧 Development
@@ -486,9 +542,6 @@ Required environment variables:
    - Clear localStorage
    - Verify user exists in database
 
-3. **PDF Generation Issues**
-   - Check browser console for errors
-   - Verify font files are loaded
 
 ## 📞 Support
 
@@ -502,3 +555,15 @@ Proprietary - YNM Safety Pvt Ltd
 
 **Last Updated**: 2024
 **Version**: 2.0.0 (CRM Extended)
+
+---
+
+## 📋 Project Cleanup Notes
+
+This project has been cleaned up to remove redundant files:
+- Removed backup files (`.backup`)
+- Consolidated documentation (reduced from 50+ to essential docs)
+- Cleaned up redundant SQL scripts (kept essential migration scripts)
+- Organized project structure for better maintainability
+
+All functionality remains intact. The main database setup script is `docs/COMPLETE_DATABASE_SETUP.sql`.

@@ -13,12 +13,15 @@ const LogoutButton = memo(function LogoutButton() {
   const [otherReason, setOtherReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
 
-  // Check if user is admin on mount and on pathname change
+  // Check if user is admin or data analyst on mount and on pathname change
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const adminStatus = localStorage.getItem('isAdmin');
+      const dataAnalystStatus = localStorage.getItem('isDataAnalyst');
       setIsAdmin(adminStatus === 'true');
+      setIsDataAnalyst(dataAnalystStatus === 'true');
     }
   }, [pathname]); // Re-check when pathname changes
 
@@ -31,16 +34,18 @@ const LogoutButton = memo(function LogoutButton() {
     e.preventDefault();
     e.stopPropagation();
     
-    // Check admin status again to ensure it's current
+    // Check admin and data analyst status again to ensure it's current
     const currentIsAdmin = typeof window !== 'undefined' && localStorage.getItem('isAdmin') === 'true';
+    const currentIsDataAnalyst = typeof window !== 'undefined' && localStorage.getItem('isDataAnalyst') === 'true';
     
-    // If admin, logout directly without showing modal (no reason required)
-    if (currentIsAdmin || isAdmin) {
+    // Only Admin should logout directly without showing modal (no reason required)
+    // Employees AND Data Analysts should see the modal to provide logout reason
+    if (currentIsAdmin && !currentIsDataAnalyst) {
       handleDirectLogout();
       return;
     }
     
-    // If employee, show modal to ask for reason
+    // If employee or data analyst, show modal to ask for reason
     setShowModal(true);
   };
 
@@ -74,6 +79,7 @@ const LogoutButton = memo(function LogoutButton() {
     setSubmitting(true);
     try {
       const activeUser = username || (typeof window !== 'undefined' ? localStorage.getItem('username') : '');
+      const currentIsDataAnalyst = typeof window !== 'undefined' && localStorage.getItem('isDataAnalyst') === 'true';
       if (activeUser) {
         await fetch('/api/auth/logout', {
           method: 'POST',
@@ -82,7 +88,8 @@ const LogoutButton = memo(function LogoutButton() {
             username: activeUser,
             reason: selectedReason === 'Meeting / Field Visit' ? 'Meeting' : selectedReason,
             otherNote: selectedReason === 'Other' ? otherReason : undefined,
-            isAdmin: false, // This is for employees only
+            isAdmin: false, // This is for employees and data analysts (not full admin)
+            isDataAnalyst: currentIsDataAnalyst,
           }),
         });
       }
@@ -95,6 +102,7 @@ const LogoutButton = memo(function LogoutButton() {
         localStorage.removeItem('userId');
         localStorage.removeItem('department');
         localStorage.removeItem('isAdmin');
+        localStorage.removeItem('isDataAnalyst');
       }
       setUsername(null);
       setSubmitting(false);

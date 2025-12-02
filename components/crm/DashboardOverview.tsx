@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import QuotationStatusChart from '@/components/crm/QuotationStatusChart';
 
 interface DashboardData {
   totalCustomers?: number;
@@ -312,10 +311,7 @@ export default function DashboardOverview() {
             </div>
           )}
 
-          <div className="glassmorphic-premium rounded-2xl p-6 mb-6">
-            <h2 className="text-xl font-bold text-white mb-4">Quotation Status Overview</h2>
-            <QuotationStatusChart />
-          </div>
+          {/* Quotation Status Chart removed - feature disabled */}
         </>
       ) : (
         <>

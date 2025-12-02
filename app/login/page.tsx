@@ -94,12 +94,13 @@ export default function LoginPage() {
       // Update global username context
       setUsername(username);
       
-      // Check if this was an auto-logout (only for employees, not admin)
+      // Check if this was an auto-logout (for employees and data analysts, not full admin)
       const wasAutoLogout = localStorage.getItem('auto_logout') === 'true';
-      const isEmployee = !data.isAdmin;
+      const isFullAdmin = data.isAdmin && !data.isDataAnalyst;
+      const isEmployeeOrDataAnalyst = !isFullAdmin;
       
-      if (wasAutoLogout && isEmployee) {
-        // Show inactivity reason modal before redirecting
+      if (wasAutoLogout && isEmployeeOrDataAnalyst) {
+        // Show inactivity reason modal before redirecting (for employees and data analysts)
         setLoggedInUsername(username);
         setShowInactivityModal(true);
         // Don't redirect yet - wait for user to submit reason

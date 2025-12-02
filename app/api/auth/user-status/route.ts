@@ -42,6 +42,8 @@ export async function GET(request: NextRequest) {
         
         if (minutesSinceActivity > 15 && status !== 'logged_out') {
           status = 'logged_out';
+        } else if (minutesSinceActivity > 10 && status === 'online') {
+          status = 'inactive';
         } else if (minutesSinceActivity > 5 && status === 'online') {
           status = 'away';
         }

@@ -7,7 +7,9 @@ export type ActivityType =
   | 'meeting'
   | 'quotation'
   | 'login'
-  | 'logout';
+  | 'logout'
+  | 'away'
+  | 'inactive';
 
 export interface Activity {
   id: number;

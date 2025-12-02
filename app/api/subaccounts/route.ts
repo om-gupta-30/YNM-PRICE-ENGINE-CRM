@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logEditActivity } from '@/lib/utils/activityLogger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -263,54 +264,45 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Log activity for sub-account update
-    try {
-      const changes: string[] = [];
-      if (subAccountName !== undefined && subAccountName !== oldSubAccount?.sub_account_name) {
-        changes.push(`Name: "${oldSubAccount?.sub_account_name}" → "${subAccountName}"`);
-      }
-      if (stateId !== undefined && stateId !== oldSubAccount?.state_id) {
-        changes.push(`State updated`);
-      }
-      if (cityId !== undefined && cityId !== oldSubAccount?.city_id) {
-        changes.push(`City updated`);
-      }
-      if (address !== undefined && address !== oldSubAccount?.address) {
-        changes.push(`Address updated`);
-      }
-      if (pincode !== undefined && pincode !== oldSubAccount?.pincode) {
-        changes.push(`Pincode updated`);
-      }
-      if (gstNumber !== undefined && gstNumber !== oldSubAccount?.gst_number) {
-        changes.push(`GST Number: "${oldSubAccount?.gst_number || 'None'}" → "${gstNumber || 'None'}"`);
-      }
-      if (website !== undefined && website !== oldSubAccount?.website) {
-        changes.push(`Website: "${oldSubAccount?.website || 'None'}" → "${website || 'None'}"`);
-      }
-      if (isHeadquarter !== undefined && isHeadquarter !== oldSubAccount?.is_headquarter) {
-        changes.push(`Headquarter: ${isHeadquarter ? 'Yes' : 'No'}`);
-      }
-      if (officeType !== undefined && officeType !== oldSubAccount?.office_type) {
-        changes.push(`Office Type: ${officeType || 'None'}`);
-      }
-
-      if (changes.length > 0 && oldSubAccount?.account_id) {
-        const updatedBy = body.updated_by || body.updatedBy || 'System';
-        await supabase.from('activities').insert({
-          account_id: oldSubAccount.account_id,
-          employee_id: updatedBy,
-          activity_type: 'note',
-          description: `Sub-account "${updatedSubAccount?.sub_account_name || oldSubAccount?.sub_account_name}" updated: ${changes.join(', ')}`,
-          metadata: {
-            sub_account_id: parseInt(id),
-            changes,
-            old_data: oldSubAccount,
-            new_data: updatedSubAccount,
-          },
-        });
-      }
-    } catch (activityError) {
-      console.warn('Failed to log sub-account update activity:', activityError);
+    // Log activity for sub-account update with change detection
+    if (oldSubAccount?.account_id) {
+      const updatedBy = body.updated_by || body.updatedBy || 'System';
+      const entityName = updatedSubAccount?.sub_account_name || oldSubAccount?.sub_account_name || 'Sub-account';
+      
+      // Create newData object with all fields from oldSubAccount, then update changed ones
+      const newData: any = {
+        ...oldSubAccount,
+        sub_account_name: subAccountName !== undefined ? subAccountName : oldSubAccount.sub_account_name,
+        state_id: stateId !== undefined ? stateId : oldSubAccount.state_id,
+        city_id: cityId !== undefined ? cityId : oldSubAccount.city_id,
+        address: address !== undefined ? address : oldSubAccount.address,
+        pincode: pincode !== undefined ? pincode : oldSubAccount.pincode,
+        gst_number: gstNumber !== undefined ? gstNumber : oldSubAccount.gst_number,
+        website: website !== undefined ? website : oldSubAccount.website,
+        is_headquarter: isHeadquarter !== undefined ? isHeadquarter : oldSubAccount.is_headquarter,
+        office_type: officeType !== undefined ? officeType : oldSubAccount.office_type,
+      };
+      
+      await logEditActivity({
+        account_id: oldSubAccount.account_id,
+        employee_id: updatedBy,
+        entityName,
+        entityType: 'sub_account',
+        oldData: oldSubAccount,
+        newData,
+        fieldLabels: {
+          sub_account_name: 'Sub-Account Name',
+          account_id: 'Account ID',
+          state_id: 'State',
+          city_id: 'City',
+          address: 'Address',
+          pincode: 'Pincode',
+          gst_number: 'GST Number',
+          website: 'Website',
+          is_headquarter: 'Headquarter',
+          office_type: 'Office Type',
+        },
+      });
     }
 
     return NextResponse.json({ success: true });

@@ -16,9 +16,6 @@ import { calculateWBeamWeights } from '@/lib/calculations/wBeamCalculations';
 import { calculatePostWeights } from '@/lib/calculations/postCalculations';
 import { calculateSpacerWeights } from '@/lib/calculations/spacerCalculations';
 import { useDebounce } from '@/hooks/useDebounce';
-// Dynamic import for PDF generation to reduce initial bundle size
-import dynamic from 'next/dynamic';
-import type { PDFQuotationData } from '@/lib/utils/pdfGenerator';
 
 type PartInput = {
   thickness?: number;
@@ -601,93 +598,6 @@ export default function DoubleWBeamPage() {
     }
   };
 
-  // PDF Generation Function - Using Professional PDF Generator
-  const generatePDF = async () => {
-    const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
-    
-    // Prepare parts data
-    const parts: PDFQuotationData['parts'] = [];
-    
-    if (includeWBeam && wBeamResult?.found) {
-      parts.push({
-        partName: 'W-Beam',
-        thickness: wBeam.thickness,
-        length: null,
-        coatingGsm: wBeam.coatingGsm,
-        blackMaterialWeight: wBeamResult.weightBlackMaterial,
-        zincAddedWeight: wBeamResult.weightZincAdded,
-        totalWeight: wBeamResult.totalWeight,
-      });
-    }
-    
-    if (includePost && postResult?.found) {
-      parts.push({
-        partName: 'Post',
-        thickness: post.thickness,
-        length: post.length,
-        coatingGsm: post.coatingGsm,
-        blackMaterialWeight: postResult.weightBlackMaterial,
-        zincAddedWeight: postResult.weightZincAdded,
-        totalWeight: postResult.totalWeight,
-      });
-    }
-    
-    if (includeSpacer && spacerResult?.found) {
-      parts.push({
-        partName: 'Spacer',
-        thickness: spacer.thickness,
-        length: spacer.length,
-        coatingGsm: spacer.coatingGsm,
-        blackMaterialWeight: spacerResult.weightBlackMaterial,
-        zincAddedWeight: spacerResult.weightZincAdded,
-        totalWeight: spacerResult.totalWeight,
-      });
-    }
-    
-    // Prepare multipliers
-    const multipliers: PDFQuotationData['multipliers'] = {};
-    if (includeWBeam && wBeamResult?.found) multipliers.wBeam = 2; // Double W-Beam uses 2x
-    if (includePost && postResult?.found) multipliers.post = 2;
-    if (includeSpacer && spacerResult?.found) multipliers.spacer = 4; // Double W-Beam uses 4x
-    
-    // Prepare fastener details
-    const fastenerWeight = calculateFastenerWeight();
-    const fastenerDetails = fastenerMode === 'manual' ? {
-      hexBoltQty,
-      buttonBoltQty,
-    } : undefined;
-    
-    // Prepare PDF data (PDF export disabled)
-    const pdfData: any = {
-      createdBy: currentUsername,
-      customerName,
-      placeOfSupply: stateName && cityName ? `${stateName}, ${cityName}` : '',
-      purpose,
-      date: quotationDate,
-      section: 'Double W-Beam Section',
-      quantityRm,
-      parts,
-      fastenerMode,
-      fastenerWeight: fastenerWeight > 0 ? fastenerWeight : undefined,
-      fastenerDetails,
-      multipliers,
-      totalSetWeight,
-      totalWeightPerRm: totalWeight,
-      materialCostPerRm,
-      transportCostPerRm,
-      installationCostPerRm: includeInstallation ? installationCostPerRmValue : null,
-      totalCostPerRm,
-      finalTotal,
-    };
-    
-    // Generate PDF using professional generator
-    // Dynamic import for PDF generation to reduce initial bundle size
-    const { generateProfessionalPDF } = await import('@/lib/utils/pdfGenerator');
-    await generateProfessionalPDF(pdfData, `Double-W-Beam-Estimate-${new Date().toISOString().split('T')[0]}.pdf`);
-    
-    // PDF generation no longer saves to Supabase to prevent duplicates
-    // Only the "Save Quotation" button saves with is_saved: true
-  };
 
   return (
     <div className="min-h-screen flex flex-col items-start py-12 pt-16 pb-32 relative">

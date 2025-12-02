@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logLoginActivity } from '@/lib/utils/activityLogger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,11 +117,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Detect user role from username
-    // Admin and Mahesh = full admin users
+    // Admin = full admin user
     // swamymahesh and mahesh = data analyst users (restricted admin)
     // Employee1, Employee2, Employee3 = sales employees
     const isDataAnalyst = user.username === 'swamymahesh' || user.username === 'mahesh';
-    const isAdmin = user.username === 'Admin' || user.username === 'Mahesh';
+    const isAdmin = user.username === 'Admin';
     const department = isAdmin || isDataAnalyst ? 'Sales' : 'Sales'; // All users are in Sales department for now
 
     // Return success with EXACT format as required
@@ -163,19 +164,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Log login activity
-    try {
-      await supabase.from('activities').insert({
-        account_id: null,
-        employee_id: user.username,
-        activity_type: 'login',
-        description: `${user.username} logged in`,
-        metadata: {
-          login_time: loginTime,
-        },
-      });
-    } catch (activityError) {
-      console.error('Login activity logging failed (non-critical):', activityError);
-    }
+    await logLoginActivity({
+      employee_id: user.username,
+      loginTime: loginTime,
+      metadata: {
+        department,
+        isAdmin: isAdmin || isDataAnalyst,
+        isDataAnalyst,
+      },
+    });
 
     return NextResponse.json(responseData);
   } catch (error: any) {

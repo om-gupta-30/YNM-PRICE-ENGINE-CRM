@@ -423,7 +423,7 @@ export default function SubAccountsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', gstNumber: '', website: '', isHeadquarter: false, officeType: null });
     setCities([]);
   };
   
@@ -636,9 +636,15 @@ export default function SubAccountsPage() {
                           >
                             ✏️ Edit
                           </button>
-                          {isAdmin && subAccount?.id && (
+                          {isAdmin && !isDataAnalyst && subAccount?.id && (
                             <button
                               onClick={async () => {
+                                // Data analysts cannot delete
+                                if (isDataAnalyst) {
+                                  setToast({ message: 'Data analysts cannot delete sub-accounts', type: 'error' });
+                                  return;
+                                }
+                                
                                 if (!subAccount?.subAccountName || !confirm(`Are you sure you want to delete "${subAccount.subAccountName}"? This action cannot be undone.`)) {
                                   return;
                                 }

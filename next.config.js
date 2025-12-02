@@ -8,7 +8,6 @@ const nextConfig = {
       },
     ],
   },
-  transpilePackages: ["pdfmake"],
 }
 
 module.exports = nextConfig

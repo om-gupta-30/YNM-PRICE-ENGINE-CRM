@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = createSupabaseServerClient();
 
-    // Get all employees (excluding admin)
+    // Get all employees and data analysts (excluding full admin)
     const { data: users, error: usersError } = await supabase
       .from('users')
       .select('username')
@@ -45,6 +45,8 @@ export async function GET(request: NextRequest) {
           // Update status based on time since last activity
           if (minutesSinceActivity > 15 && status !== 'logged_out') {
             status = 'logged_out';
+          } else if (minutesSinceActivity > 10 && status === 'online') {
+            status = 'inactive';
           } else if (minutesSinceActivity > 5 && status === 'online') {
             status = 'away';
           }

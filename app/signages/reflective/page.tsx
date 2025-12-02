@@ -12,7 +12,6 @@ import { PortalPopperContainer } from '@/components/ui/PortalPopperContainer';
 import Toast from '@/components/ui/Toast';
 import { useUser } from '@/contexts/UserContext';
 import { calculateArea, Shape } from '@/lib/calculations/areaCalculations';
-import { generateProfessionalPDF, PDFQuotationData } from '@/lib/utils/pdfGenerator';
 import { MS_PIPE_OPTIONS, MsPipeOption } from '@/data/config/msPipeOptions';
 import { MS_ANGLE_OPTIONS, MsAngleOption } from '@/data/config/msAngleOptions';
 
@@ -695,65 +694,6 @@ export default function ReflectivePartPage() {
     }
   };
   
-  // Generate PDF
-  const generatePDF = async () => {
-    if (!isQuotationComplete || !areaResult || !costPerPiece || !finalTotal) {
-      setToast({ message: 'Please complete all fields before generating PDF', type: 'error' });
-      return;
-    }
-    
-    const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
-    
-    // Prepare PDF data for reflective part
-    const pdfData: any = {
-      createdBy: currentUsername,
-      customerName,
-      placeOfSupply: stateName && cityName ? `${stateName}, ${cityName}` : '',
-      purpose,
-      date: quotationDate,
-      section: 'Signages - Reflective',
-      quantityRm: quantity,
-      parts: [{
-        partName: `Reflective Board - ${shape} - ${boardType}`,
-        thickness: acpThickness,
-        length: shape === 'Rectangular' ? width : size || undefined,
-        coatingGsm: undefined,
-        blackMaterialWeight: undefined,
-        zincAddedWeight: undefined,
-        totalWeight: undefined,
-      }],
-      fastenerMode: undefined,
-      fastenerWeight: undefined,
-      fastenerDetails: undefined,
-      multipliers: {},
-      totalSetWeight: null,
-      totalWeightPerRm: null,
-      materialCostPerRm: costPerPiece,
-      transportCostPerRm: null,
-      installationCostPerRm: null,
-      totalCostPerRm: costPerPiece,
-      finalTotal: combinedTotal || finalTotal,
-      // Custom fields for reflective part
-      customFields: {
-        shape,
-        size: shape === 'Rectangular' ? null : size,
-        width: shape === 'Rectangular' ? width : null,
-        height: shape === 'Rectangular' ? height : null,
-        boardType: boardType as string,
-        sheetingType,
-        acpThickness,
-        printingType,
-        areaSqMm: areaResult.areaSqMm,
-        areaSqM: areaResult.areaSqM,
-        areaSqFt: areaResult.areaSqFt,
-        baseMaterialCostPerSqFt,
-        quantity,
-        costPerPiece,
-      },
-    };
-    
-    await generateProfessionalPDF(pdfData, `Reflective-Part-Estimate-${new Date().toISOString().split('T')[0]}.pdf`);
-  };
   
   return (
     <div className="min-h-screen flex flex-col items-start py-12 pt-16 pb-32 relative">

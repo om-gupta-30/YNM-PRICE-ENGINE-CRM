@@ -13,6 +13,8 @@ const typeEmoji: Record<Activity['activity_type'], string> = {
   quotation: '📄',
   login: '🔐',
   logout: '🚪',
+  away: '⏸️',
+  inactive: '💤',
 };
 
 interface Props {
@@ -61,6 +63,28 @@ export default function ActivityTimelineItem({ activity, onExplain }: Props) {
                   <p className="text-xs text-red-200/80 mt-1">{logoutReason.reason_text}</p>
                 )}
               </>
+            )}
+          </div>
+        )}
+        
+        {/* Show away/inactive status details */}
+        {(activity.activity_type === 'away' || activity.activity_type === 'inactive') && activity.metadata && (
+          <div className={`mt-2 p-2 rounded-lg border space-y-1 ${
+            activity.activity_type === 'away' 
+              ? 'bg-yellow-500/10 border-yellow-500/20' 
+              : 'bg-orange-500/10 border-orange-500/20'
+          }`}>
+            <p className={`text-xs ${
+              activity.activity_type === 'away' ? 'text-yellow-300' : 'text-orange-300'
+            }`}>
+              Status: <span className="font-semibold capitalize">{activity.activity_type}</span>
+            </p>
+            {activity.metadata.reason && (
+              <p className={`text-xs mt-1 ${
+                activity.activity_type === 'away' ? 'text-yellow-200/80' : 'text-orange-200/80'
+              }`}>
+                {activity.metadata.reason}
+              </p>
             )}
           </div>
         )}

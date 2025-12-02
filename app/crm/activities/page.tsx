@@ -27,7 +27,7 @@ export default function ActivitiesPage() {
     }
   }, []);
 
-  // Fetch employee list for admin filter
+  // Fetch employee list for admin filter (includes data analysts)
   useEffect(() => {
     if (isAdmin) {
       const fetchEmployees = async () => {
@@ -45,19 +45,19 @@ export default function ActivitiesPage() {
     }
   }, [isAdmin]);
 
-  // Fetch employee statuses (for admin) or current user status (for employees)
+  // Fetch employee statuses (for admin) or current user status (for employees and data analysts)
   useEffect(() => {
     const fetchStatuses = async () => {
       try {
         if (isAdmin) {
-          // Fetch all employee statuses for admin
+          // Fetch all employee and data analyst statuses for admin
           const response = await fetch('/api/auth/all-users-status');
           const data = await response.json();
           if (data.success && Array.isArray(data.statuses)) {
             setEmployeeStatuses(data.statuses);
           }
         } else if (username) {
-          // Fetch current user status for employees
+          // Fetch current user status for employees and data analysts
           const response = await fetch(`/api/auth/user-status?username=${encodeURIComponent(username)}`);
           const data = await response.json();
           if (data.success && data.status) {
@@ -199,11 +199,11 @@ export default function ActivitiesPage() {
             </div>
           )}
 
-          {/* Employee Status Section */}
+          {/* Employee & Data Analyst Status Section */}
           {employeeStatuses.length > 0 && (
             <div className="glassmorphic-premium rounded-2xl p-4 sm:p-6 mb-6">
               <h3 className="text-lg font-bold text-white mb-4">
-                {isAdmin ? 'Employee Status' : 'Your Status'}
+                {isAdmin ? 'Employee & Data Analyst Status' : 'Your Status'}
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {employeeStatuses.map((emp) => {
@@ -213,6 +213,8 @@ export default function ActivitiesPage() {
                         return 'bg-green-500';
                       case 'away':
                         return 'bg-yellow-500';
+                      case 'inactive':
+                        return 'bg-orange-500';
                       case 'logged_out':
                         return 'bg-red-500';
                       default:
@@ -226,6 +228,8 @@ export default function ActivitiesPage() {
                         return 'Online';
                       case 'away':
                         return 'Away';
+                      case 'inactive':
+                        return 'Inactive';
                       case 'logged_out':
                         return 'Logged Out';
                       default:

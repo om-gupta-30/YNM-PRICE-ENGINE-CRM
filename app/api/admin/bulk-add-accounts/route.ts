@@ -113,19 +113,12 @@ export async function POST(request: NextRequest) {
       'Indis Smart Homes Pvt. Ltd.',
     ];
 
-    const currentTime = getCurrentISTTime();
-    const createdBy = 'System';
-
-    // Prepare insert data
+    // Prepare insert data - only set account_name, company_stage, and company_tag
+    // All other fields will be empty/null or use database defaults
     const accountsData = accountsToAdd.map((accountName) => ({
       account_name: accountName.trim(),
       company_stage: 'Enterprise',
       company_tag: 'New',
-      assigned_employee: null,
-      engagement_score: 0,
-      is_active: true,
-      created_at: currentTime,
-      updated_at: currentTime,
     }));
 
     // Check for existing accounts to avoid duplicates
@@ -193,7 +186,7 @@ export async function POST(request: NextRequest) {
       await supabase.from('activities').insert({
         activity_type: 'account',
         description: activityDescription,
-        created_by: createdBy,
+        created_by: 'System',
         metadata: {
           action: 'bulk_create',
           account_count: allInsertedAccounts.length,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logAwayActivity } from '@/lib/utils/activityLogger';
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,23 +41,17 @@ export async function POST(request: NextRequest) {
     const accountId = accounts && accounts.length > 0 ? accounts[0].id : null;
 
     // Log inactivity reason activity
-    try {
-      await supabase.from('activities').insert({
-        account_id: accountId, // May be null if user has no accounts
-        employee_id: username,
-        activity_type: 'note',
-        description: `Logged back in after auto-logout. Inactivity reason: ${reason}`,
-        metadata: {
-          type: 'inactivity_reason',
-          reason: reason,
-          timestamp: getCurrentISTTime(),
-          auto_logout: true,
-        },
-      });
-    } catch (activityError) {
-      console.warn('Failed to log inactivity reason activity:', activityError);
-      // Don't fail the request if activity logging fails
-    }
+    await logAwayActivity({
+      employee_id: username,
+      status: 'inactive',
+      reason: reason,
+      metadata: {
+        type: 'inactivity_reason',
+        timestamp: getCurrentISTTime(),
+        auto_logout: true,
+        account_id: accountId,
+      },
+    });
 
     return NextResponse.json({ 
       success: true, 

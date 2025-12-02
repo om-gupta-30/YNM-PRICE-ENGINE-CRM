@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logAwayActivity } from '@/lib/utils/activityLogger';
 
 type UserStatus = 'online' | 'away' | 'logged_out';
 
@@ -48,17 +49,17 @@ export async function POST(request: NextRequest) {
       const accountId = accounts && accounts.length > 0 ? accounts[0].id : null;
 
       // Log status change activity
-      await supabase.from('activities').insert({
-        account_id: accountId, // May be null if user has no accounts
-        employee_id: username,
-        activity_type: 'note',
-        description: `Status changed to ${status}${reason ? `: ${reason}` : ''}`,
-        metadata: {
-          status,
-          reason: reason || null,
-          timestamp: getCurrentISTTime(),
-        },
-      });
+      if (status === 'away' || status === 'inactive') {
+        await logAwayActivity({
+          employee_id: username,
+          status: status as 'away' | 'inactive',
+          reason: reason || undefined,
+          metadata: {
+            timestamp: getCurrentISTTime(),
+            account_id: accountId,
+          },
+        });
+      }
     } catch (activityError) {
       console.warn('Failed to log status change activity:', activityError);
       // Don't fail the request if activity logging fails

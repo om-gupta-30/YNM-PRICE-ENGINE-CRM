@@ -176,9 +176,14 @@ export default function AccountsPage() {
       if (editAccount) {
         // Update account
         try {
-          // Data analysts cannot assign accounts - keep existing assignment or set to null
-          // Admin can assign to any employee, employees cannot change assignment
-          const assignedEmployee = currentIsDataAnalyst ? (editAccount?.assignedEmployee || null) : (currentIsAdmin ? formData.assignedEmployee : (!currentIsAdmin && currentUsername ? currentUsername : formData.assignedEmployee));
+          // Data analysts cannot assign accounts - keep existing assignment
+          // Admin can assign to any employee (but form doesn't have assignment field, so keep existing)
+          // Employees cannot change assignment - keep their own assignment
+          const assignedEmployee = currentIsDataAnalyst 
+            ? (editAccount?.assignedEmployee || null) 
+            : (!currentIsAdmin && currentUsername 
+              ? currentUsername 
+              : editAccount?.assignedEmployee || null);
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -212,9 +217,9 @@ export default function AccountsPage() {
       }
 
       // For employees, always use their username as assignedEmployee (auto-assigned)
-      // For admin, use the selected employee from the form (or null if not selected)
+      // For admin, set to null (form doesn't have assignment field for create)
       // Data analysts cannot assign accounts - always set to null
-      const assignedEmployee = currentIsDataAnalyst ? null : (currentIsAdmin ? formData.assignedEmployee : (!currentIsAdmin && currentUsername ? currentUsername : null));
+      const assignedEmployee = currentIsDataAnalyst ? null : (!currentIsAdmin && currentUsername ? currentUsername : null);
       // Create new account
       const response = await fetch('/api/accounts', {
         method: 'POST',
@@ -619,7 +624,6 @@ export default function AccountsPage() {
           accountName: editAccount.accountName || '',
           companyStage: editAccount.companyStage || '',
           companyTag: editAccount.companyTag || '',
-          assignedEmployee: editAccount.assignedEmployee || '',
           notes: editAccount.notes || '',
           industries: editAccount.industries || [],
         } : null}

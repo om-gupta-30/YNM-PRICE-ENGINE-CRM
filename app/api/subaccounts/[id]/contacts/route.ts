@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { syncContactNotification } from '@/lib/utils/notificationSync';
 import { formatDateIST, formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
 
 // GET - Fetch contacts for a sub-account
 export async function GET(
@@ -152,21 +153,23 @@ export async function POST(
       return NextResponse.json({ error: contactError.message }, { status: 500 });
     }
 
-    // Create activity record if possible
+    // Log contact creation activity
     if (created_by) {
-      try {
-        await supabase.from('activities').insert({
-          account_id: subAccount.account_id,
-          contact_id: contact.id,
-          employee_id: created_by,
-          activity_type: 'note',
-          description: `Contact ${name} added`,
-          metadata: { action: 'contact_created' },
-        });
-      } catch (activityError) {
-        console.error('Error creating activity (non-critical):', activityError);
-        // Don't fail the request if activity creation fails
-      }
+      await logCreateActivity({
+        account_id: subAccount.account_id,
+        contact_id: contact.id,
+        employee_id: created_by,
+        entityName: name,
+        entityType: 'contact',
+        createdData: {
+          name,
+          designation,
+          email,
+          phone,
+          call_status,
+          follow_up_date,
+        },
+      });
     }
 
     // Sync notification if follow-up date exists and call status is not "Connected"
@@ -312,25 +315,36 @@ export async function PUT(
       changes.push(`Notes: ${before} → ${after}`);
     }
 
+    // Log activity with change detection
     if (changes.length > 0) {
-      try {
-        const displayName = updateData.name || existingContact.name || 'Contact';
-        await supabase.from('activities').insert({
-          account_id: existingContact.account_id,
-          contact_id,
-          employee_id: created_by || body.updated_by || 'System',
-          activity_type: 'note',
-          description: `Contact "${displayName}" edited - ${changes.join(', ')}`,
-          metadata: {
-            contact_id,
-            changes,
-            old_data: existingContact,
-            new_data: updatedContact,
-          },
-        });
-      } catch (activityError) {
-        console.error('Error logging contact update activity (non-critical):', activityError);
-      }
+      const displayName = updateData.name || existingContact.name || 'Contact';
+      const employeeId = created_by || body.updated_by || 'System';
+      
+      // Create newData object with all fields from existingContact, then update changed ones
+      const newData: any = {
+        ...existingContact,
+        call_status: updateData.call_status !== undefined ? updateData.call_status : existingContact.call_status,
+        follow_up_date: updateData.follow_up_date !== undefined ? updateData.follow_up_date : existingContact.follow_up_date,
+        notes: updateData.notes !== undefined ? updateData.notes : existingContact.notes,
+      };
+      
+      await logEditActivity({
+        account_id: existingContact.account_id,
+        contact_id,
+        employee_id: employeeId,
+        entityName: displayName,
+        entityType: 'contact',
+        oldData: existingContact,
+        newData,
+        fieldLabels: {
+          id: 'ID',
+          name: 'Name',
+          account_id: 'Account ID',
+          call_status: 'Call Status',
+          follow_up_date: 'Follow-up Date',
+          notes: 'Notes',
+        },
+      });
     }
 
     // Sync notifications when call status or follow-up date changes

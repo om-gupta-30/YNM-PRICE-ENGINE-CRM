@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logQuotationSaveActivity } from '@/lib/utils/activityLogger';
 
 // Helper function to determine which table to use based on section
 function getTableName(section: string): string {
@@ -225,18 +226,15 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Log activity
-      await supabase.from('activities').insert({
-        account_id: finalAccountId,
+      // Log quotation save activity
+      await logQuotationSaveActivity({
         employee_id: created_by || 'System',
-        activity_type: 'quotation',
-        description: `Quotation created for ${subAccountName} (${section}) - ₹${final_total_cost?.toLocaleString('en-IN') || 'N/A'}`,
+        quotationId: data.id,
+        section,
+        accountName,
+        subAccountName,
         metadata: {
-          section,
-          sub_account_name: subAccountName,
-          account_name: accountName,
           final_total_cost,
-          quotation_id: data.id,
           product_added: productName,
         },
       });
