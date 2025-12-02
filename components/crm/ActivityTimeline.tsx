@@ -86,12 +86,20 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleString('en-IN', {
+    return date.toLocaleDateString('en-IN', {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
     });
   };
 
@@ -121,15 +129,26 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
           <div className="flex-1 pb-6">
             <div className="glassmorphic-premium rounded-lg p-4">
               <div className="flex justify-between items-start mb-2">
-                <div>
+                <div className="flex-1">
                   <p className="text-white font-semibold">{activity.description}</p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    By {activity.employee_id}
+                  <div className="flex items-center gap-3 mt-1">
+                    <p className="text-slate-400 text-xs">
+                      By {activity.employee_id}
+                    </p>
+                    <span className="text-slate-500">•</span>
+                    <p className="text-slate-400 text-xs">
+                      {formatDate(activity.created_at)}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right ml-4">
+                  <p className="text-premium-gold text-sm font-semibold">
+                    {formatTime(activity.created_at)}
+                  </p>
+                  <p className="text-slate-500 text-xs mt-0.5">
+                    {formatDate(activity.created_at)}
                   </p>
                 </div>
-                <span className="text-slate-400 text-xs">
-                  {formatDate(activity.created_at)}
-                </span>
               </div>
               {activity.metadata && Object.keys(activity.metadata).length > 0 && (
                 <div className="mt-2 text-xs text-slate-400 flex flex-wrap gap-2">

@@ -13,6 +13,7 @@ export default function ActivitiesPage() {
   const [filterEmployee, setFilterEmployee] = useState<string>('');
   const [filterDate, setFilterDate] = useState<string>('');
   const [employeeOptions, setEmployeeOptions] = useState<string[]>([]);
+  const [employeeStatuses, setEmployeeStatuses] = useState<Array<{username: string, status: string}>>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -38,6 +39,36 @@ export default function ActivitiesPage() {
       fetchEmployees();
     }
   }, [isAdmin]);
+
+  // Fetch employee statuses (for admin) or current user status (for employees)
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      try {
+        if (isAdmin) {
+          // Fetch all employee statuses for admin
+          const response = await fetch('/api/auth/all-users-status');
+          const data = await response.json();
+          if (data.success && Array.isArray(data.statuses)) {
+            setEmployeeStatuses(data.statuses);
+          }
+        } else if (username) {
+          // Fetch current user status for employees
+          const response = await fetch(`/api/auth/user-status?username=${encodeURIComponent(username)}`);
+          const data = await response.json();
+          if (data.success && data.status) {
+            setEmployeeStatuses([{ username, status: data.status }]);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching statuses:', error);
+      }
+    };
+
+    fetchStatuses();
+    // Refresh statuses every 30 seconds
+    const interval = setInterval(fetchStatuses, 30000);
+    return () => clearInterval(interval);
+  }, [isAdmin, username]);
 
   // Set default date to today
   useEffect(() => {
@@ -160,6 +191,57 @@ export default function ActivitiesPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Employee Status Section */}
+          {employeeStatuses.length > 0 && (
+            <div className="glassmorphic-premium rounded-2xl p-4 sm:p-6 mb-6">
+              <h3 className="text-lg font-bold text-white mb-4">
+                {isAdmin ? 'Employee Status' : 'Your Status'}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {employeeStatuses.map((emp) => {
+                  const getStatusColor = () => {
+                    switch (emp.status) {
+                      case 'online':
+                        return 'bg-green-500';
+                      case 'away':
+                        return 'bg-yellow-500';
+                      case 'logged_out':
+                        return 'bg-red-500';
+                      default:
+                        return 'bg-gray-500';
+                    }
+                  };
+
+                  const getStatusText = () => {
+                    switch (emp.status) {
+                      case 'online':
+                        return 'Online';
+                      case 'away':
+                        return 'Away';
+                      case 'logged_out':
+                        return 'Logged Out';
+                      default:
+                        return 'Unknown';
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={emp.username}
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg bg-white/5 border border-white/10"
+                    >
+                      <div className={`w-3 h-3 rounded-full ${getStatusColor()} animate-pulse`}></div>
+                      <div className="flex-1">
+                        <p className="text-white text-sm font-semibold">{emp.username}</p>
+                        <p className="text-slate-400 text-xs">{getStatusText()}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
