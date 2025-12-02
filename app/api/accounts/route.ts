@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch accounts with all required fields
     // Filter by is_active to exclude deleted accounts
+    // Note: gst_number and website are in sub_accounts, not accounts
     let query = supabase
       .from('accounts')
       .select(`
@@ -75,8 +76,6 @@ export async function GET(request: NextRequest) {
               companyStage: account.company_stage,
               companyTag: account.company_tag,
               engagementScore: 0,
-              gstNumber: account.gst_number || null,
-              website: account.website || null,
               notes: account.notes || null,
               industries: account.industries || [],
               industryProjects: account.industry_projects || {},
@@ -113,8 +112,6 @@ export async function GET(request: NextRequest) {
             companyStage: account.company_stage,
             companyTag: account.company_tag,
             engagementScore: 0,
-            gstNumber: account.gst_number || null,
-            website: account.website || null,
             notes: account.notes || null,
             industries: account.industries || [],
             industryProjects: account.industry_projects || {},
