@@ -17,11 +17,13 @@ export default function CelebrationToast() {
   const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     // Listen for celebration events
     const checkForCelebrations = async () => {
       try {
-        const username = localStorage.getItem('username') || '';
-        const isAdmin = localStorage.getItem('isAdmin') === 'true';
+        const username = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+        const isAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
 
         const params = new URLSearchParams({
           limit: '10',
@@ -51,7 +53,7 @@ export default function CelebrationToast() {
             const latest = recentClosedWon[0];
             const celebrationKey = `toast_celebrated_${latest.id}_${latest.status_history?.length || 0}`;
             
-            const hasShownToast = sessionStorage.getItem(celebrationKey);
+            const hasShownToast = typeof window !== 'undefined' ? sessionStorage.getItem(celebrationKey) : null;
             if (!hasShownToast) {
               let accountName = latest.customer_name;
               if (latest.account_id) {
@@ -76,7 +78,9 @@ export default function CelebrationToast() {
               });
 
               setShowToast(true);
-              sessionStorage.setItem(celebrationKey, 'true');
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(celebrationKey, 'true');
+              }
 
               // Hide toast after 5 seconds
               setTimeout(() => {

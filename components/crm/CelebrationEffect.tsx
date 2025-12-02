@@ -18,6 +18,8 @@ export default function CelebrationEffect() {
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const updateSize = () => {
       setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     };
@@ -27,11 +29,13 @@ export default function CelebrationEffect() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     // Poll for new "Closed Won" quotations
     const checkForCelebrations = async () => {
       try {
-        const username = localStorage.getItem('username') || '';
-        const isAdmin = localStorage.getItem('isAdmin') === 'true';
+        const username = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+        const isAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
 
         // Get recent quotations with Closed Won status
         const params = new URLSearchParams({
@@ -66,7 +70,7 @@ export default function CelebrationEffect() {
             const celebrationKey = `celebrated_${latest.id}_${latest.status_history?.length || 0}`;
             
             // Check if we've already celebrated this
-            const hasCelebrated = sessionStorage.getItem(celebrationKey);
+            const hasCelebrated = typeof window !== 'undefined' ? sessionStorage.getItem(celebrationKey) : null;
             if (!hasCelebrated) {
               // Get account name if available
               let accountName = latest.customer_name;
@@ -92,7 +96,9 @@ export default function CelebrationEffect() {
               });
 
               setShowConfetti(true);
-              sessionStorage.setItem(celebrationKey, 'true');
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(celebrationKey, 'true');
+              }
 
               // Hide confetti after 3 seconds
               setTimeout(() => {

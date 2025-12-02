@@ -12,6 +12,8 @@ function FloatingMascot() {
   const [danceTransform, setDanceTransform] = useState('none');
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleScroll = () => {
       setScrollTarget(window.scrollY + 80);
     };
@@ -57,6 +59,8 @@ function FloatingMascot() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    
     const checkOverContent = () => {
       if (!mascotRef.current) return;
 

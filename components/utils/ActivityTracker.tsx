@@ -137,7 +137,7 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
 
   // Set up activity listeners (throttled for performance)
   useEffect(() => {
-    if (!username || isAdmin) return;
+    if (!username || isAdmin || typeof window === 'undefined') return;
 
     // Throttle activity handler to avoid too many calls
     let throttleTimer: NodeJS.Timeout | null = null;
@@ -161,17 +161,21 @@ export default function ActivityTracker({ isAdmin = false }: ActivityTrackerProp
 
     // Also listen for visibility change (tab focus)
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
         handleActivity();
       }
     };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
     return () => {
       events.forEach(event => {
         window.removeEventListener(event, throttledHandleActivity);
       });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
       if (throttleTimer) {
         clearTimeout(throttleTimer);
       }

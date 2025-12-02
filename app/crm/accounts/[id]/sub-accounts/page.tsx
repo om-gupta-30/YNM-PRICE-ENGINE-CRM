@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
@@ -66,7 +66,7 @@ export default function SubAccountsPage() {
       const data = await response.json();
       
       if (data.success) {
-        const accounts = data.subAccounts || [];
+        const accounts = Array.isArray(data.subAccounts) ? data.subAccounts : [];
         setSubAccounts(accounts);
         applyFilters(accounts, officeTypeFilter, stateFilter, cityFilter);
         // Only show error toast if there's a critical error, not for empty results
@@ -118,31 +118,45 @@ export default function SubAccountsPage() {
       }
       
       const response = await fetch(`/api/accounts/${accountId}?${params}`);
+      
+      if (!response.ok) {
+        console.error('Failed to fetch account info:', response.status);
+        return;
+      }
+      
       const data = await response.json();
       
-      if (data.data) {
-        // Fetch state name
+      if (data && data.data) {
+        // Fetch state name (optional - not critical if it fails)
         let stateName = null;
         if (data.data.state_id) {
           try {
             const stateResponse = await fetch(`/api/states`);
-            const stateData = await stateResponse.json();
-            if (stateData.success) {
-              const state = stateData.states.find((s: any) => s.id === data.data.state_id);
-              stateName = state?.name || null;
+            if (stateResponse.ok) {
+              const stateData = await stateResponse.json();
+              if (stateData && stateData.success && Array.isArray(stateData.states)) {
+                const state = stateData.states.find((s: any) => s && s.id === data.data.state_id);
+                stateName = state?.name || null;
+              }
             }
           } catch (err) {
             console.error('Error fetching state name:', err);
+            // Non-critical error, continue without state name
           }
         }
         
         setAccountInfo({
-          accountName: data.data.account_name,
+          accountName: data.data.account_name || 'Unknown Account',
           stateName,
         });
       }
     } catch (error: any) {
       console.error('Error fetching account info:', error);
+      // Set default account info on error
+      setAccountInfo({
+        accountName: 'Unknown Account',
+        stateName: null,
+      });
     }
   };
 
@@ -153,21 +167,26 @@ export default function SubAccountsPage() {
     stateId: number | null,
     cityId: number | null
   ) => {
-    let filtered = [...accounts];
+    if (!accounts || accounts.length === 0) {
+      setFilteredSubAccounts([]);
+      return;
+    }
+    
+    let filtered = [...accounts].filter(acc => acc != null);
     
     // Filter by office type
     if (officeType !== 'all') {
-      filtered = filtered.filter(acc => acc.officeType === officeType);
+      filtered = filtered.filter(acc => acc && acc.officeType === officeType);
     }
     
     // Filter by state
     if (stateId) {
-      filtered = filtered.filter(acc => acc.stateId === stateId);
+      filtered = filtered.filter(acc => acc && acc.stateId === stateId);
     }
     
     // Filter by city
     if (cityId) {
-      filtered = filtered.filter(acc => acc.cityId === cityId);
+      filtered = filtered.filter(acc => acc && acc.cityId === cityId);
     }
     
     setFilteredSubAccounts(filtered);
@@ -179,20 +198,27 @@ export default function SubAccountsPage() {
   }, [officeTypeFilter, stateFilter, cityFilter, subAccounts]);
   
   // Get unique states and cities for filters
-  const uniqueStates = Array.from(new Map(subAccounts
-    .filter(acc => acc.stateId && acc.stateName)
-    .map(acc => [acc.stateId, { id: acc.stateId!, name: acc.stateName! }]))
-    .values())
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const uniqueStates = useMemo(() => {
+    if (!subAccounts || subAccounts.length === 0) return [];
+    return Array.from(new Map(subAccounts
+      .filter(acc => acc && acc.stateId && acc.stateName)
+      .map(acc => [acc.stateId, { id: acc.stateId!, name: acc.stateName! }]))
+      .values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [subAccounts]);
   
-  const uniqueCities = Array.from(new Map(subAccounts
-    .filter(acc => {
-      if (!stateFilter) return acc.cityId && acc.cityName;
-      return acc.stateId === stateFilter && acc.cityId && acc.cityName;
-    })
-    .map(acc => [acc.cityId, { id: acc.cityId!, name: acc.cityName! }]))
-    .values())
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const uniqueCities = useMemo(() => {
+    if (!subAccounts || subAccounts.length === 0) return [];
+    return Array.from(new Map(subAccounts
+      .filter(acc => {
+        if (!acc) return false;
+        if (!stateFilter) return acc.cityId && acc.cityName;
+        return acc.stateId === stateFilter && acc.cityId && acc.cityName;
+      })
+      .map(acc => [acc.cityId, { id: acc.cityId!, name: acc.cityName! }]))
+      .values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [subAccounts, stateFilter]);
 
   useEffect(() => {
     if (accountId && (username || isAdmin)) {
@@ -216,26 +242,46 @@ export default function SubAccountsPage() {
   const fetchStates = async () => {
     try {
       const response = await fetch('/api/states');
+      if (!response.ok) {
+        console.error('Failed to fetch states:', response.status);
+        setStates([]);
+        return;
+      }
       const data = await response.json();
-      if (data.success) {
-        setStates(data.states || []);
+      if (data && data.success && Array.isArray(data.states)) {
+        setStates(data.states.filter((s: any) => s != null));
+      } else {
+        setStates([]);
       }
     } catch (error) {
       console.error('Error fetching states:', error);
+      setStates([]);
     }
   };
 
   // Fetch cities for selected state
   const fetchCities = async (stateId: number) => {
+    if (!stateId) {
+      setCities([]);
+      return;
+    }
     setLoadingCities(true);
     try {
       const response = await fetch(`/api/cities?state_id=${stateId}`);
+      if (!response.ok) {
+        console.error('Failed to fetch cities:', response.status);
+        setCities([]);
+        return;
+      }
       const data = await response.json();
-      if (data.success) {
-        setCities(data.cities || []);
+      if (data && data.success && Array.isArray(data.cities)) {
+        setCities(data.cities.filter((c: any) => c != null));
+      } else {
+        setCities([]);
       }
     } catch (error) {
       console.error('Error fetching cities:', error);
+      setCities([]);
     } finally {
       setLoadingCities(false);
     }
@@ -249,32 +295,42 @@ export default function SubAccountsPage() {
     try {
       setSubmitting(true);
 
-      if (editSubAccount) {
+      if (editSubAccount && editSubAccount.id) {
         // Update sub-account
         const response = await fetch('/api/subaccounts', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             id: editSubAccount.id,
-            subAccountName: formData.subAccountName,
+            subAccountName: formData.subAccountName || '',
             stateId: formData.stateId,
             cityId: formData.cityId,
             address: formData.address || null,
             pincode: formData.pincode || null,
-            isHeadquarter: formData.isHeadquarter,
+            isHeadquarter: formData.isHeadquarter || false,
             officeType: formData.officeType || null,
           }),
         });
 
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to update sub-account');
+        if (!data || !data.success) {
+          throw new Error(data?.error || 'Failed to update sub-account');
         }
 
         setToast({ message: 'Sub-account updated successfully', type: 'success' });
       } else {
         // Create sub-account
+        if (!formData.subAccountName || !formData.stateId || !formData.cityId) {
+          setToast({ message: 'Please fill all required fields', type: 'error' });
+          return;
+        }
+
         const response = await fetch('/api/subaccounts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -285,15 +341,20 @@ export default function SubAccountsPage() {
             cityId: formData.cityId,
             address: formData.address || null,
             pincode: formData.pincode || null,
-            isHeadquarter: formData.isHeadquarter,
+            isHeadquarter: formData.isHeadquarter || false,
             officeType: formData.officeType || null,
           }),
         });
 
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || `HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
-          throw new Error(data.error || 'Failed to create sub-account');
+        if (!data || !data.success) {
+          throw new Error(data?.error || 'Failed to create sub-account');
         }
 
         setToast({ message: 'Sub-account created successfully', type: 'success' });
@@ -306,7 +367,7 @@ export default function SubAccountsPage() {
       await fetchSubAccounts();
     } catch (error: any) {
       console.error('Error saving sub-account:', error);
-      setToast({ message: error.message || 'Failed to save sub-account', type: 'error' });
+      setToast({ message: error?.message || 'Failed to save sub-account', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -431,11 +492,11 @@ export default function SubAccountsPage() {
                 className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
               >
                 <option value="">All States</option>
-                {uniqueStates.map((state) => (
+                {uniqueStates && uniqueStates.length > 0 ? uniqueStates.map((state) => (
                   <option key={state.id} value={String(state.id)}>
                     {state.name}
                   </option>
-                ))}
+                )) : null}
               </select>
               
               {/* City Filter */}
@@ -448,11 +509,11 @@ export default function SubAccountsPage() {
                 <option value="">
                   {stateFilter ? 'All Cities' : 'Select State First'}
                 </option>
-                {uniqueCities.map((city) => (
+                {uniqueCities && uniqueCities.length > 0 ? uniqueCities.map((city) => (
                   <option key={city.id} value={String(city.id)}>
                     {city.name}
                   </option>
-                ))}
+                )) : null}
               </select>
               
               {/* Clear Filters Button */}
@@ -494,29 +555,29 @@ export default function SubAccountsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubAccounts.map((subAccount) => (
+                  {filteredSubAccounts && filteredSubAccounts.length > 0 ? filteredSubAccounts.map((subAccount) => (
                     <tr 
-                      key={subAccount.id} 
+                      key={subAccount?.id || Math.random()} 
                       className="border-b border-white/10 hover:bg-white/5 transition-all duration-200"
                     >
-                      <td className="py-4 px-4 text-slate-200 font-semibold">{subAccount.subAccountName}</td>
+                      <td className="py-4 px-4 text-slate-200 font-semibold">{subAccount?.subAccountName || 'N/A'}</td>
                       <td className="py-4 px-4 text-slate-200 text-sm">
-                        {subAccount.cityName && subAccount.stateName ? (
+                        {subAccount?.cityName && subAccount?.stateName ? (
                           <span>{subAccount.cityName}, {subAccount.stateName}</span>
-                        ) : subAccount.cityName ? (
+                        ) : subAccount?.cityName ? (
                           <span>{subAccount.cityName}</span>
-                        ) : subAccount.stateName ? (
+                        ) : subAccount?.stateName ? (
                           <span>{subAccount.stateName}</span>
                         ) : (
                           <span className="text-slate-500 italic">Not set</span>
                         )}
                       </td>
                       <td className="py-4 px-4">
-                        {subAccount.officeType ? (
+                        {subAccount?.officeType ? (
                           <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
                             {subAccount.officeType}
                           </span>
-                        ) : subAccount.isHeadquarter ? (
+                        ) : subAccount?.isHeadquarter ? (
                           <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
                             ✓ HQ
                           </span>
@@ -525,26 +586,26 @@ export default function SubAccountsPage() {
                         )}
                       </td>
                       <td className="py-4 px-4">
-                        <EngagementScoreBadge score={subAccount.engagementScore || 0} />
+                        <EngagementScoreBadge score={subAccount?.engagementScore || 0} />
                       </td>
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => router.push(`/crm/subaccounts/${subAccount.id}/contacts`)}
+                            onClick={() => subAccount?.id && router.push(`/crm/subaccounts/${subAccount.id}/contacts`)}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200"
                           >
                             View Contacts
                           </button>
                           <button
-                            onClick={() => handleEdit(subAccount)}
+                            onClick={() => subAccount && handleEdit(subAccount)}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-premium-gold/80 hover:bg-premium-gold rounded-lg transition-all duration-200"
                           >
                             ✏️ Edit
                           </button>
-                          {isAdmin && (
+                          {isAdmin && subAccount?.id && (
                             <button
                               onClick={async () => {
-                                if (!confirm(`Are you sure you want to delete "${subAccount.subAccountName}"? This action cannot be undone.`)) {
+                                if (!subAccount?.subAccountName || !confirm(`Are you sure you want to delete "${subAccount.subAccountName}"? This action cannot be undone.`)) {
                                   return;
                                 }
                                 
@@ -574,7 +635,7 @@ export default function SubAccountsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )) : null}
                 </tbody>
               </table>
             </div>
@@ -639,11 +700,11 @@ export default function SubAccountsPage() {
                       required
                     >
                       <option value="">Select State</option>
-                      {states.map((state) => (
+                      {states && states.length > 0 ? states.map((state) => (
                         <option key={state.id} value={String(state.id)}>
                           {state.name}
                         </option>
-                      ))}
+                      )) : <option value="">No states available</option>}
                     </select>
                   </div>
 
@@ -661,11 +722,11 @@ export default function SubAccountsPage() {
                       <option value="">
                         {loadingCities ? 'Loading cities...' : formData.stateId ? 'Select City' : 'Select State first'}
                       </option>
-                      {cities.map((city) => (
+                      {cities && cities.length > 0 ? cities.map((city) => (
                         <option key={city.id} value={String(city.id)}>
                           {city.name}
                         </option>
-                      ))}
+                      )) : <option value="">No cities available</option>}
                     </select>
                   </div>
                 </div>

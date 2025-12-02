@@ -72,6 +72,8 @@ export default function NotificationBell({ userId, isAdmin }: NotificationBellPr
 
   // Close dropdown when clicking outside
   useEffect(() => {
+    if (typeof document === 'undefined') return;
+
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
