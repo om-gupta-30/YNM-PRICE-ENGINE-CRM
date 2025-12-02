@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { data: subAccounts, error } = await supabase
       .from('sub_accounts')
-      .select('id, account_id, sub_account_name, state_id, city_id, address, pincode, is_headquarter, office_type, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
+      .select('id, account_id, sub_account_name, state_id, city_id, address, pincode, gst_number, website, is_headquarter, office_type, engagement_score, is_active, created_at, updated_at, accounts:account_id(account_name)')
       .eq('account_id', parseInt(accountId))
       .eq('is_active', true)
       .order('sub_account_name', { ascending: true });
@@ -89,6 +89,8 @@ export async function GET(request: NextRequest) {
           cityName,
           address: sub.address || null,
           pincode: sub.pincode || null,
+          gstNumber: sub.gst_number || null,
+          website: sub.website || null,
           isHeadquarter: sub.is_headquarter || false,
           officeType: sub.office_type || null,
           engagementScore: parseFloat(sub.engagement_score?.toString() || '0') || 0,
@@ -119,6 +121,8 @@ export async function POST(request: NextRequest) {
       cityId,
       address,
       pincode,
+      gstNumber,
+      website,
       isHeadquarter,
       officeType,
     } = body;
@@ -143,6 +147,8 @@ export async function POST(request: NextRequest) {
         city_id: parseInt(cityId),
         address: address && address.trim() !== '' ? address.trim() : null,
         pincode: pincode && pincode.trim() !== '' ? pincode.trim() : null,
+        gst_number: gstNumber && gstNumber.trim() !== '' ? gstNumber.trim() : null,
+        website: website && website.trim() !== '' ? website.trim() : null,
         is_headquarter: isHeadquarter || false,
         office_type: officeType && officeType.trim() !== '' ? officeType.trim() : null,
         engagement_score: 0,
@@ -186,6 +192,8 @@ export async function PUT(request: NextRequest) {
       cityId,
       address,
       pincode,
+      gstNumber,
+      website,
       isHeadquarter,
       officeType,
     } = body;
@@ -220,6 +228,12 @@ export async function PUT(request: NextRequest) {
     if (pincode !== undefined) {
       updateData.pincode = pincode && pincode.trim() !== '' ? pincode.trim() : null;
     }
+    if (gstNumber !== undefined) {
+      updateData.gst_number = gstNumber && gstNumber.trim() !== '' ? gstNumber.trim() : null;
+    }
+    if (website !== undefined) {
+      updateData.website = website && website.trim() !== '' ? website.trim() : null;
+    }
     if (isHeadquarter !== undefined) {
       updateData.is_headquarter = isHeadquarter || false;
     }
@@ -230,7 +244,7 @@ export async function PUT(request: NextRequest) {
     // Get old sub-account data for activity logging
     const { data: oldSubAccount } = await supabase
       .from('sub_accounts')
-      .select('account_id, sub_account_name, state_id, city_id, address, pincode, is_headquarter, office_type')
+      .select('account_id, sub_account_name, state_id, city_id, address, pincode, gst_number, website, is_headquarter, office_type')
       .eq('id', parseInt(id))
       .single();
 
@@ -266,6 +280,12 @@ export async function PUT(request: NextRequest) {
       }
       if (pincode !== undefined && pincode !== oldSubAccount?.pincode) {
         changes.push(`Pincode updated`);
+      }
+      if (gstNumber !== undefined && gstNumber !== oldSubAccount?.gst_number) {
+        changes.push(`GST Number: "${oldSubAccount?.gst_number || 'None'}" → "${gstNumber || 'None'}"`);
+      }
+      if (website !== undefined && website !== oldSubAccount?.website) {
+        changes.push(`Website: "${oldSubAccount?.website || 'None'}" → "${website || 'None'}"`);
       }
       if (isHeadquarter !== undefined && isHeadquarter !== oldSubAccount?.is_headquarter) {
         changes.push(`Headquarter: ${isHeadquarter ? 'Yes' : 'No'}`);

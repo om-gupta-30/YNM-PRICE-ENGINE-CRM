@@ -388,44 +388,7 @@ export default function AccountDetailsPage() {
                 </div>
               </div>
 
-              {/* Business Information */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
-                  <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">🏢</span>
-                    Business Details
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
-                      <span className="text-slate-400 text-sm">GST Number</span>
-                      <span className="text-white font-medium">{account?.gst_number || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
-                      <span className="text-slate-400 text-sm">Website</span>
-                      {account?.website ? (
-                        <a href={account.website} target="_blank" rel="noopener noreferrer" className="text-premium-gold hover:underline font-medium">
-                          {account.website.replace(/^https?:\/\//, '')}
-                        </a>
-                      ) : <span className="text-slate-500">—</span>}
-                    </div>
-                    <div className="py-2">
-                      <span className="text-slate-400 text-sm block mb-2">Related Products</span>
-                      <div className="flex flex-wrap gap-2">
-                        {account?.related_products && account.related_products.length > 0 ? (
-                          account.related_products.map((product, idx) => (
-                            <span key={`${product}-${idx}`} className="px-3 py-1 bg-slate-700/70 rounded-full text-xs text-white font-medium">
-                              {product}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-slate-500 text-sm">No products linked</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline */}
+              {/* Timeline */}
                 <div className="bg-slate-800/50 rounded-xl p-5 border border-slate-700/50">
                   <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                     <span className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-sm">📅</span>

@@ -21,11 +21,6 @@ interface Account {
   companyTag: string;
   assignedEmployee?: string | null;
   engagementScore: number;
-  contactPerson: string | null;
-  phone: string | null;
-  email: string | null;
-  gstNumber: string | null;
-  website: string | null;
   notes: string | null;
   industries?: SelectedIndustry[];
   industryProjects?: Record<string, number>;
@@ -45,6 +40,7 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [bulkAdding, setBulkAdding] = useState(false);
   
   // Pagination for performance on large lists
   const [currentPage, setCurrentPage] = useState(1);
@@ -295,6 +291,41 @@ export default function AccountsPage() {
     }
   };
 
+  // Handle bulk add accounts
+  const handleBulkAddAccounts = async () => {
+    if (!confirm('This will add 89 pre-configured accounts:\n\n- Company Tag: "New"\n- Company Stage: "Enterprise"\n- Assigned Employee: Unassigned\n\nContinue?')) {
+      return;
+    }
+
+    try {
+      setBulkAdding(true);
+      const params = new URLSearchParams();
+      params.append('isAdmin', 'true');
+
+      const response = await fetch(`/api/admin/bulk-add-accounts?${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to bulk add accounts');
+      }
+
+      setToast({ 
+        message: `Successfully added ${data.added} account(s). ${data.skipped > 0 ? `${data.skipped} account(s) already existed.` : ''}`, 
+        type: 'success' 
+      });
+      await fetchAccounts(); // Refresh list
+    } catch (error: any) {
+      console.error('Error bulk adding accounts:', error);
+      setToast({ message: error.message || 'Failed to bulk add accounts', type: 'error' });
+    } finally {
+      setBulkAdding(false);
+    }
+  };
+
   return (
     <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
       <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
@@ -310,16 +341,31 @@ export default function AccountsPage() {
             >
               Accounts
             </h1>
-            <button 
-              onClick={handleOpenModal}
-              disabled={submitting}
-              className="absolute right-0 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
-              style={{ WebkitTapHighlightColor: 'transparent' }}
-            >
-              <span>+</span>
-              <span className="hidden sm:inline">Create New Account</span>
-              <span className="sm:hidden">New</span>
-            </button>
+            <div className="absolute right-0 flex items-center gap-2 sm:gap-3">
+              {isAdmin && (
+                <button 
+                  onClick={handleBulkAddAccounts}
+                  disabled={bulkAdding || submitting}
+                  className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-600 rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-blue-500/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                  title="Bulk add 14 pre-configured accounts"
+                >
+                  <span>📦</span>
+                  <span className="hidden sm:inline">{bulkAdding ? 'Adding...' : 'Bulk Add'}</span>
+                  <span className="sm:hidden">{bulkAdding ? '...' : 'Bulk'}</span>
+                </button>
+              )}
+              <button 
+                onClick={handleOpenModal}
+                disabled={submitting || bulkAdding}
+                className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+              >
+                <span>+</span>
+                <span className="hidden sm:inline">Create New Account</span>
+                <span className="sm:hidden">New</span>
+              </button>
+            </div>
           </div>
         <div className="gold-divider w-full"></div>
       </div>

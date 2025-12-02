@@ -57,11 +57,13 @@ export async function POST(
     try {
       await supabase.from('activities').insert({
         account_id: task.account_id || null,
-        customer_id: task.customer_id || null,
-        activity_type: 'task_completed',
+        employee_id: completed_by || task.assigned_to || task.assigned_employee || 'System',
+        activity_type: 'task',
         description: `Task "${task.title}" marked as completed`,
-        created_by: completed_by || task.assigned_to,
-        created_at: getCurrentISTTime(),
+        metadata: {
+          task_id: task.id,
+          status: 'Completed',
+        },
       });
     } catch (activityError) {
       console.error('Error creating activity (non-critical):', activityError);

@@ -12,8 +12,6 @@ export async function POST(request: NextRequest) {
       task_type,
       due_date,
       assigned_to,
-      customer_id,
-      customer_name,
       account_id,
       sub_account_id,
       status = 'Pending',
@@ -83,8 +81,7 @@ export async function POST(request: NextRequest) {
     }];
 
     // Create task
-    // Note: customer_id and customer_name columns don't exist in tasks table
-    // The relationship to accounts/customers is maintained through account_id and sub_account_id
+    // The relationship to accounts is maintained through account_id and sub_account_id
     const { data: task, error: taskError } = await supabase
       .from('tasks')
       .insert({

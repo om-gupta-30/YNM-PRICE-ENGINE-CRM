@@ -76,8 +76,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       title,
-      customer_id,
-      customer_name,
       task_type,
       due_date,
       status,
@@ -108,13 +106,12 @@ export async function POST(request: NextRequest) {
       .from('tasks')
       .insert({
         title: title.trim(),
-        customer_id: customer_id || null,
-        customer_name: customer_name?.trim() || null,
         task_type,
         due_date,
         status: status || 'Pending',
         description: description?.trim() || null,
         assigned_to,
+        assigned_employee: assigned_to,
         created_by: created_by || assigned_to,
       })
       .select()

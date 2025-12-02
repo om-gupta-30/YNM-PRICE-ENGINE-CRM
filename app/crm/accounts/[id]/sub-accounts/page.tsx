@@ -15,6 +15,8 @@ interface SubAccount {
   cityName: string | null;
   address: string | null;
   pincode: string | null;
+  gstNumber: string | null;
+  website: string | null;
   isHeadquarter: boolean;
   officeType: 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office' | null;
   engagementScore: number;
@@ -52,6 +54,8 @@ export default function SubAccountsPage() {
     cityId: null as number | null,
     address: '',
     pincode: '',
+    gstNumber: '',
+    website: '',
     isHeadquarter: false,
     officeType: null as 'Headquarter' | 'Zonal Office' | 'Regional Office' | 'Site Office' | null,
   });
@@ -307,6 +311,8 @@ export default function SubAccountsPage() {
             cityId: formData.cityId,
             address: formData.address || null,
             pincode: formData.pincode || null,
+            gstNumber: formData.gstNumber || null,
+            website: formData.website || null,
             isHeadquarter: formData.isHeadquarter || false,
             officeType: formData.officeType || null,
           }),
@@ -341,6 +347,8 @@ export default function SubAccountsPage() {
             cityId: formData.cityId,
             address: formData.address || null,
             pincode: formData.pincode || null,
+            gstNumber: formData.gstNumber || null,
+            website: formData.website || null,
             isHeadquarter: formData.isHeadquarter || false,
             officeType: formData.officeType || null,
           }),
@@ -361,7 +369,7 @@ export default function SubAccountsPage() {
       }
 
       setIsModalOpen(false);
-      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
+      setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', gstNumber: '', website: '', isHeadquarter: false, officeType: null });
       setEditSubAccount(null);
       setCities([]);
       await fetchSubAccounts();
@@ -376,7 +384,7 @@ export default function SubAccountsPage() {
   // Handle open modal
   const handleOpenModal = () => {
     setEditSubAccount(null);
-    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', isHeadquarter: false, officeType: null });
+    setFormData({ subAccountName: '', stateId: null, cityId: null, address: '', pincode: '', gstNumber: '', website: '', isHeadquarter: false, officeType: null });
     setCities([]);
     setIsModalOpen(true);
   };
@@ -390,6 +398,8 @@ export default function SubAccountsPage() {
       cityId: subAccount.cityId || null,
       address: subAccount.address || '',
       pincode: subAccount.pincode || '',
+      gstNumber: subAccount.gstNumber || '',
+      website: subAccount.website || '',
       isHeadquarter: subAccount.isHeadquarter || false,
       officeType: subAccount.officeType || null,
     });
@@ -549,6 +559,8 @@ export default function SubAccountsPage() {
                   <tr className="border-b border-white/20">
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Sub-Account Name</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">City + State</th>
+                    <th className="text-left py-4 px-4 text-sm font-bold text-white">GST Number</th>
+                    <th className="text-left py-4 px-4 text-sm font-bold text-white">Website</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Headquarter</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Engagement Score</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Actions</th>
@@ -572,6 +584,21 @@ export default function SubAccountsPage() {
                           <span className="text-slate-500 italic">Not set</span>
                         )}
                       </td>
+                      <td className="py-4 px-4 text-slate-200 text-sm">{subAccount?.gstNumber || '—'}</td>
+                      <td className="py-4 px-4 text-slate-200 text-sm">
+                        {subAccount?.website ? (
+                          <a
+                            href={subAccount.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-premium-gold hover:underline"
+                          >
+                            {subAccount.website.replace(/^https?:\/\//, '')}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="py-4 px-4">
                         {subAccount?.officeType ? (
                           <span className="px-2 py-1 text-xs font-semibold bg-premium-gold/20 text-premium-gold rounded-lg border border-premium-gold/30">
@@ -591,10 +618,10 @@ export default function SubAccountsPage() {
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => subAccount?.id && router.push(`/crm/subaccounts/${subAccount.id}/contacts`)}
+                            onClick={() => subAccount?.id && router.push(`/crm/subaccounts/${subAccount.id}`)}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200"
                           >
-                            View Contacts
+                            View Details
                           </button>
                           <button
                             onClick={() => subAccount && handleEdit(subAccount)}
@@ -758,6 +785,36 @@ export default function SubAccountsPage() {
                     placeholder="Enter pincode"
                     maxLength={10}
                   />
+                </div>
+
+                {/* GST Number and Website - Side by Side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-200 mb-2">
+                      GST Number
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.gstNumber}
+                      onChange={(e) => setFormData(prev => ({ ...prev, gstNumber: e.target.value }))}
+                      className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                      placeholder="Enter GST number"
+                      maxLength={15}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-200 mb-2">
+                      Website URL
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
+                      className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                      placeholder="https://example.com"
+                    />
+                  </div>
                 </div>
 
                 {/* Office Type Selection */}

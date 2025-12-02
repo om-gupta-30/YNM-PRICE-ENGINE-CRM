@@ -53,6 +53,18 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
       href: '/crm/activities',
       icon: '📝',
     },
+    ...(isAdmin ? [
+      {
+        title: 'All Sub-Accounts',
+        href: '/crm/admin/subaccounts',
+        icon: '🏛️',
+      },
+      {
+        title: 'All Contacts',
+        href: '/crm/admin/contacts',
+        icon: '👥',
+      },
+    ] : []),
   ];
 
   return (

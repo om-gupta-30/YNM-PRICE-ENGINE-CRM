@@ -14,9 +14,6 @@ export interface AccountFormData {
   accountName: string;
   companyStage: string;
   companyTag: string;
-  assignedEmployee: string;
-  website?: string;
-  gstNumber?: string;
   notes?: string;
   industries?: SelectedIndustry[];
   industryProjects?: Record<string, number>; // Key: "industry_id-sub_industry_id", Value: number of projects
@@ -63,14 +60,10 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     accountName: '',
     companyStage: '',
     companyTag: '',
-    assignedEmployee: '',
-    website: '',
-    gstNumber: '',
     notes: '',
     industries: [],
     industryProjects: {},
   });
-  const [employeeOptions, setEmployeeOptions] = useState<string[]>(['Employee1', 'Employee2']);
   const [industryProjects, setIndustryProjects] = useState<Record<string, number>>({});
 
   // Initialize form data when modal opens or initialData changes
@@ -83,15 +76,10 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
       });
       setIndustryProjects(initialData.industryProjects || {});
     } else {
-      // Auto-assign to current user if employee (not admin)
-      const defaultAssignedEmployee = !isAdmin && currentUser ? currentUser : '';
       setFormData({
         accountName: '',
         companyStage: '',
         companyTag: '',
-        assignedEmployee: defaultAssignedEmployee,
-        website: '',
-        gstNumber: '',
         notes: '',
         industries: [],
         industryProjects: {},
@@ -99,25 +87,6 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
       setIndustryProjects({});
     }
   }, [initialData, isOpen, isAdmin, currentUser]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const fetchEmployees = async () => {
-      try {
-        const response = await fetch('/api/employees');
-        const data = await response.json();
-        if (data.success && Array.isArray(data.employees) && data.employees.length > 0) {
-          const filtered = data.employees.filter(
-            (employee: string) => employee?.toLowerCase() !== 'admin'
-          );
-          setEmployeeOptions(filtered);
-        }
-      } catch (error) {
-        console.error('Error fetching employees:', error);
-      }
-    };
-    fetchEmployees();
-  }, [isOpen]);
 
   // Handle input change
   const handleInputChange = (field: keyof AccountFormData, value: string) => {
@@ -241,76 +210,6 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                     </option>
                   ))}
                 </select>
-              </div>
-            </div>
-
-            {/* Assigned Employee - Admin can assign to any employee, employees are auto-assigned */}
-            {isAdmin ? (
-              <div>
-                <label className="block text-sm font-semibold text-slate-200 mb-2">
-                  Assigned Employee <span className="text-slate-400 text-xs">(optional - assign later)</span>
-                </label>
-                <select
-                  value={formData.assignedEmployee || ''}
-                  onChange={(e) => handleInputChange('assignedEmployee', e.target.value)}
-                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
-                >
-                  <option value="">Unassigned (assign later)</option>
-                  {employeeOptions
-                    .filter((employee) => employee?.toLowerCase() !== 'admin')
-                    .map((employee) => (
-                    <option key={employee} value={employee}>
-                      {employee}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-slate-400 mt-1">Select an employee to assign this account to, or leave unassigned to assign later</p>
-              </div>
-            ) : (
-              // For employees, show read-only field with their name
-              <div>
-                <label className="block text-sm font-semibold text-slate-200 mb-2">
-                  Assigned Employee
-                </label>
-                <input
-                  type="text"
-                  value={currentUser || 'Not assigned'}
-                  className="input-premium w-full px-4 py-3 text-slate-300 bg-white/5 border border-white/10 rounded-lg cursor-not-allowed"
-                  disabled
-                  readOnly
-                />
-                <p className="text-xs text-slate-400 mt-1">This account will be automatically assigned to you when created</p>
-              </div>
-            )}
-
-
-            {/* Website and GST Number - Side by Side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-200 mb-2">
-                  Website
-                </label>
-                <input
-                  type="url"
-                  value={formData.website || ''}
-                  onChange={(e) => handleInputChange('website', e.target.value)}
-                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
-                  placeholder="https://example.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-slate-200 mb-2">
-                  GST Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.gstNumber || ''}
-                  onChange={(e) => handleInputChange('gstNumber', e.target.value)}
-                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
-                  placeholder="Enter GST number"
-                  maxLength={15}
-                />
               </div>
             </div>
 

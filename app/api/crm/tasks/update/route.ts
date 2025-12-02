@@ -13,8 +13,6 @@ export async function POST(request: NextRequest) {
       task_type,
       due_date,
       assigned_to,
-      customer_id,
-      customer_name,
       account_id,
       sub_account_id,
       status,
@@ -74,14 +72,6 @@ export async function POST(request: NextRequest) {
         );
       }
       updateData.assigned_employee = assigned_to.trim();
-    }
-
-    if (customer_id !== undefined) {
-      updateData.customer_id = customer_id || null;
-    }
-
-    if (customer_name !== undefined) {
-      updateData.customer_name = customer_name?.trim() || null;
     }
 
     if (account_id !== undefined) {
@@ -179,7 +169,7 @@ export async function POST(request: NextRequest) {
     // Get old task data for comparison
     const { data: oldTask } = await supabase
       .from('tasks')
-      .select('title, description, task_type, due_date, assigned_employee, customer_id, customer_name, account_id, sub_account_id, status, reminder_enabled, reminder_value, reminder_unit')
+      .select('title, description, task_type, due_date, assigned_employee, account_id, sub_account_id, status, reminder_enabled, reminder_value, reminder_unit')
       .eq('id', id)
       .single();
 
@@ -203,12 +193,6 @@ export async function POST(request: NextRequest) {
       }
       if (due_date !== undefined && due_date !== oldTask?.due_date) {
         changes.push(`Due date: ${oldTask?.due_date || 'None'} → ${due_date || 'None'}`);
-      }
-      if (customer_id !== undefined && customer_id !== oldTask?.customer_id) {
-        changes.push(`Customer ID: ${oldTask?.customer_id || 'None'} → ${customer_id || 'None'}`);
-      }
-      if (customer_name !== undefined && customer_name !== oldTask?.customer_name) {
-        changes.push(`Customer: "${oldTask?.customer_name || 'None'}" → "${customer_name || 'None'}"`);
       }
       if (account_id !== undefined && account_id !== oldTask?.account_id) {
         changes.push(`Account: ${oldTask?.account_id || 'None'} → ${account_id || 'None'}`);

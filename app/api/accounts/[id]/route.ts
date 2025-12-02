@@ -116,9 +116,6 @@ export async function PUT(
     // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)
     if (body.companyStage !== undefined) updateData.company_stage = (body.companyStage && body.companyStage.trim() !== '') ? body.companyStage : null;
     if (body.companyTag !== undefined) updateData.company_tag = (body.companyTag && body.companyTag.trim() !== '') ? body.companyTag : null;
-    if (body.website !== undefined) updateData.website = body.website?.trim() || null;
-    if (body.gstNumber !== undefined) updateData.gst_number = body.gstNumber?.trim() || null;
-    if (body.relatedProducts !== undefined) updateData.related_products = body.relatedProducts || [];
     if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
     if (body.industries !== undefined) updateData.industries = body.industries || [];
     if (body.industryProjects !== undefined) updateData.industry_projects = body.industryProjects || {};
@@ -133,7 +130,7 @@ export async function PUT(
     // Get old account data for activity logging
     const { data: oldAccount } = await supabase
       .from('accounts')
-      .select('account_name, assigned_employee, website, gst_number, notes, industries, industry_projects')
+      .select('account_name, assigned_employee, notes, industries, industry_projects')
       .eq('id', id)
       .single();
 
@@ -157,12 +154,6 @@ export async function PUT(
       }
       if (body.companyStage) changes.push(`Stage: ${body.companyStage}`);
       if (body.companyTag) changes.push(`Tag: ${body.companyTag}`);
-      if (body.website !== undefined && body.website !== oldAccount?.website) {
-        changes.push(`Website: "${oldAccount?.website || 'None'}" → "${body.website || 'None'}"`);
-      }
-      if (body.gstNumber !== undefined && body.gstNumber !== oldAccount?.gst_number) {
-        changes.push(`GST: "${oldAccount?.gst_number || 'None'}" → "${body.gstNumber || 'None'}"`);
-      }
       if (body.notes !== undefined && body.notes !== oldAccount?.notes) {
         changes.push(`Notes updated`);
       }
