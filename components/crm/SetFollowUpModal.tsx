@@ -18,13 +18,19 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
 
   // Auto-scroll to top when modal opens
   useEffect(() => {
-    if (isOpen && modalRef.current) {
+    if (isOpen) {
+      // Scroll window to top so modal is visible
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
       setTimeout(() => {
         if (modalRef.current) {
           modalRef.current.scrollTop = 0;
         }
       }, 100);
     }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;

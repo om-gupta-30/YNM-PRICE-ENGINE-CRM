@@ -49,7 +49,7 @@ export default function FilterBar({
   ];
 
   // Assigned Employee options (only employees, not admin)
-  const assignedEmployeeOptions = ['Employee1', 'Employee2', 'Employee3'];
+  const assignedEmployeeOptions = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
 
   const hasActiveFilters = searchQuery || filterStage || filterTag || filterEmployee;
 

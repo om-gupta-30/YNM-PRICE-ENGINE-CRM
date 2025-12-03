@@ -118,11 +118,12 @@ export async function POST(request: NextRequest) {
 
     // Detect user role from username
     // Admin = full admin user
-    // swamymahesh and mahesh = data analyst users (restricted admin)
-    // Employee1, Employee2, Employee3 = sales employees
-    const isDataAnalyst = user.username === 'swamymahesh' || user.username === 'mahesh';
+    // DataAnalyst_* = data analyst users (restricted admin access)
+    // Sales_* = sales employees
+    const isDataAnalyst = user.username.startsWith('DataAnalyst_');
     const isAdmin = user.username === 'Admin';
-    const department = isAdmin || isDataAnalyst ? 'Sales' : 'Sales'; // All users are in Sales department for now
+    const isSalesEmployee = user.username.startsWith('Sales_');
+    const department = 'Sales'; // All users are in Sales department for now
 
     // Return success with EXACT format as required
     // NEVER return undefined userId - always return user.username

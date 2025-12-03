@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
   onConfirm: () => void | Promise<void>;
@@ -23,6 +25,17 @@ export default function DeleteConfirmationModal({
   message,
   isDeleting = false,
 }: DeleteConfirmationModalProps) {
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleCancel = onCancel || onClose || (() => {});

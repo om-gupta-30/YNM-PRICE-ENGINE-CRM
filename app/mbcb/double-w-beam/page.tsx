@@ -505,7 +505,7 @@ export default function DoubleWBeamPage() {
       // State and City are already in the database, no need to save them
       if (customerName.trim()) {
         // Determine sales employee from current user
-        const salesEmployee = (currentUsername === 'Employee1' || currentUsername === 'Employee2' || currentUsername === 'Employee3') 
+        const salesEmployee = currentUsername.startsWith('Sales_') 
           ? currentUsername 
           : 'Admin';
         

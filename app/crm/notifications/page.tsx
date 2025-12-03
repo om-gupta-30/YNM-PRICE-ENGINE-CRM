@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Notification } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
-import CRMLayout from '@/components/layout/CRMLayout';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 
 export default function NotificationsPage() {
@@ -130,7 +129,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <CRMLayout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="glassmorphic-premium rounded-2xl p-6 mb-6">
@@ -260,7 +259,7 @@ export default function NotificationsPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+    </>
   );
 }
 

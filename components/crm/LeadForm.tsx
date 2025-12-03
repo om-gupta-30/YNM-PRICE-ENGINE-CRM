@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import useModalAutoScroll from '@/hooks/useModalAutoScroll';
 
 export interface LeadFormData {
   lead_name: string;
@@ -28,6 +29,9 @@ const LEAD_SOURCES = ['Website', 'Referral', 'Inbound Call', 'Existing Customer'
 const LEAD_STATUSES = ['New', 'In Progress', 'Quotation Sent', 'Follow-up', 'Closed', 'Lost'];
 
 export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode = 'create' }: LeadFormProps) {
+  // Auto-scroll when modal opens
+  const modalContentRef = useModalAutoScroll(isOpen);
+
   const [formData, setFormData] = useState<LeadFormData>({
     lead_name: '',
     contact_person: '',
@@ -167,17 +171,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         if (data.success && data.employees) {
           setEmployees(data.employees);
         } else {
-          // Fallback: use common employee names from localStorage or default list
-          setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+          // Fallback: use new employee names
+          setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
         }
       } else {
         // Fallback list
-        setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+        setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
       }
     } catch (error) {
       console.error('Error loading employees:', error);
       // Fallback list
-      setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+      setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
     }
   };
 
@@ -295,7 +299,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div ref={modalContentRef} className="flex-1 overflow-y-auto p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Account Selection - Required - FIRST */}
             <div>

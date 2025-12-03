@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import CRMLayout from '@/components/layout/CRMLayout';
 import Toast from '@/components/ui/Toast';
 import { Task } from '@/lib/constants/types';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
@@ -241,7 +240,6 @@ export default function TasksPage() {
 
   if (loading) {
     return (
-      <CRMLayout>
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-center">
             <div className="relative w-16 h-16 mx-auto mb-6">
@@ -254,12 +252,11 @@ export default function TasksPage() {
             <p className="text-slate-500 text-sm mt-1">Please wait</p>
           </div>
         </div>
-      </CRMLayout>
     );
   }
 
   return (
-    <CRMLayout>
+    <>
       <div className="min-h-screen w-full px-4 py-8 relative">
         <div className="max-w-7xl mx-auto space-y-6 relative z-10">
           {/* Header - Clean & Minimal */}
@@ -645,7 +642,7 @@ export default function TasksPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+    </>
   );
 }
 

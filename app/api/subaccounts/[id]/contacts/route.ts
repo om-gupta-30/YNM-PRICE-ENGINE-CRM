@@ -157,6 +157,7 @@ export async function POST(
     if (created_by) {
       await logCreateActivity({
         account_id: subAccount.account_id,
+        sub_account_id: subAccountId,
         contact_id: contact.id,
         employee_id: created_by,
         entityName: name,
@@ -330,6 +331,7 @@ export async function PUT(
       
       await logEditActivity({
         account_id: existingContact.account_id,
+        sub_account_id: subAccountId,
         contact_id,
         employee_id: employeeId,
         entityName: displayName,

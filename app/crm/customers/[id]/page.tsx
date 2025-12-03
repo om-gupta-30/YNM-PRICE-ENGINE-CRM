@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Customer, Quote } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
-import CRMLayout from '@/components/layout/CRMLayout';
 
 export default function CustomerDetailsPage() {
   const params = useParams();
@@ -79,26 +78,22 @@ export default function CustomerDetailsPage() {
 
   if (loading) {
     return (
-      <CRMLayout>
         <div className="text-center py-20">
           <p className="text-slate-300">Loading customer details...</p>
         </div>
-      </CRMLayout>
     );
   }
 
   if (error || !customer) {
     return (
-      <CRMLayout>
         <div className="bg-red-500/20 border border-red-400/50 rounded-xl p-4">
           <p className="text-red-200 text-center">{error || 'Customer not found'}</p>
         </div>
-      </CRMLayout>
     );
   }
 
   return (
-    <CRMLayout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="glassmorphic-premium rounded-2xl p-6 mb-6">
@@ -298,7 +293,7 @@ export default function CustomerDetailsPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+    </>
   );
 }
 

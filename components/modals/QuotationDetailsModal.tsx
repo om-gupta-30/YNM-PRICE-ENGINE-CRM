@@ -31,6 +31,8 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
   
   // Prevent body scroll when modal is open and auto-scroll to top
   useEffect(() => {
+    // Scroll window to top so modal is visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     document.body.style.overflow = 'hidden';
     // Auto-scroll to top of modal when opened
     setTimeout(() => {

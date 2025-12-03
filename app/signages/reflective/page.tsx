@@ -576,7 +576,7 @@ export default function ReflectivePartPage() {
       if (customerName.trim()) {
         // Determine sales employee from current user
         const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
-        const salesEmployee = (currentUsername === 'Employee1' || currentUsername === 'Employee2' || currentUsername === 'Employee3') 
+        const salesEmployee = currentUsername.startsWith('Sales_') 
           ? currentUsername 
           : 'Admin';
         

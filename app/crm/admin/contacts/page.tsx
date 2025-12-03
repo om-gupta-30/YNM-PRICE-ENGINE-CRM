@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
-import CRMLayout from '@/components/layout/CRMLayout';
 
 interface Contact {
   id: number;
@@ -148,7 +147,6 @@ export default function AdminContactsPage() {
   }
 
   return (
-    <CRMLayout>
       <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
@@ -344,6 +342,5 @@ export default function AdminContactsPage() {
           />
         )}
       </div>
-    </CRMLayout>
   );
 }

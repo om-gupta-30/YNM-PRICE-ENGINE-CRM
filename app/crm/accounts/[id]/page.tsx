@@ -7,11 +7,11 @@ import Toast from '@/components/ui/Toast';
 import ActivityTimeline from '@/components/crm/ActivityTimeline';
 import ContactFormModal from '@/components/crm/ContactFormModal';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
-import CRMLayout from '@/components/layout/CRMLayout';
 import CelebrationEffect from '@/components/crm/CelebrationEffect';
 import CelebrationToast from '@/components/crm/CelebrationToast';
 import QuotationDetailsModal from '@/components/modals/QuotationDetailsModal';
 import { formatTimestampIST, formatDateIST } from '@/lib/utils/dateFormatters';
+import CoachButton from '@/components/CoachButton';
 
 type TabType = 'overview' | 'contacts' | 'leads' | 'quotations';
 
@@ -206,7 +206,6 @@ export default function AccountDetailsPage() {
 
   if (loading) {
     return (
-      <CRMLayout>
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
           <div className="max-w-7xl mx-auto">
             <div className="text-center py-20">
@@ -214,13 +213,11 @@ export default function AccountDetailsPage() {
             </div>
           </div>
         </div>
-      </CRMLayout>
     );
   }
 
   if (error || !account) {
     return (
-      <CRMLayout>
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
           <div className="max-w-7xl mx-auto">
             <div className="bg-red-500/20 border border-red-400/50 rounded-xl p-4">
@@ -237,7 +234,6 @@ export default function AccountDetailsPage() {
             </div>
           </div>
         </div>
-      </CRMLayout>
     );
   }
 
@@ -246,7 +242,7 @@ export default function AccountDetailsPage() {
   const closedWonQuotations = quotations.filter(q => q.status === 'closed_won').length;
 
   return (
-    <CRMLayout>
+    <>
       {/* Animated Background - Pre-rendered to prevent flash */}
       <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#0a0a0f' }}>
         {/* Dynamic gradient background - rendered immediately */}
@@ -843,7 +839,14 @@ export default function AccountDetailsPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+
+      {/* AI Coach Button */}
+      <CoachButton
+        user={username}
+        role={isAdmin ? 'admin' : 'employee'}
+        context={accountId ? { accountId } : undefined}
+      />
+    </>
   );
 }
 

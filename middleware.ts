@@ -5,9 +5,11 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Whitelist AI system endpoints so they are not redirected to login
+  // Note: run-auto-monitor is under (system)/api/ai for CRON access
   if (
     pathname.startsWith("/api/cron") ||
-    pathname.startsWith("/api/ai/run-auto-monitor")
+    pathname.startsWith("/api/ai/run-auto-monitor") ||
+    pathname.startsWith("/api/ai/run-daily-coaching")
   ) {
     return NextResponse.next();
   }

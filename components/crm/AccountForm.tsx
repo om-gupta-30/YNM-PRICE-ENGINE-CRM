@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import IndustrySelector from './IndustrySelector';
+import useModalAutoScroll from '@/hooks/useModalAutoScroll';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -31,6 +32,9 @@ interface AccountFormProps {
 }
 
 export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, isDataAnalyst = false, currentUser = '' }: AccountFormProps) {
+  // Auto-scroll when modal opens
+  const modalContentRef = useModalAutoScroll(isOpen);
+
   // Company Stage options (from enum)
   const companyStageOptions = [
     'Enterprise',
@@ -150,7 +154,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         </div>
 
         {/* Scrollable Form Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 modal-scrollable">
+        <div ref={modalContentRef} className="flex-1 overflow-y-auto px-6 py-4 modal-scrollable">
           <form onSubmit={handleSubmit} className="space-y-6">
           {/* Company Details Section */}
           <div className="space-y-4">

@@ -43,11 +43,11 @@ export default function SmartDropdown({
           const isAdmin = localStorage.getItem('isAdmin') === 'true';
           
           // Determine sales employee: 
-          // - If username is Employee1, Employee2, or Employee3, use that username
+          // - If username starts with Sales_, use that username
           // - If username is Admin, use Admin
           // - Otherwise default to Admin
           let salesEmployee = 'Admin';
-          if (username === 'Employee1' || username === 'Employee2' || username === 'Employee3') {
+          if (username.startsWith('Sales_')) {
             salesEmployee = username;
           } else if (username === 'Admin') {
             salesEmployee = 'Admin';

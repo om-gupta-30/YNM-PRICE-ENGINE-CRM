@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
-import { logEditActivity } from '@/lib/utils/activityLogger';
+import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -171,6 +171,26 @@ export async function POST(request: NextRequest) {
         { error: `Failed to create sub-account: ${error.message}` },
         { status: 500 }
       );
+    }
+
+    // Log activity for sub-account creation
+    try {
+      await logCreateActivity({
+        account_id: parseInt(accountId),
+        sub_account_id: subAccount.id,
+        employee_id: body.created_by || 'System',
+        entityName: subAccountName,
+        entityType: 'sub_account',
+        createdData: {
+          sub_account_name: subAccountName,
+          state_id: stateId,
+          city_id: cityId,
+          address,
+          pincode,
+        },
+      });
+    } catch (activityError) {
+      console.warn('Failed to log sub-account creation activity:', activityError);
     }
 
     return NextResponse.json({ success: true, subAccountId: subAccount.id }, { status: 201 });

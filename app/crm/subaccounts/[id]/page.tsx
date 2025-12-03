@@ -6,10 +6,11 @@ import { Quote, Lead, Task, Contact, Activity } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
 import ActivityTimeline from '@/components/crm/ActivityTimeline';
 import ContactFormModal from '@/components/crm/ContactFormModal';
-import CRMLayout from '@/components/layout/CRMLayout';
 import QuotationDetailsModal from '@/components/modals/QuotationDetailsModal';
 import { formatTimestampIST, formatDateIST } from '@/lib/utils/dateFormatters';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
+import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Area, AreaChart } from 'recharts';
+import CoachButton from '@/components/CoachButton';
 
 type TabType = 'overview' | 'contacts' | 'leads' | 'quotations';
 
@@ -65,6 +66,34 @@ export default function SubAccountDetailsPage() {
   const [aiData, setAiData] = useState<{ score: number; tips: string[]; comment: string } | null>(null);
   const [errorAI, setErrorAI] = useState<string | null>(null);
 
+  // Daily Coaching state
+  const [coachData, setCoachData] = useState<{
+    motivation: string;
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+    priorityAccounts: string[];
+  } | null>(null);
+  const [loadingCoach, setLoadingCoach] = useState(false);
+  const [errorCoach, setErrorCoach] = useState<string | null>(null);
+
+  // Engagement History state
+  const [engagementHistory, setEngagementHistory] = useState<{ date: string; score: number }[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Employee Streak state
+  const [streakData, setStreakData] = useState<{ streak: number; message: string } | null>(null);
+  const [loadingStreak, setLoadingStreak] = useState(false);
+
+  // Weekly Insights state
+  const [weeklyInsights, setWeeklyInsights] = useState<{
+    summary: string;
+    topOpportunity: string;
+    improvementArea: string;
+  } | null>(null);
+  const [showWeeklyPopup, setShowWeeklyPopup] = useState(false);
+  const [loadingWeeklyInsights, setLoadingWeeklyInsights] = useState(false);
+
   // Load user info on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -77,8 +106,63 @@ export default function SubAccountDetailsPage() {
     if (subAccountId) {
       loadSubAccount();
       loadRelatedData();
+      loadEngagementHistory();
     }
   }, [subAccountId]);
+
+  // Load streak when username is available
+  useEffect(() => {
+    if (username) {
+      loadStreak();
+    }
+  }, [username]);
+
+  // Check and load weekly insights on mount (once per week)
+  useEffect(() => {
+    if (!username || typeof window === 'undefined') return;
+
+    const checkAndLoadWeeklyInsights = async () => {
+      const storageKey = `weekly_insights_${username}`;
+      const lastShown = localStorage.getItem(storageKey);
+      const now = new Date();
+      
+      // Check if we've shown it this week
+      if (lastShown) {
+        const lastShownDate = new Date(lastShown);
+        const daysSince = Math.floor((now.getTime() - lastShownDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        // If shown within the last 7 days, don't show again
+        if (daysSince < 7) {
+          return;
+        }
+      }
+
+      // Load weekly insights
+      setLoadingWeeklyInsights(true);
+      try {
+        const res = await fetch(`/api/ai/weekly-insights?employee=${username}`);
+        const data = await res.json();
+        if (data.success && data.insights) {
+          setWeeklyInsights(data.insights);
+          setShowWeeklyPopup(true);
+        }
+      } catch (err: any) {
+        console.error('Error loading weekly insights:', err);
+      } finally {
+        setLoadingWeeklyInsights(false);
+      }
+    };
+
+    checkAndLoadWeeklyInsights();
+  }, [username]);
+
+  // Dismiss weekly popup
+  function dismissWeeklyPopup() {
+    if (!username || typeof window === 'undefined') return;
+    setShowWeeklyPopup(false);
+    const storageKey = `weekly_insights_${username}`;
+    localStorage.setItem(storageKey, new Date().toISOString());
+  }
 
   // Update page title
   useEffect(() => {
@@ -160,9 +244,64 @@ export default function SubAccountDetailsPage() {
     }
   }
 
+  // Fetch daily coaching
+  async function fetchDailyCoaching() {
+    if (!username) {
+      setErrorCoach('Username not available');
+      return;
+    }
+    setLoadingCoach(true);
+    setErrorCoach(null);
+    try {
+      const res = await fetch(`/api/ai/daily-coaching?employee=${username}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to fetch coaching');
+      setCoachData(data.coaching);
+    } catch (err: any) {
+      setErrorCoach(err.message || 'Failed to load daily coaching');
+    } finally {
+      setLoadingCoach(false);
+    }
+  }
+
+  // Fetch engagement history
+  async function loadEngagementHistory() {
+    setLoadingHistory(true);
+    try {
+      const res = await fetch(`/api/engagement-history?subAccountId=${subAccountId}`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setEngagementHistory(data.data);
+      }
+    } catch (err: any) {
+      console.error('Error loading engagement history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }
+
+  // Fetch employee streak
+  async function loadStreak() {
+    if (!username) return;
+    setLoadingStreak(true);
+    try {
+      const res = await fetch(`/api/streak?employee=${username}`);
+      const data = await res.json();
+      if (data.success) {
+        setStreakData({
+          streak: data.streak,
+          message: data.message,
+        });
+      }
+    } catch (err: any) {
+      console.error('Error loading streak:', err);
+    } finally {
+      setLoadingStreak(false);
+    }
+  }
+
   if (loading) {
     return (
-      <CRMLayout>
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
           <div className="max-w-7xl mx-auto">
             <div className="text-center py-20">
@@ -170,13 +309,11 @@ export default function SubAccountDetailsPage() {
             </div>
           </div>
         </div>
-      </CRMLayout>
     );
   }
 
   if (error || !subAccount) {
     return (
-      <CRMLayout>
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
           <div className="max-w-7xl mx-auto">
             <div className="bg-red-500/20 border border-red-400/50 rounded-xl p-4">
@@ -192,7 +329,6 @@ export default function SubAccountDetailsPage() {
             </div>
           </div>
         </div>
-      </CRMLayout>
     );
   }
 
@@ -201,7 +337,7 @@ export default function SubAccountDetailsPage() {
   const closedWonQuotations = quotations.filter(q => q.status === 'closed_won').length;
 
   return (
-    <CRMLayout>
+    <>
       <div className="min-h-screen relative overflow-hidden" style={{ backgroundColor: '#0a0a0f' }}>
         <div className="fixed inset-0 z-0" style={{ backgroundColor: '#0a0a0f' }}>
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-[#0d1117] to-slate-900"></div>
@@ -269,6 +405,99 @@ export default function SubAccountDetailsPage() {
                           {subAccount.isActive ? 'Active' : 'Inactive'}
                         </span>
                       </div>
+
+                      {/* Engagement Trend Chart */}
+                      {engagementHistory.length >= 3 && (
+                        <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                          <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                            <span>📈</span>
+                            Engagement Trend
+                          </h3>
+                          {loadingHistory ? (
+                            <div className="h-[120px] flex items-center justify-center text-slate-400 text-sm">
+                              Loading trend...
+                            </div>
+                          ) : (
+                            <div className="h-[120px]">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={engagementHistory}>
+                                  <defs>
+                                    <linearGradient id={`engagementGradient-${subAccountId}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop 
+                                        offset="5%" 
+                                        stopColor={
+                                          engagementHistory.length >= 2 && 
+                                          engagementHistory[engagementHistory.length - 1].score > engagementHistory[0].score
+                                            ? '#10b981' // green for rising
+                                            : engagementHistory[engagementHistory.length - 1].score < engagementHistory[0].score
+                                            ? '#ef4444' // red for falling
+                                            : '#6366f1' // indigo for stable
+                                        } 
+                                        stopOpacity={0.3}
+                                      />
+                                      <stop 
+                                        offset="95%" 
+                                        stopColor={
+                                          engagementHistory.length >= 2 && 
+                                          engagementHistory[engagementHistory.length - 1].score > engagementHistory[0].score
+                                            ? '#10b981'
+                                            : engagementHistory[engagementHistory.length - 1].score < engagementHistory[0].score
+                                            ? '#ef4444'
+                                            : '#6366f1'
+                                        } 
+                                        stopOpacity={0}
+                                      />
+                                    </linearGradient>
+                                  </defs>
+                                  <Area
+                                    type="monotone"
+                                    dataKey="score"
+                                    stroke={
+                                      engagementHistory.length >= 2 && 
+                                      engagementHistory[engagementHistory.length - 1].score > engagementHistory[0].score
+                                        ? '#10b981'
+                                        : engagementHistory[engagementHistory.length - 1].score < engagementHistory[0].score
+                                        ? '#ef4444'
+                                        : '#6366f1'
+                                    }
+                                    strokeWidth={2}
+                                    fill={`url(#engagementGradient-${subAccountId})`}
+                                  />
+                                  <XAxis
+                                    dataKey="date"
+                                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                    tickFormatter={(value) => {
+                                      const date = new Date(value);
+                                      return `${date.getDate()}/${date.getMonth() + 1}`;
+                                    }}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={40}
+                                  />
+                                  <YAxis
+                                    domain={[0, 100]}
+                                    tick={{ fontSize: 10, fill: '#94a3b8' }}
+                                    width={30}
+                                  />
+                                  <Tooltip
+                                    contentStyle={{
+                                      backgroundColor: '#1e293b',
+                                      border: '1px solid #475569',
+                                      borderRadius: '8px',
+                                      color: '#f1f5f9',
+                                    }}
+                                    labelFormatter={(value) => {
+                                      const date = new Date(value);
+                                      return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+                                    }}
+                                    formatter={(value: any) => [`${Number(value).toFixed(1)}`, 'Score']}
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* AI Alert Display */}
                       {(() => {
@@ -341,6 +570,114 @@ export default function SubAccountDetailsPage() {
                                 <li key={i}>{t}</li>
                               ))}
                             </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Employee Streak Badge */}
+                      {loadingStreak ? (
+                        <div className="mt-4 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                          <div className="text-slate-400 text-sm">Loading streak...</div>
+                        </div>
+                      ) : streakData ? (
+                        <div className="mt-4 bg-gradient-to-r from-orange-500/20 to-red-500/20 rounded-xl p-4 border border-orange-500/30">
+                          <div className="flex items-center gap-3">
+                            <div className="flex-shrink-0">
+                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                🔥
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-white font-bold text-lg">{streakData.streak}</span>
+                                <span className="text-slate-300 text-sm">day streak</span>
+                              </div>
+                              <p className="text-slate-200 text-sm">{streakData.message}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Daily Coaching Section */}
+                      <div className="mt-4">
+                        <button
+                          onClick={fetchDailyCoaching}
+                          disabled={loadingCoach}
+                          className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
+                        >
+                          {loadingCoach ? 'Loading...' : "Get Today's Coaching"}
+                        </button>
+
+                        {loadingCoach && (
+                          <div className="mt-3 text-slate-400 text-sm">Loading coaching insights...</div>
+                        )}
+
+                        {errorCoach && (
+                          <div className="mt-3 text-red-500 text-sm">{errorCoach}</div>
+                        )}
+
+                        {coachData && (
+                          <div className="mt-3 p-3 border border-slate-700/50 rounded-lg bg-slate-800/50">
+                            {coachData.motivation && (
+                              <>
+                                <p className="font-medium text-white mb-2">
+                                  💪 Motivation:
+                                </p>
+                                <p className="text-slate-300 mb-4 text-sm">{coachData.motivation}</p>
+                              </>
+                            )}
+
+                            {coachData.strengths && coachData.strengths.length > 0 && (
+                              <>
+                                <p className="font-medium text-white mb-2">
+                                  ✨ Strengths:
+                                </p>
+                                <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1 mb-4">
+                                  {coachData.strengths.map((strength: string, i: number) => (
+                                    <li key={i}>{strength}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+
+                            {coachData.weaknesses && coachData.weaknesses.length > 0 && (
+                              <>
+                                <p className="font-medium text-white mb-2">
+                                  📈 Areas for Improvement:
+                                </p>
+                                <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1 mb-4">
+                                  {coachData.weaknesses.map((weakness: string, i: number) => (
+                                    <li key={i}>{weakness}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+
+                            {coachData.recommendations && coachData.recommendations.length > 0 && (
+                              <>
+                                <p className="font-medium text-white mb-2">
+                                  💡 Recommendations:
+                                </p>
+                                <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1 mb-4">
+                                  {coachData.recommendations.map((rec: string, i: number) => (
+                                    <li key={i}>{rec}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+
+                            {coachData.priorityAccounts && coachData.priorityAccounts.length > 0 && (
+                              <>
+                                <p className="font-medium text-white mb-2">
+                                  🎯 Priority Accounts:
+                                </p>
+                                <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                                  {coachData.priorityAccounts.map((account: string, i: number) => (
+                                    <li key={i}>{account}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -756,6 +1093,55 @@ export default function SubAccountDetailsPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+
+      {/* Weekly AI Insights Popup */}
+      {showWeeklyPopup && weeklyInsights && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="relative bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 rounded-2xl border border-slate-700/50 shadow-2xl max-w-md w-full mx-4 p-6 animate-fade-up">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-premium-gold/20 to-transparent rounded-bl-full"></div>
+            
+            <div className="relative">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-premium-gold/30 to-amber-600/20 flex items-center justify-center border border-premium-gold/30">
+                  <span className="text-2xl">📊</span>
+                </div>
+                <h2 className="text-2xl font-bold text-white">Weekly AI Insights</h2>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <p className="text-slate-300 text-sm mb-1">Summary</p>
+                  <p className="text-white font-medium">{weeklyInsights.summary}</p>
+                </div>
+
+                <div>
+                  <p className="text-slate-300 text-sm mb-1">Top Opportunity</p>
+                  <p className="text-white font-medium">• {weeklyInsights.topOpportunity}</p>
+                </div>
+
+                <div>
+                  <p className="text-slate-300 text-sm mb-1">Focus for This Week</p>
+                  <p className="text-white font-medium">• {weeklyInsights.improvementArea}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={dismissWeeklyPopup}
+                className="w-full px-4 py-3 bg-gradient-to-r from-premium-gold to-amber-600 hover:from-amber-600 hover:to-premium-gold text-white font-semibold rounded-lg transition-all duration-300 shadow-lg shadow-premium-gold/20"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Coach Button */}
+      <CoachButton
+        user={username}
+        role={isAdmin ? 'admin' : 'employee'}
+        context={subAccountId ? { subAccountId } : undefined}
+      />
+    </>
   );
 }

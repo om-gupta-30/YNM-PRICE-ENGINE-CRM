@@ -91,7 +91,7 @@ export default function CelebrationToast() {
           }
         }
       } catch (err) {
-        console.error('Error checking for celebrations:', err);
+        // Silently ignore errors - celebrations are non-critical
       }
     };
 

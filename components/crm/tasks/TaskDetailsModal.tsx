@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Task } from '@/lib/constants/types';
 
 interface TaskDetailsModalProps {
@@ -9,6 +10,17 @@ interface TaskDetailsModalProps {
 }
 
 export default function TaskDetailsModal({ task, isOpen, onClose }: TaskDetailsModalProps) {
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen || !task) return null;
 
   return (

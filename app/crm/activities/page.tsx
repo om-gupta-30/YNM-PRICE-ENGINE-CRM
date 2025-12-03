@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import CRMLayout from '@/components/layout/CRMLayout';
 import ActivityTimeline from '@/components/crm/ActivityTimeline';
 import { Activity } from '@/lib/constants/types';
 
@@ -131,7 +130,6 @@ export default function ActivitiesPage() {
   }, [username, isAdmin, isDataAnalyst, filterEmployee, filterDate]);
 
   return (
-    <CRMLayout>
       <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
         <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
           {/* Header */}
@@ -304,6 +302,5 @@ export default function ActivitiesPage() {
           </div>
         </div>
       </div>
-    </CRMLayout>
   );
 }

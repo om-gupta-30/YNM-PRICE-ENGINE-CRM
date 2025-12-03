@@ -3,9 +3,12 @@ import { triggerAIScoringForActivity } from '@/lib/ai/engagement';
 
 export interface ActivityLogParams {
   account_id?: number | null;
+  sub_account_id?: number | null;
   contact_id?: number | null;
+  lead_id?: number | null;
+  task_id?: number | null;
   employee_id: string;
-  activity_type: 'login' | 'logout' | 'away' | 'inactive' | 'note' | 'edit' | 'delete' | 'create' | 'quotation_saved';
+  activity_type: 'login' | 'logout' | 'away' | 'inactive' | 'note' | 'edit' | 'delete' | 'create' | 'quotation_saved' | 'return_from_inactive' | 'followup';
   description: string;
   metadata?: Record<string, any>;
 }
@@ -17,14 +20,29 @@ export async function logActivity(params: ActivityLogParams): Promise<void> {
   try {
     const supabase = createSupabaseServerClient();
     
-    await supabase.from('activities').insert({
+    // Build insert object - include sub_account_id in metadata for portability
+    const insertData: Record<string, any> = {
       account_id: params.account_id || null,
       contact_id: params.contact_id || null,
       employee_id: params.employee_id,
       activity_type: params.activity_type,
       description: params.description,
-      metadata: params.metadata || {},
-    });
+      metadata: {
+        ...(params.metadata || {}),
+        // Always include sub_account_id in metadata for backwards compatibility
+        ...(params.sub_account_id ? { sub_account_id: params.sub_account_id } : {}),
+        ...(params.lead_id ? { lead_id: params.lead_id } : {}),
+        ...(params.task_id ? { task_id: params.task_id } : {}),
+      },
+    };
+    
+    // Try to insert with sub_account_id column if it exists
+    const { error: insertError } = await supabase.from('activities').insert(insertData);
+    
+    // If there's an error about sub_account_id column, it's already in metadata so that's fine
+    if (insertError && !insertError.message?.includes('does not exist')) {
+      console.error('Failed to log activity:', insertError);
+    }
 
     // Trigger AI scoring after activity is logged
     // Extract sub_account_id from metadata if present, otherwise use account_id
@@ -38,9 +56,87 @@ export async function logActivity(params: ActivityLogParams): Promise<void> {
       account_id: params.account_id || null,
       sub_account_id: subAccountId,
     });
+
+    // Update employee streak (only for non-login/logout activities)
+    // Skip streak updates for login/logout to avoid inflating streaks
+    if (params.activity_type !== 'login' && params.activity_type !== 'logout') {
+      await updateEmployeeStreak(params.employee_id);
+    }
   } catch (error) {
     console.error('Failed to log activity:', error);
     // Don't throw - activity logging should not break the main operation
+  }
+}
+
+/**
+ * Updates employee streak based on activity date
+ * - If last_activity_date = today → do nothing
+ * - If last_activity_date = yesterday → streak_count + 1
+ * - Else → streak_count = 1
+ */
+async function updateEmployeeStreak(employee: string): Promise<void> {
+  try {
+    const supabase = createSupabaseServerClient();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Get yesterday
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    // Fetch current streak
+    const { data: currentStreak, error: fetchError } = await supabase
+      .from('employee_streaks')
+      .select('streak_count, last_activity_date')
+      .eq('employee', employee)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Error fetching streak:', fetchError);
+      return;
+    }
+
+    let newStreakCount = 1;
+    let shouldUpdate = true;
+
+    if (currentStreak) {
+      const lastDate = currentStreak.last_activity_date 
+        ? new Date(currentStreak.last_activity_date).toISOString().split('T')[0]
+        : null;
+
+      if (lastDate === todayStr) {
+        // Already logged today, do nothing
+        shouldUpdate = false;
+      } else if (lastDate === yesterdayStr) {
+        // Consecutive day - increment streak
+        newStreakCount = (currentStreak.streak_count || 0) + 1;
+      } else {
+        // Gap in streak - reset to 1
+        newStreakCount = 1;
+      }
+    }
+
+    if (shouldUpdate) {
+      // Upsert streak record
+      const { error: upsertError } = await supabase
+        .from('employee_streaks')
+        .upsert({
+          employee,
+          streak_count: newStreakCount,
+          last_activity_date: todayStr,
+        }, {
+          onConflict: 'employee',
+        });
+
+      if (upsertError) {
+        console.error('Error updating streak:', upsertError);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to update employee streak:', error);
+    // Don't throw - streak update should not break activity logging
   }
 }
 
@@ -100,10 +196,13 @@ export function detectChanges<T extends Record<string, any>>(
 export async function logEditActivity<T extends Record<string, any>>(
   params: {
     account_id?: number | null;
+    sub_account_id?: number | null;
     contact_id?: number | null;
+    lead_id?: number | null;
+    task_id?: number | null;
     employee_id: string;
     entityName: string;
-    entityType: 'account' | 'contact' | 'sub_account' | 'quotation';
+    entityType: 'account' | 'contact' | 'sub_account' | 'quotation' | 'lead' | 'task';
     oldData: T | null;
     newData: Partial<T>;
     fieldLabels: Record<keyof T, string>;
@@ -118,7 +217,10 @@ export async function logEditActivity<T extends Record<string, any>>(
   
   await logActivity({
     account_id: params.account_id,
+    sub_account_id: params.sub_account_id,
     contact_id: params.contact_id,
+    lead_id: params.lead_id,
+    task_id: params.task_id,
     employee_id: params.employee_id,
     activity_type: 'edit',
     description: `${params.entityName} updated: ${changes.join(', ')}`,
@@ -136,15 +238,21 @@ export async function logEditActivity<T extends Record<string, any>>(
  */
 export async function logDeleteActivity(params: {
   account_id?: number | null;
+  sub_account_id?: number | null;
   contact_id?: number | null;
+  lead_id?: number | null;
+  task_id?: number | null;
   employee_id: string;
   entityName: string;
-  entityType: 'account' | 'contact' | 'sub_account' | 'quotation';
+  entityType: 'account' | 'contact' | 'sub_account' | 'quotation' | 'lead' | 'task';
   deletedData?: Record<string, any>;
 }): Promise<void> {
   await logActivity({
     account_id: params.account_id,
+    sub_account_id: params.sub_account_id,
     contact_id: params.contact_id,
+    lead_id: params.lead_id,
+    task_id: params.task_id,
     employee_id: params.employee_id,
     activity_type: 'delete',
     description: `${params.entityName} deleted`,
@@ -160,15 +268,21 @@ export async function logDeleteActivity(params: {
  */
 export async function logCreateActivity(params: {
   account_id?: number | null;
+  sub_account_id?: number | null;
   contact_id?: number | null;
+  lead_id?: number | null;
+  task_id?: number | null;
   employee_id: string;
   entityName: string;
-  entityType: 'account' | 'contact' | 'sub_account' | 'quotation';
+  entityType: 'account' | 'contact' | 'sub_account' | 'quotation' | 'lead' | 'task';
   createdData?: Record<string, any>;
 }): Promise<void> {
   await logActivity({
     account_id: params.account_id,
+    sub_account_id: params.sub_account_id,
     contact_id: params.contact_id,
+    lead_id: params.lead_id,
+    task_id: params.task_id,
     employee_id: params.employee_id,
     activity_type: 'create',
     description: `${params.entityName} created`,
@@ -242,6 +356,30 @@ export async function logAwayActivity(params: {
     description,
     metadata: {
       reason: params.reason,
+      ...params.metadata,
+    },
+  });
+}
+
+/**
+ * Logs return from inactive activity with reason
+ */
+export async function logReturnFromInactiveActivity(params: {
+  employee_id: string;
+  inactiveDuration?: string;
+  reason: string;
+  metadata?: Record<string, any>;
+}): Promise<void> {
+  const description = `${params.employee_id} returned from inactive${params.inactiveDuration ? ` (was inactive for ${params.inactiveDuration})` : ''}: ${params.reason}`;
+    
+  await logActivity({
+    employee_id: params.employee_id,
+    activity_type: 'return_from_inactive',
+    description,
+    metadata: {
+      inactive_duration: params.inactiveDuration,
+      reason: params.reason,
+      return_time: new Date().toISOString(),
       ...params.metadata,
     },
   });

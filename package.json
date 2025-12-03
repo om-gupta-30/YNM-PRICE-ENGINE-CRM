@@ -4,6 +4,9 @@
   "description": "YNM Safety Price Engine & CRM System - Complete quotation management and CRM platform",
   "author": "YNM Safety Pvt Ltd",
   "private": true,
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,32 +16,32 @@
     "convert:signages": "tsx scripts/convert/convertSignagesExcelToJson.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.29.2",
-    "@supabase/supabase-js": "^2.81.1",
-    "@types/node": "^24.10.1",
-    "@types/react": "^19.2.5",
-    "@types/react-datepicker": "^6.2.0",
-    "@types/react-dom": "^19.2.3",
-    "autoprefixer": "^10.4.22",
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.47.0",
+    "autoprefixer": "^10.4.20",
     "bcryptjs": "^2.4.3",
-    "canvas-confetti": "^1.9.4",
-    "framer-motion": "^12.23.24",
-    "jspdf": "^3.0.3",
-    "next": "^16.0.3",
+    "canvas-confetti": "^1.9.3",
+    "framer-motion": "^11.18.0",
+    "jspdf": "^2.5.2",
+    "next": "^16.0.7",
     "next-themes": "^0.4.6",
-    "postcss": "^8.5.6",
-    "react": "^19.2.0",
+    "postcss": "^8.4.49",
+    "react": "^18.3.1",
     "react-confetti": "^6.4.0",
-    "react-datepicker": "^8.9.0",
-    "react-dom": "^19.2.0",
+    "react-datepicker": "^7.6.0",
+    "react-dom": "^18.3.1",
     "react-use": "^17.6.0",
-    "tailwindcss": "^3.4.0",
+    "recharts": "^2.15.4",
+    "tailwindcss": "^3.4.15",
     "typescript": "^5.9.3",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22.9.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "ts-node": "^10.9.2",
-    "tsx": "^4.20.6"
+    "tsx": "^4.19.2"
   }
 }

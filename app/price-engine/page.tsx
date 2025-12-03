@@ -125,8 +125,8 @@ export default function PriceEnginePage() {
               ];
             }
             
-            // Employees (Employee1, Employee2, Employee3): MBCB, Paints, Signages, Quotation History, Quotation Status Update
-            if (username === 'Employee1' || username === 'Employee2' || username === 'Employee3') {
+            // Sales Employees (Sales_*): MBCB, Paints, Signages, Quotation History, Quotation Status Update
+            if (username.startsWith('Sales_')) {
               return [
                 {
                   title: "Metal Beam Crash Barriers (MBCB)",

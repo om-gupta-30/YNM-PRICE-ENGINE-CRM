@@ -30,6 +30,8 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
   // Prevent body scroll when modal is open and auto-scroll to top
   useEffect(() => {
     if (isOpen) {
+      // Scroll window to top so modal is visible
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       document.body.style.overflow = 'hidden';
       loadEmployees();
       // Auto-scroll to top of modal when opened
@@ -52,14 +54,14 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
         if (data.success && data.employees) {
           setEmployees(data.employees);
         } else {
-          setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+          setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
         }
       } else {
-        setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+        setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
       }
     } catch (error) {
       console.error('Error loading employees:', error);
-      setEmployees(['Admin', 'Employee1', 'Employee2', 'Employee3']);
+      setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
     }
   };
 

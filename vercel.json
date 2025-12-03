@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/generate-notifications",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/ai/run-daily-coaching",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/ai/run-auto-monitor",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

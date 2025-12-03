@@ -20,18 +20,46 @@ export async function GET(
 
     const supabase = createSupabaseServerClient();
 
-    // Fetch activities where sub_account_id matches
-    const { data: activities, error } = await supabase
+    // Fetch activities where sub_account_id matches in metadata
+    // Note: sub_account_id column may not exist in all databases, so we query through metadata only
+    let activities: any[] = [];
+    let fetchError: any = null;
+    
+    // Try with sub_account_id column first
+    const { data: activitiesData, error: error1 } = await supabase
       .from('activities')
       .select('*')
       .or(`sub_account_id.eq.${subAccountId},metadata->>sub_account_id.eq.${subAccountId}`)
       .order('created_at', { ascending: false })
       .limit(100);
+    
+    if (error1) {
+      // If sub_account_id column doesn't exist, try with just metadata
+      if (error1.message?.includes('sub_account_id') && error1.message?.includes('does not exist')) {
+        const { data: activitiesFromMetadata, error: error2 } = await supabase
+          .from('activities')
+          .select('*')
+          .or(`metadata->>sub_account_id.eq.${subAccountId},metadata->>sub_account_id.eq."${subAccountId}"`)
+          .order('created_at', { ascending: false })
+          .limit(100);
+        
+        if (error2) {
+          console.error('Error fetching activities from metadata:', error2);
+          fetchError = error2;
+        } else {
+          activities = activitiesFromMetadata || [];
+        }
+      } else {
+        console.error('Error fetching activities:', error1);
+        fetchError = error1;
+      }
+    } else {
+      activities = activitiesData || [];
+    }
 
-    if (error) {
-      console.error('Error fetching activities:', error);
+    if (fetchError) {
       return NextResponse.json(
-        { error: `Failed to fetch activities: ${error.message}` },
+        { error: `Failed to fetch activities: ${fetchError.message}` },
         { status: 500 }
       );
     }

@@ -80,17 +80,17 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Final fallback: return default list
+    // Final fallback: return default list with new employee names
     return NextResponse.json({ 
       success: true, 
-      employees: ['Employee1', 'Employee2', 'Employee3']
+      employees: ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']
     });
   } catch (error: any) {
     console.error('Employees API error:', error);
     // Return fallback list on error
     return NextResponse.json({ 
       success: true, 
-      employees: ['Employee1', 'Employee2', 'Employee3']
+      employees: ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']
     });
   }
 }

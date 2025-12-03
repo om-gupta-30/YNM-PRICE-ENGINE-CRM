@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Customer } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
-import CRMLayout from '@/components/layout/CRMLayout';
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -81,7 +80,7 @@ export default function CustomersPage() {
   const uniqueCities = Array.from(new Set(customers.map(c => c.city).filter(Boolean)));
 
   return (
-    <CRMLayout>
+    <>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="glassmorphic-premium rounded-2xl p-6 mb-6">
@@ -277,7 +276,7 @@ export default function CustomersPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+    </>
   );
 }
 

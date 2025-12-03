@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface InactivityReasonModalProps {
   isOpen: boolean;
@@ -12,6 +12,17 @@ interface InactivityReasonModalProps {
 export default function InactivityReasonModal({ isOpen, onClose, onSubmit, username }: InactivityReasonModalProps) {
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

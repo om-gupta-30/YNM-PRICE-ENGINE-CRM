@@ -56,10 +56,10 @@ export async function GET(
       console.error('Error fetching leads:', leadsError);
     }
 
-    // Fetch tasks
+    // Fetch tasks - using correct column names: title and task_type (not task_name)
     const { data: tasks, error: tasksError } = await supabase
       .from('tasks')
-      .select('id, task_name, status, priority, due_date, created_at, sub_account_id, account_id')
+      .select('id, title, task_type, status, due_date, created_at, sub_account_id, account_id')
       .eq('sub_account_id', subAccountId)
       .order('created_at', { ascending: false });
 

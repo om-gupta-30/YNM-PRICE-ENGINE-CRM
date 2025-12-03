@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import CRMLayout from '@/components/layout/CRMLayout';
 import LeadForm, { LeadFormData } from '@/components/crm/LeadForm';
 import LeadDetailsModal from '@/components/crm/LeadDetailsModal';
 import LeadsDashboard from '@/components/crm/LeadsDashboard';
@@ -513,7 +512,7 @@ export default function LeadsPage() {
   };
 
   return (
-    <CRMLayout>
+    <>
       <div className="min-h-screen flex flex-col items-start py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative">
         <div className="w-full max-w-7xl mx-auto px-2 sm:px-4">
           {/* Header with Title and Add Button */}
@@ -1016,6 +1015,6 @@ export default function LeadsPage() {
           onClose={() => setToast(null)}
         />
       )}
-    </CRMLayout>
+    </>
   );
 }

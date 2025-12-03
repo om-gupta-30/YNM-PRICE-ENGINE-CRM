@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -7,6 +9,17 @@ interface Props {
 }
 
 export default function ActivityCreationModal({ isOpen, onClose, onCreated }: Props) {
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (

@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect } from 'react';
+
 interface ComingSoonModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -7,6 +9,17 @@ interface ComingSoonModalProps {
 }
 
 export default function ComingSoonModal({ isOpen, onClose, feature }: ComingSoonModalProps) {
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (

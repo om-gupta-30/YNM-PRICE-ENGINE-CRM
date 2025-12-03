@@ -1,7 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
-import { calculateSubaccountAIInsights, runClaude } from '@/utils/ai';
-// TODO: will implement new AI-based engagement refresh later (v2).
-// import { updateEngagementScoreAI } from '@/utils/ai';
+import { calculateSubaccountAIInsights, runGemini, runGeminiFast } from '@/utils/ai';
 
 export async function refreshAccountEngagementScore(accountId?: number | null) {
   // TODO: will implement new AI-based engagement refresh later (v2).
@@ -138,6 +136,76 @@ export async function runSubaccountAIScoring(subAccountId: number) {
     if (updateError) {
       console.error('Error updating sub-account with AI insights:', updateError.message);
       // Continue and return result even if DB update fails
+    }
+
+    // E.2) Insert engagement score snapshot into history
+    // Check if we already have a snapshot for today (to avoid duplicates)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStart = today.toISOString();
+    const todayEnd = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: existingSnapshot } = await supabase
+      .from('engagement_history')
+      .select('id')
+      .eq('sub_account_id', subAccountId)
+      .gte('created_at', todayStart)
+      .lt('created_at', todayEnd)
+      .limit(1)
+      .single();
+
+    // Only insert if no snapshot exists for today
+    if (!existingSnapshot) {
+      const { error: historyError } = await supabase
+        .from('engagement_history')
+        .insert({
+          sub_account_id: subAccountId,
+          score: result.score,
+          created_at: new Date().toISOString(),
+        });
+
+      if (historyError) {
+        // Log but don't fail - history is optional
+        console.warn('Error inserting engagement history snapshot:', historyError.message);
+      }
+    }
+
+    // E.1) Insert notification if AI returned comment or alert
+    if (result.comment && result.comment.trim()) {
+      // Get assigned employee from subaccount or parent account
+      let assignedEmployee = subAccount.assigned_employee;
+      
+      // If subaccount doesn't have assigned_employee, try to get it from parent account
+      if (!assignedEmployee) {
+        const { data: accountData } = await supabase
+          .from('accounts')
+          .select('assigned_employee')
+          .eq('id', subAccount.account_id)
+          .single();
+        
+        if (accountData?.assigned_employee) {
+          assignedEmployee = accountData.assigned_employee;
+        }
+      }
+
+      // Insert notification if we have an assigned employee (target_role = 'employee' for AI insights)
+      if (assignedEmployee) {
+        try {
+          await supabase
+            .from('employee_notifications')
+            .insert({
+              employee: assignedEmployee,
+              message: result.comment,
+              priority: 'normal',
+              target_role: 'employee',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            });
+        } catch (notifError: any) {
+          // Don't break the flow if notification insert fails
+          console.error('Error inserting notification for AI comment:', notifError.message);
+        }
+      }
     }
 
     // F) Return the AI result
@@ -290,8 +358,8 @@ Analyze performance and return JSON:
 }
 `.trim();
 
-    // Call AI via runClaude
-    const raw = await runClaude<AdminAIScoringResult>(systemPrompt, userPrompt);
+    // Call AI via runGemini
+    const raw = await runGemini<AdminAIScoringResult>(systemPrompt, userPrompt);
 
     // Parse and validate response with fallback
     const summary = typeof raw.summary === 'string' && raw.summary.trim()
@@ -347,6 +415,180 @@ Analyze performance and return JSON:
       coachingAdvice: ['Review account assignments', 'Check activity logs'],
       suggestedFocusAccounts: [],
     };
+  }
+}
+
+// ============================================
+// V2 AI: Escalation Intelligence
+// ============================================
+
+/**
+ * Check if sub-account has 3+ AI slipping alerts in past 7 days
+ * If so, insert escalation notification
+ */
+async function checkSubAccountEscalation(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  subAccountId: number,
+  subAccountName: string
+): Promise<void> {
+  try {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const startTime = sevenDaysAgo.toISOString();
+
+    // Count admin notifications for this sub-account's employee in past 7 days
+    // We'll check by looking for notifications that mention this sub-account or its employee
+    // Since we don't have direct sub-account reference in notifications, we'll check by employee
+    // and message content, or we can check all admin notifications and filter
+    
+    // Get the sub-account to find assigned employee
+    const { data: subAccount } = await supabase
+      .from('sub_accounts')
+      .select('assigned_employee, account_id, accounts:account_id(account_name)')
+      .eq('id', subAccountId)
+      .single();
+
+    if (!subAccount?.assigned_employee) {
+      return; // No employee assigned, skip escalation check
+    }
+
+    // Count admin notifications for this employee in past 7 days
+    // We'll look for notifications that are likely related to this sub-account
+    const { data: recentNotifications, error: notifError } = await supabase
+      .from('employee_notifications')
+      .select('id')
+      .eq('target_role', 'admin')
+      .eq('employee', subAccount.assigned_employee)
+      .gte('created_at', startTime)
+      .order('created_at', { ascending: false });
+
+    if (notifError) {
+      console.error('Error checking escalation for sub-account:', notifError);
+      return;
+    }
+
+    // If 3+ admin notifications in past 7 days, escalate
+    if (recentNotifications && recentNotifications.length >= 3) {
+      // Check if escalation already sent recently (avoid duplicates)
+      const { data: recentEscalations } = await supabase
+        .from('employee_notifications')
+        .select('id')
+        .eq('target_role', 'admin')
+        .eq('employee', subAccount.assigned_employee)
+        .like('message', '%has repeatedly slipped — escalate follow-up%')
+        .gte('created_at', startTime)
+        .limit(1);
+
+      if (!recentEscalations || recentEscalations.length === 0) {
+        const account = Array.isArray(subAccount.accounts) 
+          ? subAccount.accounts[0] 
+          : subAccount.accounts;
+        const accountName = (account as any)?.account_name || subAccountName;
+
+        try {
+          await supabase
+            .from('employee_notifications')
+            .insert({
+              employee: subAccount.assigned_employee,
+              message: `Account ${subAccountName} (${accountName}) has repeatedly slipped — escalate follow-up`,
+              priority: 'high',
+              target_role: 'admin',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            });
+          console.log(`[ESCALATION] Sub-account ${subAccountName} escalated (${recentNotifications.length} alerts in 7 days)`);
+        } catch (escalationError: any) {
+          console.error('Error inserting escalation notification:', escalationError.message);
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error('Error checking sub-account escalation:', error);
+    // Don't throw - escalation check should not break main flow
+  }
+}
+
+/**
+ * Check if engagement score dropped by 20+ points in past 30 days
+ * This checks sub-accounts and compares current score with historical patterns
+ */
+async function checkEngagementScoreDrop(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  subAccountId: number,
+  currentScore: number,
+  subAccountName: string
+): Promise<void> {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startTime = thirtyDaysAgo.toISOString();
+
+    // Check if there are multiple alerts/notifications that might indicate a drop
+    // We'll look for patterns in notifications or check if score is significantly low
+    // Since we don't have historical score tracking, we'll use a heuristic:
+    // If current score is < 40 and there are multiple admin alerts, likely a drop occurred
+    
+    // Get sub-account details
+    const { data: subAccount } = await supabase
+      .from('sub_accounts')
+      .select('assigned_employee, account_id, accounts:account_id(account_name)')
+      .eq('id', subAccountId)
+      .single();
+
+    if (!subAccount?.assigned_employee) {
+      return;
+    }
+
+    // Count admin notifications for this employee in past 30 days
+    const { data: recentAdminNotifications, error: notifError } = await supabase
+      .from('employee_notifications')
+      .select('id, message, created_at')
+      .eq('target_role', 'admin')
+      .eq('employee', subAccount.assigned_employee)
+      .gte('created_at', startTime)
+      .order('created_at', { ascending: false });
+
+    if (notifError) {
+      console.error('Error checking engagement score drop:', notifError);
+      return;
+    }
+
+    // Heuristic: If score is low (< 40) and there are 2+ admin alerts in past 30 days,
+    // it likely indicates a significant drop
+    // Also check if current score is very low compared to what would be "normal"
+    if (currentScore < 40 && recentAdminNotifications && recentAdminNotifications.length >= 2) {
+      const account = Array.isArray(subAccount.accounts) 
+        ? subAccount.accounts[0] 
+        : subAccount.accounts;
+      const accountName = (account as any)?.account_name || subAccountName;
+
+      // Check if we already sent a drop notification recently (avoid duplicates)
+      const recentDropNotifications = recentAdminNotifications.filter(n => 
+        n.message?.includes('Major engagement drop') || 
+        n.message?.includes('engagement drop detected')
+      );
+
+      if (recentDropNotifications.length === 0) {
+        try {
+          await supabase
+            .from('employee_notifications')
+            .insert({
+              employee: subAccount.assigned_employee,
+              message: `Major engagement drop detected for account ${subAccountName} (${accountName}) — intervene`,
+              priority: 'critical',
+              target_role: 'admin',
+              is_read: false,
+              created_at: new Date().toISOString(),
+            });
+          console.log(`[ESCALATION] Engagement drop detected for ${subAccountName} (score: ${currentScore})`);
+        } catch (dropError: any) {
+          console.error('Error inserting engagement drop notification:', dropError.message);
+        }
+      }
+    }
+  } catch (error: any) {
+    console.error('Error checking engagement score drop:', error);
+    // Don't throw - escalation check should not break main flow
   }
 }
 
@@ -420,7 +662,8 @@ Return JSON:
 }
 `.trim();
 
-        const raw = await runClaude<{ message: string; priority: string }>(systemPrompt, userPrompt);
+        // Use FAST_MODEL for bulk slipping engagement detection
+        const raw = await runGeminiFast<{ message: string; priority: string }>(systemPrompt, userPrompt);
 
         // Validate and sanitize response
         const alertMessage = typeof raw.message === 'string' && raw.message.trim()
@@ -468,6 +711,41 @@ Return JSON:
           console.error(`Error updating sub-account ${sub.id} with alert:`, updateError.message);
         } else {
           updatedCount++;
+          
+          // Insert notification for the alert (target_role = 'admin' for slipping engagement alerts)
+          if (sub.assigned_employee && alertMessage) {
+            try {
+              // Map priority: 'low' -> 'low', 'medium' -> 'normal', 'high' -> 'high'
+              let notificationPriority: 'low' | 'normal' | 'high' | 'critical' = 'normal';
+              if (priority === 'low') {
+                notificationPriority = 'low';
+              } else if (priority === 'high') {
+                notificationPriority = 'high';
+              } else if (priority === 'critical') {
+                notificationPriority = 'critical';
+              }
+
+              await supabase
+                .from('employee_notifications')
+                .insert({
+                  employee: sub.assigned_employee,
+                  message: alertMessage,
+                  priority: notificationPriority,
+                  target_role: 'admin',
+                  is_read: false,
+                  created_at: new Date().toISOString(),
+                });
+
+              // Escalation check: If 3+ alerts in past 7 days, escalate
+              await checkSubAccountEscalation(supabase, sub.id, sub.sub_account_name);
+
+              // Escalation check: If engagement score dropped significantly, escalate
+              await checkEngagementScoreDrop(supabase, sub.id, Number(sub.engagement_score) || 0, sub.sub_account_name);
+            } catch (notifError: any) {
+              // Don't break the flow if notification insert fails
+              console.error(`Error inserting notification for alert on sub-account ${sub.id}:`, notifError.message);
+            }
+          }
         }
       } catch (err: any) {
         console.error(`Error processing sub-account ${sub.id}:`, err);

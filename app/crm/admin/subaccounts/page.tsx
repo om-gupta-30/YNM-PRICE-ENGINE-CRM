@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
-import CRMLayout from '@/components/layout/CRMLayout';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
 import StateCitySelect from '@/components/forms/StateCitySelect';
 
@@ -160,7 +159,6 @@ export default function AdminSubAccountsPage() {
   }
 
   return (
-    <CRMLayout>
       <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
@@ -392,6 +390,5 @@ export default function AdminSubAccountsPage() {
           />
         )}
       </div>
-    </CRMLayout>
   );
 }

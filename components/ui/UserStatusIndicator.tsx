@@ -40,7 +40,7 @@ export default function UserStatusIndicator({ username, isAdmin = false }: UserS
           }
         }
       } catch (error) {
-        console.error('Failed to fetch user status:', error);
+        // Silently ignore errors - status indicator is non-critical
       }
     };
 

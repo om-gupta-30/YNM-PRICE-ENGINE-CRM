@@ -41,9 +41,9 @@ export default function QuotationStatusUpdatePage() {
       const storedDepartment = localStorage.getItem('department') || 'Sales';
       const storedIsAdmin = localStorage.getItem('isAdmin') === 'true';
       
-      // Redirect if not an Employee (only allow Employee1, Employee2, Employee3)
+      // Redirect if not a Sales Employee (only allow Sales_* users)
       // Do NOT allow Admin
-      const isEmployee = (storedUsername === 'Employee1' || storedUsername === 'Employee2' || storedUsername === 'Employee3') && !storedIsAdmin;
+      const isEmployee = storedUsername.startsWith('Sales_') && !storedIsAdmin;
       
       if (!isEmployee || storedDepartment !== 'Sales') {
         router.replace('/');

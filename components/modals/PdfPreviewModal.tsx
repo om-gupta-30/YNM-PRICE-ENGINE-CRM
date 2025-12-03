@@ -30,6 +30,17 @@ export default function PdfPreviewModal({
     }
   }, [pdfBlob, isOpen]);
 
+  // Auto-scroll window to top when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
   if (!isOpen || !pdfUrl) {
     return null;
   }

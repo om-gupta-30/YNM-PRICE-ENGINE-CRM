@@ -32,7 +32,7 @@ export default function CustomerSelect({
         // Determine sales employee
         // Admin sees all customers, employees see their own
         let salesEmployee = 'Admin';
-        if (username === 'Employee1' || username === 'Employee2' || username === 'Employee3') {
+        if (username.startsWith('Sales_')) {
           salesEmployee = username;
         } else if (username === 'Admin') {
           salesEmployee = 'Admin';
