@@ -11,10 +11,11 @@ interface BackButtonProps {
 const BackButton = memo(function BackButton({ href, label }: BackButtonProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const safePathname = pathname ?? "/";
 
   const handleBack = () => {
     // Don't show on homepage or login
-    if (pathname === '/' || pathname === '/login') {
+    if (safePathname === '/' || safePathname === '/login') {
       return null;
     }
 
@@ -25,13 +26,13 @@ const BackButton = memo(function BackButton({ href, label }: BackButtonProps) {
     }
 
     // Special handling for section pages
-    if (pathname === '/mbcb') {
+    if (safePathname === '/mbcb') {
       router.push('/');
       return;
     }
     
     // Special handling for signages pages
-    if (pathname === '/signages' || pathname === '/signages/reflective') {
+    if (safePathname === '/signages' || safePathname === '/signages/reflective') {
       router.push('/');
       return;
     }
@@ -41,22 +42,22 @@ const BackButton = memo(function BackButton({ href, label }: BackButtonProps) {
       router.back();
     } else {
       // Fallback: go to parent route or home
-      const parentPath = pathname.split('/').slice(0, -1).join('/') || '/';
+      const parentPath = safePathname.split('/').slice(0, -1).join('/') || '/';
       router.push(parentPath || '/');
     }
   };
 
   // Don't render on homepage or login
-  if (pathname === '/' || pathname === '/login') {
+  if (safePathname === '/' || safePathname === '/login') {
     return null;
   }
 
   // Determine label based on pathname if not provided
   const getLabel = () => {
     if (label) return label;
-    if (pathname === '/mbcb') return '← Back to Home';
-    if (pathname?.startsWith('/mbcb/')) return '← Back';
-    if (pathname === '/paint' || pathname === '/signages' || pathname === '/signages/reflective') return '← Back to Home';
+    if (safePathname === '/mbcb') return '← Back to Home';
+    if (safePathname.startsWith('/mbcb/')) return '← Back';
+    if (safePathname === '/paint' || safePathname === '/signages' || safePathname === '/signages/reflective') return '← Back to Home';
     return '← Back';
   };
 

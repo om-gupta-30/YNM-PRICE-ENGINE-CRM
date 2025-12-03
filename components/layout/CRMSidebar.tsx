@@ -11,6 +11,7 @@ interface CRMSidebarProps {
 
 export default function CRMSidebar({ isExpanded, onToggle }: CRMSidebarProps) {
   const pathname = usePathname();
+  const safePathname = pathname ?? "/";
   const [username, setUsername] = useState('');
 
   useEffect(() => {
@@ -21,9 +22,9 @@ export default function CRMSidebar({ isExpanded, onToggle }: CRMSidebarProps) {
 
   const isActive = (path: string) => {
     if (path === '/crm') {
-      return pathname === '/crm' || pathname === '/crm/';
+      return safePathname === '/crm' || safePathname === '/crm/';
     }
-    return pathname === path || pathname?.startsWith(path + '/');
+    return safePathname === path || safePathname.startsWith(path + '/');
   };
 
   const menuItems = [

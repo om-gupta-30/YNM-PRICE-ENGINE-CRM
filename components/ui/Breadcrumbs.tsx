@@ -11,19 +11,20 @@ interface BreadcrumbItem {
 
 function Breadcrumbs() {
   const pathname = usePathname();
+  const safePathname = pathname ?? "/";
   const [dynamicLabels, setDynamicLabels] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const shouldHideBreadcrumbs =
-    pathname === '/login' || pathname === '/change-password';
+    safePathname === '/login' || safePathname === '/change-password';
 
   const generateBreadcrumbs = (): BreadcrumbItem[] => {
-    const paths = pathname.split('/').filter(Boolean);
+    const paths = safePathname.split('/').filter(Boolean);
     const breadcrumbs: BreadcrumbItem[] = [
       { label: 'Home', href: '/home' },
     ];
 
     // Handle special routes
-    if (pathname === '/home') {
+    if (safePathname === '/home') {
       return breadcrumbs;
     }
 
@@ -32,7 +33,7 @@ function Breadcrumbs() {
     const isPriceEngineRoute = paths.some(p => priceEngineRoutes.includes(p.toLowerCase()));
 
     // Check if we're in CRM section
-    const isCrmRoute = pathname.startsWith('/crm');
+    const isCrmRoute = safePathname.startsWith('/crm');
 
     // Add Price Engine or CRM link based on route
     if (isPriceEngineRoute) {
@@ -113,11 +114,11 @@ function Breadcrumbs() {
 
     const fetchDynamicLabels = async () => {
       setIsLoading(true);
-      const paths = pathname.split('/').filter(Boolean);
+      const paths = safePathname.split('/').filter(Boolean);
       const newLabels: Record<string, string> = {};
       
       // Check for sub-account ID (e.g., /crm/subaccounts/40/contacts)
-      if (pathname.startsWith('/crm/subaccounts/') && paths.length >= 3) {
+      if (safePathname.startsWith('/crm/subaccounts/') && paths.length >= 3) {
         const subAccountId = paths[2];
         if (/^\d+$/.test(subAccountId)) {
           try {
@@ -146,7 +147,7 @@ function Breadcrumbs() {
       }
       
       // Check if we're in a CRM route with account IDs (including detail pages)
-      if (pathname.startsWith('/crm/accounts/') && paths.length >= 3) {
+      if (safePathname.startsWith('/crm/accounts/') && paths.length >= 3) {
         const accountId = paths[2];
         if (/^\d+$/.test(accountId)) {
           try {
@@ -162,7 +163,7 @@ function Breadcrumbs() {
       }
       
       // Check for account detail page with sub-accounts (e.g., /crm/accounts/1/sub-accounts)
-      if (pathname.includes('/sub-accounts') && paths.length >= 4 && paths[0] === 'crm' && paths[1] === 'accounts') {
+      if (safePathname.includes('/sub-accounts') && paths.length >= 4 && paths[0] === 'crm' && paths[1] === 'accounts') {
         const accountId = paths[2];
         if (/^\d+$/.test(accountId)) {
           try {
@@ -183,12 +184,12 @@ function Breadcrumbs() {
       setIsLoading(false);
     };
     
-    if (pathname.startsWith('/crm')) {
+    if (safePathname.startsWith('/crm')) {
       fetchDynamicLabels();
     } else {
       setDynamicLabels({});
     }
-  }, [pathname, shouldHideBreadcrumbs]);
+  }, [safePathname, shouldHideBreadcrumbs]);
 
   if (shouldHideBreadcrumbs) {
     return null;

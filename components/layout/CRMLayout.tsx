@@ -11,6 +11,7 @@ interface CRMLayoutProps {
 
 export default function CRMLayout({ children }: CRMLayoutProps) {
   const pathname = usePathname();
+  const safePathname = pathname ?? "/";
   const [isAdmin, setIsAdmin] = useState(false);
   const [isDataAnalyst, setIsDataAnalyst] = useState(false);
 
@@ -24,9 +25,9 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
 
   const isActive = (path: string) => {
     if (path === '/crm') {
-      return pathname === '/crm' || pathname === '/crm/';
+      return safePathname === '/crm' || safePathname === '/crm/';
     }
-    return pathname === path || pathname?.startsWith(path + '/');
+    return safePathname === path || safePathname.startsWith(path + '/');
   };
 
   // Data analysts cannot see Leads, All Sub-Accounts, or All Contacts
