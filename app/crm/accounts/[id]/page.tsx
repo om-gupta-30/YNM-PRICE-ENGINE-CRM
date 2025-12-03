@@ -18,7 +18,7 @@ type TabType = 'overview' | 'contacts' | 'leads' | 'quotations';
 export default function AccountDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const accountId = parseInt(params.id as string);
+  const accountId = params?.id ? parseInt(params.id as string) : 0;
 
   const [account, setAccount] = useState<Account | null>(null);
   const [quotations, setQuotations] = useState<Quote[]>([]);

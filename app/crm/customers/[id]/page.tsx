@@ -9,7 +9,7 @@ import CRMLayout from '@/components/layout/CRMLayout';
 export default function CustomerDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const customerId = parseInt(params.id as string);
+  const customerId = params?.id ? parseInt(params.id as string) : 0;
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [quotations, setQuotations] = useState<Quote[]>([]);

@@ -39,7 +39,7 @@ interface SubAccount {
 export default function SubAccountDetailsPage() {
   const params = useParams();
   const router = useRouter();
-  const subAccountId = parseInt(params.id as string);
+  const subAccountId = params?.id ? parseInt(params.id as string) : 0;
 
   const [subAccount, setSubAccount] = useState<SubAccount | null>(null);
   const [quotations, setQuotations] = useState<Quote[]>([]);
