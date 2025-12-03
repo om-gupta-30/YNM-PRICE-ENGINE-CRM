@@ -10,6 +10,7 @@ interface AuthGuardProps {
 export default function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const safePathname = pathname ?? "/";
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -28,24 +29,24 @@ export default function AuthGuard({ children }: AuthGuardProps) {
     }
 
     // Prevent re-running for the same pathname
-    if (lastPathname.current === pathname && hasRedirected.current) {
+    if (lastPathname.current === safePathname && hasRedirected.current) {
       return;
     }
     
     // Reset redirect flag when pathname actually changes
-    if (lastPathname.current !== pathname) {
+    if (lastPathname.current !== safePathname) {
       hasRedirected.current = false;
     }
-    lastPathname.current = pathname ?? "/";
+    lastPathname.current = safePathname;
 
       setIsChecking(true);
       const auth = localStorage.getItem('auth');
       const isAuth = auth === 'true';
       
       // Public routes - allow access
-      if (pathname === '/login' || pathname === '/change-password') {
+      if (safePathname === '/login' || safePathname === '/change-password') {
         // If already authenticated on login page, redirect to home
-      if (pathname === '/login' && isAuth && !hasRedirected.current) {
+      if (safePathname === '/login' && isAuth && !hasRedirected.current) {
         hasRedirected.current = true;
         router.replace('/home');
           setIsAuthenticated(true);
@@ -59,7 +60,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
     }
 
     // If user visits root path, redirect based on auth status
-    if (pathname === '/') {
+    if (safePathname === '/') {
       if (!hasRedirected.current) {
         hasRedirected.current = true;
         if (isAuth) {
@@ -89,7 +90,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
       // Block data analysts from accessing price engine routes
       const isDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
       const priceEngineRoutes = ['/mbcb', '/paint', '/signages', '/home'];
-      const isPriceEngineRoute = priceEngineRoutes.some(route => pathname.startsWith(route));
+      const isPriceEngineRoute = priceEngineRoutes.some(route => safePathname.startsWith(route));
       
       if (isDataAnalyst && isPriceEngineRoute) {
         // Redirect data analysts to CRM if they try to access price engine
@@ -113,7 +114,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
   }
 
   // Don't render protected content if not authenticated
-  if (pathname !== '/login' && pathname !== '/change-password' && !isAuthenticated) {
+  if (safePathname !== '/login' && safePathname !== '/change-password' && !isAuthenticated) {
     return null;
   }
 
