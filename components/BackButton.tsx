@@ -35,8 +35,9 @@ const BackButton = memo(function BackButton({ href, label }: BackButtonProps) {
       router.back();
     } else {
       // Fallback: go to parent route or home
-      const parentPath = pathname.split('/').slice(0, -1).join('/') || '/';
-      router.push(parentPath || '/');
+      const current = pathname ?? "/";
+      const parentPath = current.split("/").slice(0, -1).join("/") || "/";
+      router.push(parentPath);
     }
   };
 
