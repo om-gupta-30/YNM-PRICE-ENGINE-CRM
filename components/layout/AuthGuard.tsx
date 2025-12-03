@@ -36,7 +36,7 @@ export default function AuthGuard({ children }: AuthGuardProps) {
     if (lastPathname.current !== pathname) {
       hasRedirected.current = false;
     }
-    lastPathname.current = pathname;
+    lastPathname.current = pathname ?? "/";
 
       setIsChecking(true);
       const auth = localStorage.getItem('auth');
