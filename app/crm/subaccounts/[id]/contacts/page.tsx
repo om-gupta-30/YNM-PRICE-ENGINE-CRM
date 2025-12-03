@@ -95,6 +95,7 @@ export default function SubAccountContactsPage() {
 
   // Check for contact ID in query params to highlight
   useEffect(() => {
+    if (!searchParams) return;
     const contactIdParam = searchParams.get('contact');
     if (contactIdParam) {
       const contactId = parseInt(contactIdParam);

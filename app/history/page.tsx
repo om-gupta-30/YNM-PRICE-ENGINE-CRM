@@ -133,6 +133,7 @@ export default function HistoryPage() {
 
   // Check for quote ID in query params to highlight
   useEffect(() => {
+    if (!searchParams) return;
     const quoteIdParam = searchParams.get('quote');
     if (quoteIdParam && currentUsername) {
       const quoteId = parseInt(quoteIdParam);
