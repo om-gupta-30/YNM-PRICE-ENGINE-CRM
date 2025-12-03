@@ -71,6 +71,7 @@ export default function AccountsPage() {
   const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
   const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
   const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Account details modal state
   const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
@@ -303,6 +304,14 @@ export default function AccountsPage() {
   const filteredAndSortedAccounts = useMemo(() => {
     let filtered = [...accounts];
     
+    // Apply search query filter (by company name)
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(account => 
+        account.accountName.toLowerCase().includes(query)
+      );
+    }
+    
     // Apply industry filter
     if (filterIndustryId) {
       filtered = filtered.filter(account => {
@@ -337,7 +346,7 @@ export default function AccountsPage() {
     }
     
     return filtered;
-  }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId]);
+  }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery]);
   
   // Paginated accounts for performance (only render visible items)
   const paginatedAccounts = useMemo(() => {
@@ -390,7 +399,7 @@ export default function AccountsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId]);
+  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery]);
 
   // ========== RENDER ==========
   return (
@@ -424,6 +433,20 @@ export default function AccountsPage() {
         <div className="gold-divider w-full"></div>
       </div>
 
+
+        {/* Search Bar */}
+        <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+          <h3 className="text-sm font-semibold text-white mb-3">Search</h3>
+          <div className="w-full">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by company name..."
+              className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+            />
+          </div>
+        </div>
 
         {/* Filters */}
         <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
@@ -468,12 +491,13 @@ export default function AccountsPage() {
             </div>
 
             {/* Clear Filters */}
-            {(filterIndustryId || filterSubIndustryId) && (
+            {(filterIndustryId || filterSubIndustryId || searchQuery.trim()) && (
               <div className="flex items-end">
                 <button
                   onClick={() => {
                     setFilterIndustryId(null);
                     setFilterSubIndustryId(null);
+                    setSearchQuery('');
                   }}
                   className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
                 >
@@ -529,8 +553,10 @@ export default function AccountsPage() {
               >
                 <colgroup>
                   <col style={{ width: '80px' }} />
-                  <col style={{ width: '300px' }} />
-                  <col style={{ width: '200px' }} />
+                  <col style={{ width: '250px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '180px' }} />
+                  <col style={{ width: '120px' }} />
                   <col style={{ width: '200px' }} />
                   <col style={{ width: '280px' }} />
                 </colgroup>
@@ -543,6 +569,9 @@ export default function AccountsPage() {
                         {sortField === 'accountName' && <span className="text-premium-gold ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
                       </button>
                     </th>
+                    <th className="crm-th">Industry</th>
+                    <th className="crm-th">Sub Industry</th>
+                    <th className="crm-th">Projects</th>
                     <th className="crm-th score-col">
                       <button onClick={() => handleSort('engagementScore')} className="hover:text-premium-gold transition-colors">
                         <span>Engagement Score</span>
@@ -556,10 +585,19 @@ export default function AccountsPage() {
                 <tbody>
                   {paginatedAccounts.map((account, idx) => {
                     const globalIndex = (currentPage - 1) * itemsPerPage + idx;
+                    // Get first industry and sub-industry for display
+                    const firstIndustry = account.industries && account.industries.length > 0 ? account.industries[0] : null;
+                    const industryName = firstIndustry?.industry_name || 'N/A';
+                    const subIndustryName = firstIndustry?.sub_industry_name || 'N/A';
+                    // Calculate total number of projects
+                    const totalProjects = account.industryProjects ? Object.values(account.industryProjects).reduce((sum: number, count: any) => sum + (Number(count) || 0), 0) : 0;
                     return (
                     <tr key={account.id} className="crm-tr">
                       <td className="crm-td sr-col">{globalIndex + 1}</td>
                       <td className="crm-td acc-col" title={account.accountName}>{account.accountName}</td>
+                      <td className="crm-td" title={industryName}>{industryName}</td>
+                      <td className="crm-td" title={subIndustryName}>{subIndustryName}</td>
+                      <td className="crm-td">{totalProjects}</td>
                       <td className="crm-td score-col">
                         <EngagementScoreBadge score={account.engagementScore || 0} />
                       </td>

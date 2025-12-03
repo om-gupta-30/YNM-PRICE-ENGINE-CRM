@@ -45,6 +45,18 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
         return '🔐';
       case 'logout':
         return '🚪';
+      case 'away':
+        return '🟡';
+      case 'inactive':
+        return '⏸️';
+      case 'edit':
+        return '✏️';
+      case 'create':
+        return '➕';
+      case 'delete':
+        return '🗑️';
+      case 'quotation_saved':
+        return '💾';
       default:
         return '📌';
     }
@@ -86,9 +98,21 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
       case 'meeting':
         return 'bg-pink-500/20 text-pink-300';
       case 'login':
-        return 'bg-cyan-500/20 text-cyan-300';
+        return 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
       case 'logout':
-        return 'bg-gray-500/20 text-gray-300';
+        return 'bg-gray-500/20 text-gray-300 border-gray-500/30';
+      case 'away':
+        return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+      case 'inactive':
+        return 'bg-orange-500/20 text-orange-300 border-orange-500/30';
+      case 'edit':
+        return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+      case 'create':
+        return 'bg-green-500/20 text-green-300 border-green-500/30';
+      case 'delete':
+        return 'bg-red-500/20 text-red-300 border-red-500/30';
+      case 'quotation_saved':
+        return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
       default:
         return 'bg-slate-500/20 text-slate-300';
     }
@@ -147,6 +171,11 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                       <span className="font-semibold">Inactivity Reason:</span> {activity.metadata.reason}
                     </span>
                   )}
+                  {activity.metadata.wasInactive && activity.metadata.inactivityReason && (
+                    <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
+                      <span className="font-semibold">Returned:</span> {activity.metadata.inactivityReason}
+                    </span>
+                  )}
                   {activity.metadata.call_status && (
                     <span className="px-2 py-1 bg-slate-700/50 rounded">
                       Call Status: {activity.metadata.call_status}
@@ -157,6 +186,38 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                       {activity.metadata.reason}
                     </span>
                   )}
+                  {activity.metadata.changes && Array.isArray(activity.metadata.changes) && activity.metadata.changes.length > 0 && (
+                    <div className="w-full mt-2">
+                      <span className="text-xs text-slate-400 font-semibold">Changes:</span>
+                      <ul className="list-disc ml-4 mt-1 text-xs text-slate-300">
+                        {activity.metadata.changes.map((change: string, idx: number) => (
+                          <li key={idx}>{change}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {activity.metadata.entity_type && (
+                    <span className="px-2 py-1 bg-slate-700/50 rounded text-xs">
+                      {activity.metadata.entity_type}
+                    </span>
+                  )}
+                </div>
+              )}
+              {activity.logout_reason && (
+                <div className="mt-2 text-xs">
+                  <span className="px-2 py-1 bg-red-500/20 text-red-300 rounded border border-red-500/30">
+                    <span className="font-semibold">Logout Reason:</span> {activity.logout_reason.reason_text || activity.logout_reason.reason_tag}
+                  </span>
+                </div>
+              )}
+              {activity.login_time && (
+                <div className="mt-2 text-xs text-slate-400">
+                  Login: {activity.login_time}
+                </div>
+              )}
+              {activity.logout_time && (
+                <div className="mt-2 text-xs text-slate-400">
+                  Logout: {activity.logout_time}
                 </div>
               )}
             </div>

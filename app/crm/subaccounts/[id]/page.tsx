@@ -31,6 +31,7 @@ interface SubAccount {
   officeType: string | null;
   engagementScore: number;
   isActive: boolean;
+  aiInsights: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,6 +59,11 @@ export default function SubAccountDetailsPage() {
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState('');
+
+  // AI Insights state
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [aiData, setAiData] = useState<{ score: number; tips: string[]; comment: string } | null>(null);
+  const [errorAI, setErrorAI] = useState<string | null>(null);
 
   // Load user info on mount
   useEffect(() => {
@@ -137,6 +143,22 @@ export default function SubAccountDetailsPage() {
 
   const formatDate = formatDateIST;
   const formatTimestamp = formatTimestampIST;
+
+  // Fetch AI insights
+  async function fetchAIInsights() {
+    setLoadingAI(true);
+    setErrorAI(null);
+    try {
+      const res = await fetch(`/api/ai/subaccount-insights?subAccountId=${subAccountId}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'AI failed');
+      setAiData(data.data);
+    } catch (err: any) {
+      setErrorAI(err.message || 'Failed to load AI insights');
+    } finally {
+      setLoadingAI(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -246,6 +268,81 @@ export default function SubAccountDetailsPage() {
                           <span className={`w-2 h-2 rounded-full ${subAccount.isActive ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
                           {subAccount.isActive ? 'Active' : 'Inactive'}
                         </span>
+                      </div>
+
+                      {/* AI Alert Display */}
+                      {(() => {
+                        let aiAlert = null;
+                        let priority = 'medium';
+                        try {
+                          const parsed = JSON.parse(subAccount.aiInsights ?? '{}');
+                          aiAlert = parsed.alert;
+                          priority = parsed.alert_priority || 'medium';
+                        } catch {
+                          // Silently handle parse errors
+                        }
+
+                        if (aiAlert) {
+                          const priorityColors = {
+                            high: 'bg-red-500/20 border-red-500/50 text-red-200',
+                            medium: 'bg-amber-500/20 border-amber-500/50 text-amber-200',
+                            low: 'bg-yellow-500/20 border-yellow-500/50 text-yellow-200',
+                          };
+                          const colorClass = priorityColors[priority as keyof typeof priorityColors] || priorityColors.medium;
+
+                          return (
+                            <div className={`mt-4 p-4 rounded-lg border ${colorClass}`}>
+                              <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-sm mb-1">AI Engagement Alert</p>
+                                  <p className="text-sm leading-relaxed">{aiAlert}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {/* AI Insights Section */}
+                      <div className="mt-4">
+                        <button
+                          onClick={fetchAIInsights}
+                          disabled={loadingAI}
+                          className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
+                        >
+                          {loadingAI ? 'Loading...' : 'Get AI Insights'}
+                        </button>
+
+                        {loadingAI && (
+                          <div className="mt-3 text-slate-400 text-sm">Loading AI insights...</div>
+                        )}
+
+                        {errorAI && (
+                          <div className="mt-3 text-red-500 text-sm">{errorAI}</div>
+                        )}
+
+                        {aiData && (
+                          <div className="mt-3 p-3 border border-slate-700/50 rounded-lg bg-slate-800/50">
+                            <p className="font-medium text-white mb-2">
+                              AI Comment:
+                            </p>
+                            <p className="text-slate-300 mb-4 text-sm">{aiData.comment}</p>
+                            <p className="font-medium text-white mb-2">
+                              Tips to improve:
+                            </p>
+                            <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                              {aiData.tips.map((t: string, i: number) => (
+                                <li key={i}>{t}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

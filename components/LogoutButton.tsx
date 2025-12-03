@@ -9,11 +9,36 @@ const LogoutButton = memo(function LogoutButton() {
   const pathname = usePathname();
   const { setUsername } = useUser();
 
-  const handleLogout = (e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleLogout = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
     
     try {
+      // Get user info before clearing
+      const username = typeof window !== 'undefined' ? localStorage.getItem('username') : null;
+      const isAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
+      const isDataAnalyst = typeof window !== 'undefined' ? localStorage.getItem('isDataAnalyst') === 'true' : false;
+      
+      // Call logout API to log activity (only for employees and data analysts, not full admins)
+      const isFullAdmin = isAdmin && !isDataAnalyst;
+      if (!isFullAdmin && username) {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username,
+              reason: 'Manual logout',
+              isAdmin,
+              isDataAnalyst,
+            }),
+          });
+        } catch (apiError) {
+          console.error('Error calling logout API:', apiError);
+          // Continue with logout even if API call fails
+        }
+      }
+      
       // Clear all localStorage items
       if (typeof window !== 'undefined') {
         localStorage.removeItem('auth');
@@ -21,6 +46,7 @@ const LogoutButton = memo(function LogoutButton() {
         localStorage.removeItem('userId');
         localStorage.removeItem('department');
         localStorage.removeItem('isAdmin');
+        localStorage.removeItem('isDataAnalyst');
       }
       
       // Clear user context

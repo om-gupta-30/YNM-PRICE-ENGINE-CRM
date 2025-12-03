@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logActivity } from '@/lib/utils/activityLogger';
 
 // GET - Fetch single lead
 export async function GET(
@@ -78,6 +79,13 @@ export async function PUT(
       );
     }
 
+    // Get old lead data for comparison before updating
+    const { data: oldLead } = await supabase
+      .from('leads')
+      .select('*')
+      .eq('id', id)
+      .single();
+
     const updateData: any = {
       updated_at: getCurrentISTTime(),
     };
@@ -106,6 +114,36 @@ export async function PUT(
     if (error) {
       console.error('Error updating lead:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Log activity for lead update
+    if (data && oldLead) {
+      try {
+        const changes: string[] = [];
+        Object.keys(updateData).forEach(key => {
+          if (key !== 'updated_at' && oldLead[key] !== data[key]) {
+            changes.push(`${key}: "${oldLead[key] || 'None'}" → "${data[key] || 'None'}"`);
+          }
+        });
+
+        if (changes.length > 0) {
+          await logActivity({
+            account_id: data.account_id,
+            employee_id: body.updated_by || oldLead.created_by || 'System',
+            activity_type: 'edit',
+            description: `Lead "${data.lead_name}" updated: ${changes.join(', ')}`,
+            metadata: {
+              entity_type: 'lead',
+              lead_id: data.id,
+              changes,
+              old_data: oldLead,
+              new_data: data,
+            },
+          });
+        }
+      } catch (activityError) {
+        console.warn('Failed to log lead update activity:', activityError);
+      }
     }
 
     return NextResponse.json({ data, success: true });

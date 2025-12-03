@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logActivity } from '@/lib/utils/activityLogger';
 
 // POST - Create a new task
 export async function POST(request: NextRequest) {
@@ -104,17 +105,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: taskError.message }, { status: 500 });
     }
 
-    if (numericAccountId) {
+    // Log activity for task creation
+    if (created_by) {
       try {
-        await supabase.from('activities').insert({
+        await logActivity({
           account_id: numericAccountId,
           employee_id: created_by.trim(),
-          activity_type: 'task',
+          activity_type: 'create',
           description: `Task created: ${title.trim()}`,
           metadata: {
+            entity_type: 'task',
             task_id: task.id,
             task_type: task.task_type,
             due_date,
+            status: task.status,
           },
         });
       } catch (activityError) {

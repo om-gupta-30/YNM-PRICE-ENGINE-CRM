@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
+import { logActivity } from '@/lib/utils/activityLogger';
 
 // GET - Fetch a single task by ID
 export async function GET(
@@ -65,6 +66,13 @@ export async function DELETE(
 
     const supabase = createSupabaseServerClient();
 
+    // Get task data before deletion for activity logging
+    const { data: taskData } = await supabase
+      .from('tasks')
+      .select('account_id, title, created_by')
+      .eq('id', taskId)
+      .single();
+
     const { error } = await supabase
       .from('tasks')
       .delete()
@@ -73,6 +81,25 @@ export async function DELETE(
     if (error) {
       console.error('Error deleting task:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Log activity for task deletion
+    if (taskData) {
+      try {
+        await logActivity({
+          account_id: taskData.account_id,
+          employee_id: taskData.created_by || 'System',
+          activity_type: 'delete',
+          description: `Task deleted: ${taskData.title}`,
+          metadata: {
+            entity_type: 'task',
+            task_id: taskId,
+            deleted_data: taskData,
+          },
+        });
+      } catch (activityError) {
+        console.warn('Failed to log task deletion activity:', activityError);
+      }
     }
 
     return NextResponse.json({ success: true });

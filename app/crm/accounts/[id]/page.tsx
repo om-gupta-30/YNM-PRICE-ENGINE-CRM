@@ -42,6 +42,17 @@ export default function AccountDetailsPage() {
   const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
+  // Admin AI Insights state
+  const [adminAIData, setAdminAIData] = useState<{
+    summary: string;
+    strengths: string[];
+    weaknesses: string[];
+    coachingAdvice: string[];
+    suggestedFocusAccounts: Array<{ accountName: string; reason: string }>;
+  } | null>(null);
+  const [adminAILoading, setAdminAILoading] = useState(false);
+  const [adminAIError, setAdminAIError] = useState<string | null>(null);
+
   // Load user info on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -172,6 +183,27 @@ export default function AccountDetailsPage() {
   const formatDate = formatDateIST;
   const formatTimestamp = formatTimestampIST;
 
+  // Fetch Admin AI Insights
+  async function fetchAdminAIInsights() {
+    if (!account?.assigned_employee) {
+      setAdminAIError('No assigned employee for this account');
+      return;
+    }
+
+    setAdminAILoading(true);
+    setAdminAIError(null);
+    try {
+      const res = await fetch(`/api/ai/admin-insights?employeeUsername=${account.assigned_employee}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'AI failed');
+      setAdminAIData(data.data);
+    } catch (err: any) {
+      setAdminAIError(err.message || 'Failed to load admin AI insights');
+    } finally {
+      setAdminAILoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <CRMLayout>
@@ -289,6 +321,66 @@ export default function AccountDetailsPage() {
                           {account?.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
+
+                      {/* Admin AI Insights Section */}
+                      {isAdmin && account?.assigned_employee && (
+                        <div className="mt-4">
+                          <button
+                            onClick={fetchAdminAIInsights}
+                            disabled={adminAILoading}
+                            className="px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-white rounded-md text-sm font-medium transition-colors"
+                          >
+                            {adminAILoading ? 'Loading...' : 'Get Employee AI Insights'}
+                          </button>
+
+                          {adminAILoading && (
+                            <div className="mt-2 text-slate-400 text-sm">Fetching AI insights...</div>
+                          )}
+
+                          {adminAIError && (
+                            <div className="mt-2 text-red-500 text-sm">{adminAIError}</div>
+                          )}
+
+                          {adminAIData && (
+                            <div className="mt-4 p-4 border border-slate-700/50 rounded-lg bg-slate-800/50 space-y-3">
+                              <p className="font-bold text-white">
+                                AI Summary:
+                              </p>
+                              <p className="text-slate-300 text-sm">{adminAIData.summary}</p>
+
+                              <p className="font-bold text-white mt-4">Strengths:</p>
+                              <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                                {adminAIData.strengths.map((s: string, i: number) => (
+                                  <li key={i}>{s}</li>
+                                ))}
+                              </ul>
+
+                              <p className="font-bold text-white mt-4">Weaknesses:</p>
+                              <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                                {adminAIData.weaknesses.map((w: string, i: number) => (
+                                  <li key={i}>{w}</li>
+                                ))}
+                              </ul>
+
+                              <p className="font-bold text-white mt-4">Coaching Advice:</p>
+                              <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                                {adminAIData.coachingAdvice.map((c: string, i: number) => (
+                                  <li key={i}>{c}</li>
+                                ))}
+                              </ul>
+
+                              <p className="font-bold text-white mt-4">Suggested Focus Accounts:</p>
+                              <ul className="list-disc ml-5 text-slate-300 text-sm space-y-1">
+                                {adminAIData.suggestedFocusAccounts.map((a: any, i: number) => (
+                                  <li key={i}>
+                                    <strong className="text-premium-gold">{a.accountName}</strong> — {a.reason}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     
                     {/* Actions */}

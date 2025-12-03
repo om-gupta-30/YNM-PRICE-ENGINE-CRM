@@ -206,7 +206,13 @@ export type ActivityType =
   | 'task'
   | 'meeting'
   | 'login'
-  | 'logout';
+  | 'logout'
+  | 'away'
+  | 'inactive'
+  | 'edit'
+  | 'create'
+  | 'delete'
+  | 'quotation_saved';
 
 export interface Activity {
   id: number;
@@ -221,6 +227,13 @@ export interface Activity {
   contact_name?: string | null;
   timestamp?: string | null; // Alias for created_at
   created_at: string;
+  logout_reason?: {
+    reason_tag: string;
+    reason_text: string;
+    created_at: string | null;
+  } | null;
+  login_time?: string | null;
+  logout_time?: string | null;
 }
 
 export type NotificationType = 

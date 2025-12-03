@@ -150,6 +150,43 @@ export async function POST(request: NextRequest) {
 
     const loginTime = getCurrentISTTime();
     
+    // Check if user was previously inactive (check last logout or inactivity)
+    let wasInactive = false;
+    let inactivityReason = null;
+    try {
+      // Check for recent logout or inactivity activity
+      const { data: recentActivity } = await supabase
+        .from('activities')
+        .select('activity_type, description, metadata, created_at')
+        .eq('employee_id', user.username)
+        .in('activity_type', ['logout', 'inactive', 'away'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (recentActivity) {
+        const activityTime = new Date(recentActivity.created_at).getTime();
+        const now = new Date().getTime();
+        const hoursSince = (now - activityTime) / (1000 * 60 * 60);
+        
+        // If last activity was logout/inactive/away within last 24 hours, consider it a return
+        if (hoursSince < 24) {
+          wasInactive = true;
+          if (recentActivity.metadata?.reason) {
+            inactivityReason = recentActivity.metadata.reason;
+          } else if (recentActivity.activity_type === 'logout') {
+            inactivityReason = 'Logged back in after logout';
+          } else if (recentActivity.activity_type === 'inactive') {
+            inactivityReason = 'Logged back in after being inactive';
+          } else if (recentActivity.activity_type === 'away') {
+            inactivityReason = 'Logged back in after being away';
+          }
+        }
+      }
+    } catch (error) {
+      // Ignore errors in checking previous activity
+    }
+    
     // Update login_time and last_login in users table
     try {
       await supabase
@@ -163,7 +200,7 @@ export async function POST(request: NextRequest) {
       console.error('Error updating login_time in users table:', error);
     }
 
-    // Log login activity
+    // Log login activity with inactivity info if applicable
     await logLoginActivity({
       employee_id: user.username,
       loginTime: loginTime,
@@ -171,6 +208,9 @@ export async function POST(request: NextRequest) {
         department,
         isAdmin: isAdmin || isDataAnalyst,
         isDataAnalyst,
+        wasInactive,
+        inactivityReason,
+        previousStatus: wasInactive ? 'inactive' : null,
       },
     });
 

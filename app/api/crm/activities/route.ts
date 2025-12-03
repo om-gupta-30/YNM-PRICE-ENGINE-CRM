@@ -2,14 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 
-// GET - Fetch all activities for an employee (for employees to see their own activities)
-// or all activities (for admin)
+// GET - Fetch all activities for an employee (for employees/data analysts to see their own activities)
+// or all activities (for admin only)
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const employeeUsername = searchParams.get('employee');
     const isAdmin = searchParams.get('isAdmin') === 'true';
-    const filterEmployee = searchParams.get('filterEmployee'); // For admin to filter by employee
+    const isDataAnalyst = searchParams.get('isDataAnalyst') === 'true';
+    const filterEmployee = searchParams.get('filterEmployee'); // For admin only to filter by employee
     const filterDate = searchParams.get('filterDate'); // Filter by date (YYYY-MM-DD format)
 
     let supabase;
@@ -28,13 +29,17 @@ export async function GET(request: NextRequest) {
       .select('*');
 
     // Filter by employee
-    if (isAdmin && filterEmployee) {
+    // Only full admins see all activities; data analysts and employees see only their own
+    if (isAdmin && !isDataAnalyst && filterEmployee) {
       // Admin filtering by specific employee
       query = query.eq('employee_id', filterEmployee);
-    } else if (!isAdmin && employeeUsername) {
-      // Employee sees only their own activities
+    } else if (!isAdmin || isDataAnalyst) {
+      // Data analysts and employees see only their own activities
+      if (employeeUsername) {
       query = query.eq('employee_id', employeeUsername);
+      }
     }
+    // If isAdmin and no filterEmployee, show all activities (admin only)
 
     // Filter by date if provided
     if (filterDate) {

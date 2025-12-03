@@ -1,6 +1,9 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { detectSlippingEngagementAndSuggestActions } from '@/lib/ai/engagement';
 
 // This endpoint is called by cron jobs to automatically generate notifications
 // It can be called by:
@@ -22,6 +25,16 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // Always run AI engagement slipping detection
+  let aiResult = { updated: 0 };
+  try {
+    aiResult = await detectSlippingEngagementAndSuggestActions();
+    console.log("[CRON] AI engagement scan updated", aiResult.updated);
+  } catch (aiError: any) {
+    console.error("[CRON] AI engagement scan failed:", aiError?.message || aiError);
+    // Continue execution even if AI fails
+  }
+
   try {
     const supabase = createSupabaseServerClient();
     const today = new Date();
@@ -41,14 +54,18 @@ export async function GET(request: NextRequest) {
 
     if (contactsError) {
       console.error('Error fetching contacts:', contactsError);
-      return NextResponse.json({ error: contactsError.message }, { status: 500 });
+      return NextResponse.json({ 
+        error: contactsError.message,
+        aiEngagementUpdated: aiResult.updated,
+      }, { status: 500 });
     }
 
     if (!contacts || contacts.length === 0) {
       return NextResponse.json({ 
         success: true, 
         message: 'No contacts with follow-up dates found',
-        created: 0 
+        created: 0,
+        aiEngagementUpdated: aiResult.updated,
       });
     }
 
@@ -142,7 +159,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         message: 'All contacts already have notifications',
-        created: 0 
+        created: 0,
+        aiEngagementUpdated: aiResult.updated,
       });
     }
 
@@ -154,19 +172,26 @@ export async function GET(request: NextRequest) {
 
     if (insertError) {
       console.error('Error creating notifications:', insertError);
-      return NextResponse.json({ error: insertError.message }, { status: 500 });
+      return NextResponse.json({ 
+        error: insertError.message,
+        aiEngagementUpdated: aiResult.updated,
+      }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
       message: `Created ${createdNotifications?.length || 0} notifications`,
       created: createdNotifications?.length || 0,
+      aiEngagementUpdated: aiResult.updated,
       notifications: createdNotifications,
     });
   } catch (error: any) {
     console.error('Generate follow-up notifications error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        aiEngagementUpdated: aiResult.updated,
+      },
       { status: 500 }
     );
   }

@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
+import { triggerAIScoringForActivity } from '@/lib/ai/engagement';
 
 export interface ActivityLogParams {
   account_id?: number | null;
@@ -23,6 +24,19 @@ export async function logActivity(params: ActivityLogParams): Promise<void> {
       activity_type: params.activity_type,
       description: params.description,
       metadata: params.metadata || {},
+    });
+
+    // Trigger AI scoring after activity is logged
+    // Extract sub_account_id from metadata if present, otherwise use account_id
+    const subAccountId = params.metadata?.sub_account_id 
+      ? (typeof params.metadata.sub_account_id === 'number' 
+          ? params.metadata.sub_account_id 
+          : parseInt(params.metadata.sub_account_id))
+      : null;
+
+    await triggerAIScoringForActivity({
+      account_id: params.account_id || null,
+      sub_account_id: subAccountId,
     });
   } catch (error) {
     console.error('Failed to log activity:', error);

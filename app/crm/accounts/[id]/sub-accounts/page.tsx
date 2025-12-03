@@ -623,12 +623,18 @@ export default function SubAccountsPage() {
                         <EngagementScoreBadge score={subAccount?.engagementScore || 0} />
                       </td>
                       <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={() => subAccount?.id && router.push(`/crm/subaccounts/${subAccount.id}`)}
                             className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200"
                           >
                             View Details
+                          </button>
+                          <button
+                            onClick={() => subAccount?.id && router.push(`/crm/subaccounts/${subAccount.id}/contacts`)}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-purple-500/80 hover:bg-purple-500 rounded-lg transition-all duration-200"
+                          >
+                            View Contacts
                           </button>
                           <button
                             onClick={() => subAccount && handleEdit(subAccount)}

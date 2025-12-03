@@ -22,7 +22,7 @@ export async function GET(
 
     const { data, error } = await supabase
       .from('sub_accounts')
-      .select('id, account_id, sub_account_name, state_id, city_id, address, pincode, gst_number, website, engagement_score, is_active, created_at, updated_at')
+      .select('id, account_id, sub_account_name, state_id, city_id, address, pincode, gst_number, website, is_headquarter, office_type, engagement_score, is_active, created_at, updated_at, ai_insights, assigned_employee')
       .eq('id', id)
       .single();
 
@@ -68,9 +68,25 @@ export async function GET(
       }
     }
 
+    // Fetch account name
+    let accountName = null;
+    if (data.account_id) {
+      try {
+        const { data: accountData } = await supabase
+          .from('accounts')
+          .select('account_name')
+          .eq('id', data.account_id)
+          .single();
+        accountName = accountData?.account_name || null;
+      } catch (err) {
+        console.error(`Error fetching account for sub-account ${data.id}:`, err);
+      }
+    }
+
     const formattedSubAccount = {
       id: data.id,
       accountId: data.account_id,
+      accountName,
       subAccountName: data.sub_account_name,
       stateId: data.state_id || null,
       cityId: data.city_id || null,
@@ -80,8 +96,12 @@ export async function GET(
       pincode: data.pincode || null,
       gstNumber: data.gst_number || null,
       website: data.website || null,
+      isHeadquarter: data.is_headquarter || false,
+      officeType: data.office_type || null,
       engagementScore: parseFloat(data.engagement_score?.toString() || '0') || 0,
       isActive: data.is_active,
+      assignedEmployee: data.assigned_employee || null,
+      aiInsights: data.ai_insights || null,
       createdAt: formatTimestampIST(data.created_at),
       updatedAt: formatTimestampIST(data.updated_at),
     };

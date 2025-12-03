@@ -20,16 +20,16 @@ export default function ActivitiesPage() {
     if (typeof window !== 'undefined') {
       const adminValue = localStorage.getItem('isAdmin') === 'true';
       const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
-      // Data analysts should be treated as employees, not admins
-      setIsAdmin(adminValue && !dataAnalystValue);
+      // Data analysts should only see their own activities, not all like admins
+      setIsAdmin(adminValue && !dataAnalystValue); // Only true admin, not data analyst
       setIsDataAnalyst(dataAnalystValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
 
-  // Fetch employee list for admin filter (includes data analysts)
+  // Fetch employee list for admin filter (admin only, not data analysts)
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin && !isDataAnalyst) {
       const fetchEmployees = async () => {
         try {
           const response = await fetch('/api/employees');
@@ -43,14 +43,14 @@ export default function ActivitiesPage() {
       };
       fetchEmployees();
     }
-  }, [isAdmin]);
+  }, [isAdmin, isDataAnalyst]);
 
   // Fetch employee statuses (for admin) or current user status (for employees and data analysts)
   useEffect(() => {
     const fetchStatuses = async () => {
       try {
-        if (isAdmin) {
-          // Fetch all employee and data analyst statuses for admin
+        if (isAdmin && !isDataAnalyst) {
+          // Fetch all employee and data analyst statuses for admin only
           const response = await fetch('/api/auth/all-users-status');
           const data = await response.json();
           if (data.success && Array.isArray(data.statuses)) {
@@ -73,7 +73,7 @@ export default function ActivitiesPage() {
     // Refresh statuses every 30 seconds
     const interval = setInterval(fetchStatuses, 30000);
     return () => clearInterval(interval);
-  }, [isAdmin, username]);
+  }, [isAdmin, isDataAnalyst, username]);
 
   // Set default date to today
   useEffect(() => {
@@ -82,20 +82,27 @@ export default function ActivitiesPage() {
   }, []);
 
   useEffect(() => {
-    if (!username && !isAdmin) return;
+    if (!username && !isAdmin && !isDataAnalyst) return;
 
     const fetchActivities = async () => {
       try {
         setLoading(true);
         const params = new URLSearchParams();
+        // Data analysts see only their own activities, not all like admins
         if (!isAdmin && username) {
+          // Data analysts and employees see only their own activities
           params.append('employee', username);
         }
-        if (isAdmin) {
+        if (isAdmin && !isDataAnalyst) {
+          // Only full admins see all activities
           params.append('isAdmin', 'true');
           if (filterEmployee) {
             params.append('filterEmployee', filterEmployee);
           }
+        }
+        if (isDataAnalyst) {
+          // Data analysts are treated like employees
+          params.append('isDataAnalyst', 'true');
         }
         if (filterDate) {
           params.append('filterDate', filterDate);
@@ -121,7 +128,7 @@ export default function ActivitiesPage() {
     // Refresh activities every 10 seconds for live updates
     const interval = setInterval(fetchActivities, 10000);
     return () => clearInterval(interval);
-  }, [username, isAdmin, filterEmployee, filterDate]);
+  }, [username, isAdmin, isDataAnalyst, filterEmployee, filterDate]);
 
   return (
     <CRMLayout>
@@ -143,7 +150,7 @@ export default function ActivitiesPage() {
             <div className="gold-divider w-full"></div>
           </div>
 
-          {/* Filters - Only show for admin */}
+          {/* Filters - Show for admin only */}
           {isAdmin && (
             <div className="glassmorphic-premium rounded-2xl p-4 sm:p-6 mb-6">
               <h3 className="text-lg font-bold text-white mb-4">Filters</h3>
@@ -259,7 +266,7 @@ export default function ActivitiesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-slate-300 text-sm">
-                  {isAdmin 
+                  {isAdmin
                     ? `Showing ${activities.length} activity${activities.length !== 1 ? 'ies' : ''}${filterEmployee ? ` for ${filterEmployee}` : ''}${filterDate ? ` on ${new Date(filterDate).toLocaleDateString()}` : ''}`
                     : `Showing ${activities.length} of your activity${activities.length !== 1 ? 'ies' : ''}${filterDate ? ` on ${new Date(filterDate).toLocaleDateString()}` : ''}`
                   }

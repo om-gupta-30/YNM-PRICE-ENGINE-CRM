@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { logActivity } from '@/lib/utils/activityLogger';
 
 // POST - Update an existing task
 export async function POST(request: NextRequest) {
@@ -205,13 +206,13 @@ export async function POST(request: NextRequest) {
       }
 
       if (changes.length > 0 && (task.account_id || oldTask?.account_id)) {
-        await supabase.from('activities').insert({
+        await logActivity({
           account_id: task.account_id || oldTask?.account_id,
-          task_id: task.id,
           employee_id: task.assigned_employee || task.created_by || 'System',
-          activity_type: 'task',
+          activity_type: 'edit',
           description: `Task "${task.title}" edited - ${changes.join(', ')}`,
           metadata: {
+            entity_type: 'task',
             task_id: task.id,
             changes,
             status: task.status,
