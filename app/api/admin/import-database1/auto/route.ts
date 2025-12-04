@@ -351,7 +351,7 @@ export async function GET(request: NextRequest) {
 
               if (existingCity) {
                 cityId = existingCity.id;
-                cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                if (stateId && cityId) cityMap.set(cityKey, { id: cityId, state_id: stateId });
               } else {
                 // Create new city
                 const { data: newCity, error: createCityError } = await supabase
@@ -366,7 +366,7 @@ export async function GET(request: NextRequest) {
 
                 if (!createCityError && newCity) {
                   cityId = newCity.id;
-                  cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                  if (stateId && cityId) cityMap.set(cityKey, { id: cityId, state_id: stateId });
                 }
               }
             } else {
