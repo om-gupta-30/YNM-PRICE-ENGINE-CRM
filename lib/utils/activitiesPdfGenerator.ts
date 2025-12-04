@@ -49,9 +49,9 @@ export function generateActivitiesPDF(reportData: ReportData): Blob {
     doc.setFontSize(fontSize);
     doc.setTextColor(color[0], color[1], color[2]);
     if (isBold) {
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
     } else {
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
     }
 
     const maxWidth = pageWidth - (margin * 2);
@@ -67,7 +67,7 @@ export function generateActivitiesPDF(reportData: ReportData): Blob {
   // Title
   doc.setFontSize(20);
   doc.setTextColor(0, 0, 0);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text('Activities Report', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += lineHeight * 2;
 
