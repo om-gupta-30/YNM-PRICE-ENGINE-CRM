@@ -29,15 +29,9 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
     return `${crores.toFixed(1)} Crores`;
   };
   
-  // Prevent body scroll when modal is open - keep user at current position
+  // Prevent body scroll when modal is open
   useEffect(() => {
-    const scrollY = window.scrollY;
     document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.width = '100%';
-    document.body.classList.add('modal-open');
-    
     setTimeout(() => {
       if (modalRef.current) {
         modalRef.current.scrollTop = 0;
@@ -45,15 +39,7 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
     }, 10);
     
     return () => {
-      const scrollY = document.body.style.top;
       document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.classList.remove('modal-open');
-      if (scrollY) {
-        window.scrollTo(0, parseInt(scrollY || '0') * -1);
-      }
     };
   }, []);
 

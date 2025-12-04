@@ -22,11 +22,6 @@
     text-size-adjust: 100%;
   }
   
-  /* Modal open state - prevents iOS bounce scroll */
-  body.modal-open {
-    touch-action: none;
-    -webkit-overflow-scrolling: touch;
-  }
 }
 
 /* Tooltip fade-in animation */
