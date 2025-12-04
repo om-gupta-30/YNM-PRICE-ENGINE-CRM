@@ -150,44 +150,28 @@ export default function ActivitiesPage() {
       if (filterDate) {
         params.append('filterDate', filterDate);
       }
-      params.append('format', 'json');
+      params.append('format', 'pdf'); // Request PDF format
 
       const response = await fetch(`/api/crm/activities/report?${params}`);
-      const data = await response.json();
-
-      if (data.success) {
-        // Create a downloadable JSON file
-        const reportData = {
-          generatedAt: new Date().toISOString(),
-          filters: {
-            employee: filterEmployee || (username || 'All'),
-            date: filterDate || 'All dates',
-            isAdmin,
-            isDataAnalyst,
-          },
-          summary: {
-            totalActivities: data.summary?.totalActivities || activities.length,
-            byType: data.summary?.byType || {},
-            byEmployee: data.summary?.byEmployee || {},
-          },
-          activities: data.activities || activities,
-        };
-
-        const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `activities-report-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
-        alert('Failed to generate report: ' + (data.error || 'Unknown error'));
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to generate report');
       }
+
+      // Get PDF blob
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `activities-report-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error generating report:', error);
-      alert('Error generating report. Please try again.');
+      alert('Error generating report: ' + (error instanceof Error ? error.message : 'Please try again.'));
     } finally {
       setIsGeneratingReport(false);
     }
@@ -360,11 +344,11 @@ export default function ActivitiesPage() {
                     {isGeneratingReport ? (
                       <>
                         <span className="animate-spin">⏳</span>
-                        Generating...
+                        Generating PDF...
                       </>
                     ) : (
                       <>
-                        📊 Generate Report
+                        📄 Generate PDF Report
                       </>
                     )}
                   </button>

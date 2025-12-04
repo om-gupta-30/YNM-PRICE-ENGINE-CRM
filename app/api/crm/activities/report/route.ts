@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
+import { generateActivitiesPDF } from '@/lib/utils/activitiesPdfGenerator';
 
 // Helper function to normalize employee names (map old IDs to current names)
 async function getEmployeeNameMapping(supabase: any): Promise<Record<string, string>> {
@@ -142,6 +143,34 @@ export async function GET(request: NextRequest) {
       summary.byEmployee[employee] = (summary.byEmployee[employee] || 0) + 1;
     }
 
+    // Prepare report data
+    const reportData = {
+      activities: normalizedActivities,
+      summary,
+      filters: {
+        employee: filterEmployee || (employeeUsername || 'All'),
+        date: filterDate || 'All dates',
+        isAdmin: isAdmin && !isDataAnalyst,
+        isDataAnalyst: isDataAnalyst,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Generate PDF if format is pdf, otherwise return JSON
+    if (format === 'pdf') {
+      const pdfBlob = generateActivitiesPDF(reportData);
+      const arrayBuffer = await pdfBlob.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      return new NextResponse(buffer, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="activities-report-${new Date().toISOString().split('T')[0]}.pdf"`,
+        },
+      });
+    }
+
+    // Return JSON format
     return NextResponse.json({
       success: true,
       activities: normalizedActivities,
