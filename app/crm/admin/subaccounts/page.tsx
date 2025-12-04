@@ -44,6 +44,12 @@ export default function AdminSubAccountsPage() {
   const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
   const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
 
+  // Sort states
+  type SortField = 'subAccountName' | 'accountName' | null;
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('subAccountName');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
   // Accounts list for filter
   const [accounts, setAccounts] = useState<Array<{ id: number; accountName: string }>>([]);
   const [states, setStates] = useState<Array<{ id: number; name: string }>>([]);
@@ -180,6 +186,35 @@ export default function AdminSubAccountsPage() {
   const uniqueOfficeTypes = useMemo(() => {
     return Array.from(new Set(subAccounts.map(sa => sa.officeType).filter(Boolean))).sort();
   }, [subAccounts]);
+
+  // Handle sort click
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if clicking same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field with default direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sorted sub-accounts
+  const sortedSubAccounts = useMemo(() => {
+    if (!sortField) return subAccounts;
+    
+    return [...subAccounts].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortField === 'subAccountName') {
+        comparison = (a.subAccountName || '').localeCompare(b.subAccountName || '');
+      } else if (sortField === 'accountName') {
+        comparison = (a.accountName || '').localeCompare(b.accountName || '');
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [subAccounts, sortField, sortDirection]);
 
   if (!isAdmin) {
     return null;
@@ -349,7 +384,7 @@ export default function AdminSubAccountsPage() {
                 <div className="text-4xl text-slate-400 mb-4 animate-pulse">⏳</div>
                 <p className="text-slate-300">Loading sub-accounts...</p>
               </div>
-            ) : subAccounts.length === 0 ? (
+            ) : sortedSubAccounts.length === 0 ? (
               <div className="text-center py-20">
                 <div className="text-4xl text-slate-400 mb-4">📋</div>
                 <p className="text-slate-300">No sub-accounts found</p>
@@ -359,8 +394,18 @@ export default function AdminSubAccountsPage() {
                 <table className="w-full">
                   <thead className="sticky top-0 bg-[#1A103C]/95 backdrop-blur-sm z-10">
                     <tr className="border-b border-white/20">
-                      <th className="text-left py-4 px-4 text-sm font-bold text-white">Account</th>
-                      <th className="text-left py-4 px-4 text-sm font-bold text-white">Sub-Account</th>
+                      <th className="text-left py-4 px-4 text-sm font-bold text-white">
+                        <button onClick={() => handleSort('accountName')} className="hover:text-premium-gold transition-colors flex items-center gap-1">
+                          <span>Account</span>
+                          {sortField === 'accountName' && <span className="text-premium-gold">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
+                      <th className="text-left py-4 px-4 text-sm font-bold text-white">
+                        <button onClick={() => handleSort('subAccountName')} className="hover:text-premium-gold transition-colors flex items-center gap-1">
+                          <span>Sub-Account</span>
+                          {sortField === 'subAccountName' && <span className="text-premium-gold">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">Location</th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">GST Number</th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">Website</th>
@@ -371,7 +416,7 @@ export default function AdminSubAccountsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {subAccounts.map((subAccount) => (
+                    {sortedSubAccounts.map((subAccount) => (
                       <tr
                         key={subAccount.id}
                         className="border-b border-white/10 hover:bg-white/5 transition-all duration-200"

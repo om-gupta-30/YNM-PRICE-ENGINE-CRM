@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 
@@ -37,6 +37,12 @@ export default function AdminContactsPage() {
   const [filterSubAccountId, setFilterSubAccountId] = useState<number | null>(null);
   const [filterCallStatus, setFilterCallStatus] = useState<string>('all');
   const [filterEmployeeId, setFilterEmployeeId] = useState<string>('all');
+
+  // Sort states
+  type SortField = 'name' | 'accountName' | 'subAccountName' | null;
+  type SortDirection = 'asc' | 'desc';
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Options for filters
   const [accounts, setAccounts] = useState<Array<{ id: number; accountName: string }>>([]);
@@ -141,6 +147,37 @@ export default function AdminContactsPage() {
   };
 
   const uniqueCallStatuses = Array.from(new Set(contacts.map(c => c.callStatus).filter(Boolean))).sort();
+
+  // Handle sort click
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if clicking same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field with default direction
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sorted contacts
+  const sortedContacts = useMemo(() => {
+    if (!sortField) return contacts;
+    
+    return [...contacts].sort((a, b) => {
+      let comparison = 0;
+      
+      if (sortField === 'name') {
+        comparison = (a.name || '').localeCompare(b.name || '');
+      } else if (sortField === 'accountName') {
+        comparison = (a.accountName || '').localeCompare(b.accountName || '');
+      } else if (sortField === 'subAccountName') {
+        comparison = (a.subAccountName || '').localeCompare(b.subAccountName || '');
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [contacts, sortField, sortDirection]);
 
   if (!isAdmin) {
     return null;
@@ -255,7 +292,7 @@ export default function AdminContactsPage() {
                 <div className="text-4xl text-slate-400 mb-4 animate-pulse">⏳</div>
                 <p className="text-slate-300">Loading contacts...</p>
               </div>
-            ) : contacts.length === 0 ? (
+            ) : sortedContacts.length === 0 ? (
               <div className="text-center py-20">
                 <div className="text-4xl text-slate-400 mb-4">👥</div>
                 <p className="text-slate-300">No contacts found</p>
@@ -265,9 +302,24 @@ export default function AdminContactsPage() {
                 <table className="w-full">
                   <thead className="sticky top-0 bg-[#1A103C]/95 backdrop-blur-sm z-10">
                     <tr className="border-b border-white/20">
-                      <th className="text-left py-4 px-4 text-sm font-bold text-white">Account</th>
-                      <th className="text-left py-4 px-4 text-sm font-bold text-white">Sub-Account</th>
-                      <th className="text-left py-4 px-4 text-sm font-bold text-white">Contact Name</th>
+                      <th className="text-left py-4 px-4 text-sm font-bold text-white">
+                        <button onClick={() => handleSort('accountName')} className="hover:text-premium-gold transition-colors flex items-center gap-1">
+                          <span>Account</span>
+                          {sortField === 'accountName' && <span className="text-premium-gold">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
+                      <th className="text-left py-4 px-4 text-sm font-bold text-white">
+                        <button onClick={() => handleSort('subAccountName')} className="hover:text-premium-gold transition-colors flex items-center gap-1">
+                          <span>Sub-Account</span>
+                          {sortField === 'subAccountName' && <span className="text-premium-gold">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
+                      <th className="text-left py-4 px-4 text-sm font-bold text-white">
+                        <button onClick={() => handleSort('name')} className="hover:text-premium-gold transition-colors flex items-center gap-1">
+                          <span>Contact Name</span>
+                          {sortField === 'name' && <span className="text-premium-gold">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
+                        </button>
+                      </th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">Designation</th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">Email</th>
                       <th className="text-left py-4 px-4 text-sm font-bold text-white">Phone</th>
@@ -278,7 +330,7 @@ export default function AdminContactsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {contacts.map((contact) => (
+                    {sortedContacts.map((contact) => (
                       <tr
                         key={contact.id}
                         className="border-b border-white/10 hover:bg-white/5 transition-all duration-200"
