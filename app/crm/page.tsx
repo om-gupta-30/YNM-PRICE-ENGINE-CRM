@@ -140,21 +140,45 @@ export default function CRMDashboard() {
   };
 
   const loadAdminData = async () => {
-    // Load employee list
+    // Load employee list from both accounts and activities
     try {
-      const accountsRes = await fetch('/api/accounts');
-      const accountsData = await accountsRes.json();
       const employeeSet = new Set<string>();
       
-      if (accountsData.accounts) {
-        accountsData.accounts.forEach((acc: any) => {
-          if (acc.assigned_employee) employeeSet.add(acc.assigned_employee);
-        });
+      // Fetch employees from accounts
+      try {
+        const accountsRes = await fetch('/api/accounts');
+        const accountsData = await accountsRes.json();
+        if (accountsData.accounts) {
+          accountsData.accounts.forEach((acc: any) => {
+            if (acc.assigned_employee && typeof acc.assigned_employee === 'string') {
+              employeeSet.add(acc.assigned_employee);
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching employees from accounts:', err);
+      }
+
+      // Fetch employees from activities
+      try {
+        const activitiesRes = await fetch('/api/crm/activities?isAdmin=true');
+        const activitiesData = await activitiesRes.json();
+        if (activitiesData.data) {
+          activitiesData.data.forEach((act: any) => {
+            if (act.employee_id && typeof act.employee_id === 'string') {
+              employeeSet.add(act.employee_id);
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching employees from activities:', err);
       }
       
       const empList = Array.from(employeeSet).filter(Boolean).sort();
       setEmployees(empList);
-      if (empList.length > 0) setSelectedEmployee(empList[0]);
+      if (empList.length > 0 && !selectedEmployee) {
+        setSelectedEmployee(empList[0]);
+      }
     } catch (err) {
       console.error('Error loading employees:', err);
     }

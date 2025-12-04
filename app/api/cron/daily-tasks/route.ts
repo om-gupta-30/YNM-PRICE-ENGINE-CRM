@@ -202,33 +202,12 @@ async function generateCoachingForEmployee(
       accountNames: accountNames.slice(0, 10), // Limit to top 10 for context
     };
 
-    // Prepare AI prompts
-    const systemPrompt = `You are a sales coaching assistant. Analyze employee activity data and provide constructive, actionable coaching feedback. Focus on motivation, strengths, areas for improvement, and specific recommendations.`;
+    // Prepare concise AI prompts
+    const systemPrompt = `Sales coach. Return JSON: motivation (1 sentence), strengths[], weaknesses[], recommendations[], priorityAccounts[]. Keep brief.`;
 
-    const userPrompt = `
-Employee: ${summary.employee}
-Time Period: Last 24 hours (${new Date(summary.timeWindow.start).toLocaleDateString()} to ${new Date(summary.timeWindow.end).toLocaleDateString()})
-
-Activity Summary:
-- Total Activities: ${summary.totalActivities}
-- Calls: ${summary.metrics.numCalls}
-- Followups: ${summary.metrics.numFollowups}
-- Quotations: ${summary.metrics.numQuotations}
-- Tasks: ${summary.metrics.numTasks}
-${summary.engagementChanges ? `- Engagement Changes: ${summary.engagementChanges.length} noted` : ''}
-${summary.accountNames.length > 0 ? `- Accounts Worked On: ${summary.accountNames.join(', ')}` : ''}
-
-Based on this activity data, provide coaching insights in the following JSON format:
-{
-  "motivation": "A brief motivational message (1-2 sentences) acknowledging their effort and encouraging continued engagement",
-  "strengths": ["strength 1", "strength 2", "strength 3"],
-  "weaknesses": ["area for improvement 1", "area for improvement 2"],
-  "recommendations": ["actionable recommendation 1", "actionable recommendation 2", "actionable recommendation 3"],
-  "priorityAccounts": ["account name 1", "account name 2", "account name 3"]
-}
-
-Be specific and constructive. If activity levels are low, provide gentle encouragement. If activity is high, acknowledge the effort and suggest optimization strategies.
-    `.trim();
+    const accountList = summary.accountNames.slice(0, 5).join(', ') || 'None';
+    const userPrompt = `Employee: ${summary.employee} | Last 24h: ${summary.totalActivities} activities (Calls:${summary.metrics.numCalls} Followups:${summary.metrics.numFollowups} Quotes:${summary.metrics.numQuotations} Tasks:${summary.metrics.numTasks}) | Accounts: ${accountList}
+Provide brief, actionable coaching.`;
 
     // Call AI
     const aiResponse = await runGemini<CoachingInsights>(systemPrompt, userPrompt);

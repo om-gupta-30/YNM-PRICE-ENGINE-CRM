@@ -308,55 +308,25 @@ export async function runAdminAIScoring(employeeUsername: string): Promise<Admin
       console.error('Error fetching activities for admin scoring:', activitiesError.message);
     }
 
-    // Build prompt for Claude
-    const systemPrompt = `You are a CRM admin performance coach. Analyze this employee's performance and output JSON containing summary, strengths[], weaknesses[], coachingAdvice[], suggestedFocusAccounts[] (array of {accountName, reason}).`;
+    // Build concise prompt
+    const systemPrompt = `CRM performance coach. Output JSON: summary (1 sentence), strengths[], weaknesses[], coachingAdvice[], suggestedFocusAccounts[] ({accountName, reason}). Keep responses brief.`;
 
-    const userPrompt = `
-Employee: ${employeeUsername}
+    // Limit context to reduce costs
+    const topSubAccounts = (subAccounts || []).slice(0, 10).map(sa => {
+      const account = Array.isArray(sa.accounts) ? sa.accounts[0] : sa.accounts;
+      return `${(account as any)?.account_name || sa.sub_account_name}: ${Number(sa.engagement_score) || 0}`;
+    }).join(', ');
 
-Sub-Accounts Performance:
-- Total sub-accounts: ${totalSubAccounts}
-- Average engagement score: ${averageEngagement.toFixed(1)}
-- Low engagement (<40): ${lowCount}
-- Medium engagement (40-69): ${mediumCount}
-- High engagement (≥70): ${highCount}
+    const recentActivitySummary = (recentActivities || []).slice(0, 10).map(a => 
+      `${a.activity_type}${a.description ? ': ' + a.description.substring(0, 50) : ''}`
+    ).join('; ');
 
-Sub-Account Details:
-${JSON.stringify(
-  (subAccounts || []).map(sa => {
-    const account = Array.isArray(sa.accounts) ? sa.accounts[0] : sa.accounts;
-    return {
-      subAccountName: sa.sub_account_name,
-      accountName: (account as any)?.account_name || 'Unknown',
-      engagementScore: Number(sa.engagement_score) || 0,
-    };
-  }),
-  null,
-  2
-)}
+    const userPrompt = `Employee: ${employeeUsername}
+Metrics: ${totalSubAccounts} accounts, avg score ${averageEngagement.toFixed(0)}, low:${lowCount} med:${mediumCount} high:${highCount}
+Top accounts: ${topSubAccounts || 'None'}
+Recent: ${recentActivitySummary || 'No recent activity'}
 
-Recent Activities (${recentActivities?.length || 0}):
-${JSON.stringify(
-  (recentActivities || []).map(a => ({
-    type: a.activity_type,
-    description: a.description || null,
-    age: Math.floor((new Date().getTime() - new Date(a.created_at).getTime()) / (1000 * 60 * 60 * 24)) + ' days ago',
-  })),
-  null,
-  2
-)}
-
-Analyze performance and return JSON:
-{
-  "summary": "<2-3 sentence overview>",
-  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
-  "weaknesses": ["<weakness 1>", "<weakness 2>"],
-  "coachingAdvice": ["<advice 1>", "<advice 2>", "<advice 3>"],
-  "suggestedFocusAccounts": [
-    { "accountName": "<name>", "reason": "<why focus here>" }
-  ]
-}
-`.trim();
+Return JSON with brief, actionable insights.`;
 
     // Call AI via runGemini
     const raw = await runGemini<AdminAIScoringResult>(systemPrompt, userPrompt);
@@ -641,26 +611,16 @@ export async function detectSlippingEngagementAndSuggestActions() {
           age: Math.floor((new Date().getTime() - new Date(a.created_at).getTime()) / (1000 * 60 * 60 * 24)) + ' days ago',
         }));
 
-        // 3) Call Claude for suggestions
-        const systemPrompt = `You are a CRM Engagement coach. This sub-account seems at risk. Provide 1-2 actionable suggestions in human coaching style.`;
+        // 3) Call AI for suggestions - concise prompt
+        const systemPrompt = `CRM coach. Low engagement detected. Return JSON: {message: "1 sentence action", priority: "low|medium|high"}.`;
 
-        const userPrompt = `
-Sub-account: ${sub.sub_account_name}
-Parent Account: ${accountName}
-Assigned Employee: ${sub.assigned_employee || 'Not assigned'}
-Current Engagement Score: ${sub.engagement_score}
+        const recentActivityText = (recentActivities || []).slice(0, 5).map(a => 
+          `${a.activity_type}${a.description ? ': ' + a.description.substring(0, 40) : ''}`
+        ).join('; ') || 'No recent activity';
 
-Recent Activities (${recentActivities?.length || 0}):
-${JSON.stringify(activitySummary, null, 2)}
-
-This sub-account has low engagement. Provide actionable coaching advice.
-
-Return JSON:
-{
-  "message": "<1-2 sentence actionable suggestion>",
-  "priority": "low | medium | high"
-}
-`.trim();
+        const userPrompt = `Account: ${sub.sub_account_name} (${accountName}), Score: ${sub.engagement_score}, Employee: ${sub.assigned_employee || 'Unassigned'}
+Recent: ${recentActivityText}
+Provide brief action suggestion.`;
 
         // Use FAST_MODEL for bulk slipping engagement detection
         const raw = await runGeminiFast<{ message: string; priority: string }>(systemPrompt, userPrompt);

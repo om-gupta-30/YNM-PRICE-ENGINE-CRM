@@ -783,21 +783,27 @@ export default function SubAccountDetailsPage() {
                         Location Details
                       </h3>
                       <div className="space-y-3">
-                        {subAccount.cityName && subAccount.stateName ? (
+                        {subAccount.stateName && (
                           <div>
-                            <p className="text-slate-400 text-xs mb-1">City, State</p>
-                            <p className="text-white font-medium">{subAccount.cityName}, {subAccount.stateName}</p>
+                            <p className="text-slate-400 text-xs mb-1">State</p>
+                            <p className="text-white font-medium">{subAccount.stateName}</p>
                           </div>
-                        ) : null}
+                        )}
+                        {subAccount.cityName && (
+                          <div>
+                            <p className="text-slate-400 text-xs mb-1">City</p>
+                            <p className="text-white font-medium">{subAccount.cityName}</p>
+                          </div>
+                        )}
                         {subAccount.address && (
                           <div>
                             <p className="text-slate-400 text-xs mb-1">Address</p>
-                            <p className="text-white font-medium">{subAccount.address}</p>
+                            <p className="text-white font-medium whitespace-pre-wrap">{subAccount.address}</p>
                           </div>
                         )}
                         {subAccount.pincode && (
                           <div>
-                            <p className="text-slate-400 text-xs mb-1">Pincode</p>
+                            <p className="text-slate-400 text-xs mb-1">PIN Code</p>
                             <p className="text-white font-medium">{subAccount.pincode}</p>
                           </div>
                         )}

@@ -121,13 +121,13 @@ export async function runGemini<T>(systemPrompt: string, userPrompt: string): Pr
     console.log(`[AI] Attempting inference with model: ${modelName}`);
     
     try {
-      // Configure model with JSON response format
+      // Configure model with JSON response format - reduced tokens for shorter responses
       const model = client.getGenerativeModel({
         model: modelName,
         generationConfig: {
           responseMimeType: 'application/json',
           temperature: 0.7,
-          maxOutputTokens: 2048,
+          maxOutputTokens: 1024, // Reduced from 2048 for shorter, more cost-effective responses
         },
       });
 
