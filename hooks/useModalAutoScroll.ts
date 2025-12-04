@@ -3,46 +3,47 @@
 import { useEffect, useRef, RefObject } from 'react';
 
 /**
- * Custom hook to auto-scroll when a modal opens
- * - Immediately scrolls window to top for visibility
- * - Prevents body scroll while modal is open
- * - Optionally scrolls modal content to top
- * - Uses instant scroll for immediate visibility
+ * Custom hook for modal behavior
+ * - Prevents body scroll while modal is open (modal stays where user is)
+ * - Scrolls modal content to top
+ * - Does NOT scroll the page - fixed modals are already visible in viewport
  */
 export function useModalAutoScroll(isOpen: boolean): RefObject<HTMLDivElement> {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen) {
-      // Immediately scroll window to top so modal is visible (instant, not smooth)
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-      
-      // Also try scrolling to the very top using scrollTop for compatibility
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
+      // Save current scroll position
+      const scrollY = window.scrollY;
       
       // Prevent body scroll when modal is open
       document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
-      
-      // Add class to prevent scroll on iOS
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
       document.body.classList.add('modal-open');
       
       // Scroll modal content to top after a brief delay
       setTimeout(() => {
         if (modalRef.current) {
           modalRef.current.scrollTop = 0;
-          // Also scroll the modal into view
-          modalRef.current.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'start' });
         }
       }, 10);
     }
     
     return () => {
       // Restore body scroll when modal closes
+      const scrollY = document.body.style.top;
       document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
       document.body.classList.remove('modal-open');
+      
+      // Restore scroll position
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
     };
   }, [isOpen]);
 

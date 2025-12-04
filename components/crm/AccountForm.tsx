@@ -77,13 +77,14 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
   const [employees, setEmployees] = useState<string[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
 
-  // Load employees list for admin assignment
+  // Load employees list for admin assignment (only sales employees, not data analysts)
   const loadEmployees = async () => {
     if (!isAdmin || isDataAnalyst) return; // Only admin (not data analyst) can assign
     
     setLoadingEmployees(true);
     try {
-      const response = await fetch('/api/employees');
+      // Use type=sales to get only sales employees (excludes data analysts)
+      const response = await fetch('/api/employees?type=sales');
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.employees) {

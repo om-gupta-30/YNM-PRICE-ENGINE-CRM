@@ -27,22 +27,22 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
 
   const modalRef = React.useRef<HTMLDivElement>(null);
 
-  // Prevent body scroll when modal is open and auto-scroll to top
+  // Prevent body scroll when modal is open - keep user at current scroll position
   useEffect(() => {
     if (isOpen) {
-      // Immediately scroll window to top so modal is visible
-      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
+      // Save current scroll position
+      const scrollY = window.scrollY;
       
-      // Prevent body scroll
+      // Prevent body scroll - fix body in place
       document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
       document.body.classList.add('modal-open');
       
       loadEmployees();
       
-      // Auto-scroll to top of modal when opened
+      // Scroll modal content to top
       setTimeout(() => {
         if (modalRef.current) {
           modalRef.current.scrollTop = 0;
@@ -50,9 +50,16 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
       }, 10);
     }
     return () => {
+      // Restore scroll position when modal closes
+      const scrollY = document.body.style.top;
       document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
       document.body.classList.remove('modal-open');
+      if (scrollY) {
+        window.scrollTo(0, parseInt(scrollY || '0') * -1);
+      }
     };
   }, [isOpen]);
 
