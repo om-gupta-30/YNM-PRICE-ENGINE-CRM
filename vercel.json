@@ -1,15 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/generate-notifications",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/ai/run-daily-coaching",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/ai/run-auto-monitor",
+      "path": "/api/cron/daily-tasks",
       "schedule": "0 9 * * *"
     }
   ]
