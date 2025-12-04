@@ -12,6 +12,63 @@ interface LeaderboardEntry {
   quotations: number;
 }
 
+// Helper function to normalize employee names (map old IDs to current names)
+async function getEmployeeNameMapping(supabase: any): Promise<Record<string, string>> {
+  const mapping: Record<string, string> = {};
+  
+  try {
+    // Fetch current employees from users table
+    const { data: usersData } = await supabase
+      .from('users')
+      .select('username')
+      .order('username', { ascending: true });
+
+    if (usersData) {
+      // Create a mapping: normalize variations to current names
+      for (const user of usersData) {
+        const username = user.username;
+        if (!username) continue;
+        
+        // Map the username to itself (current name)
+        mapping[username.toLowerCase()] = username;
+        
+        // Map common variations
+        // If username is "Sales_Shweta", also map "shweta", "Shweta", etc.
+        const nameParts = username.split('_');
+        if (nameParts.length > 1) {
+          const lastName = nameParts[nameParts.length - 1];
+          mapping[lastName.toLowerCase()] = username;
+          mapping[lastName] = username;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error creating employee name mapping:', error);
+  }
+  
+  return mapping;
+}
+
+// Helper function to normalize an employee name using the mapping
+function normalizeEmployeeName(employeeId: string, mapping: Record<string, string>): string {
+  if (!employeeId) return employeeId;
+  
+  // First try exact match (case-insensitive)
+  const normalized = mapping[employeeId.toLowerCase()];
+  if (normalized) return normalized;
+  
+  // Try to match by last part of name (e.g., "swamymahesh" -> "Sales_SwamyMahesh")
+  const nameParts = employeeId.split(/[_-]/);
+  if (nameParts.length > 0) {
+    const lastPart = nameParts[nameParts.length - 1].toLowerCase();
+    const matched = mapping[lastPart];
+    if (matched) return matched;
+  }
+  
+  // If no match found, return as-is (might be a valid current name)
+  return employeeId;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = createSupabaseServerClient();
@@ -21,6 +78,9 @@ export async function GET(request: NextRequest) {
     const days = parseInt(searchParams.get('days') || '30');
     const now = new Date();
     const startTime = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+
+    // Get employee name mapping to normalize old IDs to current names
+    const employeeMapping = await getEmployeeNameMapping(supabase);
 
     // Fetch all activities in the time period
     const { data: activities, error: activitiesError } = await supabase
@@ -37,7 +97,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Group activities by employee
+    // Group activities by employee (using normalized names)
     const employeeStats: Record<string, {
       calls: number;
       followups: number;
@@ -47,8 +107,11 @@ export async function GET(request: NextRequest) {
     }> = {};
 
     for (const activity of activities || []) {
-      const employee = activity.employee_id;
-      if (!employee) continue;
+      const employeeId = activity.employee_id;
+      if (!employeeId) continue;
+      
+      // Normalize employee name (map old ID to current name)
+      const employee = normalizeEmployeeName(employeeId, employeeMapping);
 
       if (!employeeStats[employee]) {
         employeeStats[employee] = {
@@ -115,7 +178,9 @@ export async function GET(request: NextRequest) {
       if (quotes) {
         for (const quote of quotes) {
           if (quote.created_by) {
-            employeeClosedWon[quote.created_by] = (employeeClosedWon[quote.created_by] || 0) + 1;
+            // Normalize employee name
+            const normalizedName = normalizeEmployeeName(quote.created_by, employeeMapping);
+            employeeClosedWon[normalizedName] = (employeeClosedWon[normalizedName] || 0) + 1;
           }
         }
       }
@@ -143,7 +208,10 @@ export async function GET(request: NextRequest) {
     const streakMap: Record<string, number> = {};
     if (streaks) {
       for (const streak of streaks) {
-        streakMap[streak.employee] = streak.streak_count || 0;
+        // Normalize employee name for streak mapping
+        const normalizedName = normalizeEmployeeName(streak.employee, employeeMapping);
+        // Accumulate streaks if multiple old names map to same current name
+        streakMap[normalizedName] = (streakMap[normalizedName] || 0) + (streak.streak_count || 0);
       }
     }
 

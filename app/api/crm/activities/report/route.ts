@@ -59,16 +59,16 @@ function normalizeEmployeeName(employeeId: string, mapping: Record<string, strin
   return employeeId;
 }
 
-// GET - Fetch all activities for an employee (for employees/data analysts to see their own activities)
-// or all activities (for admin only)
+// GET - Generate activities report
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const employeeUsername = searchParams.get('employee');
     const isAdmin = searchParams.get('isAdmin') === 'true';
     const isDataAnalyst = searchParams.get('isDataAnalyst') === 'true';
-    const filterEmployee = searchParams.get('filterEmployee'); // For admin only to filter by employee
-    const filterDate = searchParams.get('filterDate'); // Filter by date (YYYY-MM-DD format)
+    const filterEmployee = searchParams.get('filterEmployee');
+    const filterDate = searchParams.get('filterDate');
+    const format = searchParams.get('format') || 'json';
 
     let supabase;
     try {
@@ -81,22 +81,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get employee name mapping
+    const employeeMapping = await getEmployeeNameMapping(supabase);
+
     let query = supabase
       .from('activities')
       .select('*');
 
     // Filter by employee
-    // Only full admins see all activities; data analysts and employees see only their own
     if (isAdmin && !isDataAnalyst && filterEmployee) {
-      // Admin filtering by specific employee
       query = query.eq('employee_id', filterEmployee);
     } else if (!isAdmin || isDataAnalyst) {
-      // Data analysts and employees see only their own activities
       if (employeeUsername) {
-      query = query.eq('employee_id', employeeUsername);
+        query = query.eq('employee_id', employeeUsername);
       }
     }
-    // If isAdmin and no filterEmployee, show all activities (admin only)
 
     // Filter by date if provided
     if (filterDate) {
@@ -110,30 +109,46 @@ export async function GET(request: NextRequest) {
         .lte('created_at', endDate.toISOString());
     }
 
-    // Include all activity types including status changes and inactivity reasons
-    // (account_id can be null for status-only activities)
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(500); // Increased limit to show comprehensive daily activities
+      .limit(10000); // Large limit for comprehensive report
 
     if (error) {
-      console.error('Error fetching activities:', error);
+      console.error('Error fetching activities for report:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Get employee name mapping to normalize old IDs to current names
-    const employeeMapping = await getEmployeeNameMapping(supabase);
-
-    // Format timestamps in IST and normalize employee names
-    const formattedData = (data || []).map((activity: any) => ({
+    // Normalize employee names and format timestamps
+    const normalizedActivities = (data || []).map((activity: any) => ({
       ...activity,
       created_at: formatTimestampIST(activity.created_at),
       employee_id: normalizeEmployeeName(activity.employee_id || '', employeeMapping),
     }));
 
-    return NextResponse.json({ data: formattedData, success: true });
+    // Generate summary statistics
+    const summary = {
+      totalActivities: normalizedActivities.length,
+      byType: {} as Record<string, number>,
+      byEmployee: {} as Record<string, number>,
+    };
+
+    for (const activity of normalizedActivities) {
+      // Count by type
+      const type = activity.activity_type || 'unknown';
+      summary.byType[type] = (summary.byType[type] || 0) + 1;
+
+      // Count by employee
+      const employee = activity.employee_id || 'Unknown';
+      summary.byEmployee[employee] = (summary.byEmployee[employee] || 0) + 1;
+    }
+
+    return NextResponse.json({
+      success: true,
+      activities: normalizedActivities,
+      summary,
+    });
   } catch (error: any) {
-    console.error('Get activities error:', error);
+    console.error('Generate activities report error:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

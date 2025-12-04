@@ -14,6 +14,7 @@ export default function ActivitiesPage() {
   const [filterDate, setFilterDate] = useState<string>('');
   const [employeeOptions, setEmployeeOptions] = useState<string[]>([]);
   const [employeeStatuses, setEmployeeStatuses] = useState<Array<{username: string, status: string}>>([]);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -128,6 +129,69 @@ export default function ActivitiesPage() {
     const interval = setInterval(fetchActivities, 10000);
     return () => clearInterval(interval);
   }, [username, isAdmin, isDataAnalyst, filterEmployee, filterDate]);
+
+  // Generate report function
+  const generateReport = async () => {
+    try {
+      setIsGeneratingReport(true);
+      const params = new URLSearchParams();
+      if (!isAdmin && username) {
+        params.append('employee', username);
+      }
+      if (isAdmin && !isDataAnalyst) {
+        params.append('isAdmin', 'true');
+        if (filterEmployee) {
+          params.append('filterEmployee', filterEmployee);
+        }
+      }
+      if (isDataAnalyst) {
+        params.append('isDataAnalyst', 'true');
+      }
+      if (filterDate) {
+        params.append('filterDate', filterDate);
+      }
+      params.append('format', 'json');
+
+      const response = await fetch(`/api/crm/activities/report?${params}`);
+      const data = await response.json();
+
+      if (data.success) {
+        // Create a downloadable JSON file
+        const reportData = {
+          generatedAt: new Date().toISOString(),
+          filters: {
+            employee: filterEmployee || (username || 'All'),
+            date: filterDate || 'All dates',
+            isAdmin,
+            isDataAnalyst,
+          },
+          summary: {
+            totalActivities: data.summary?.totalActivities || activities.length,
+            byType: data.summary?.byType || {},
+            byEmployee: data.summary?.byEmployee || {},
+          },
+          activities: data.activities || activities,
+        };
+
+        const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `activities-report-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        alert('Failed to generate report: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error generating report:', error);
+      alert('Error generating report. Please try again.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   return (
       <div className="min-h-screen py-6 sm:py-8 md:py-12 pb-20 sm:pb-24 md:pb-32 relative w-full">
@@ -261,7 +325,7 @@ export default function ActivitiesPage() {
 
           {/* Activities Summary */}
           <div className="glassmorphic-premium rounded-2xl p-4 mb-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
               <div>
                 <p className="text-slate-300 text-sm">
                   {isAdmin
@@ -273,19 +337,39 @@ export default function ActivitiesPage() {
                   Updates every 10 seconds
                 </p>
               </div>
-              {!isAdmin && (
-                <div>
-                  <label className="block text-sm font-semibold text-slate-200 mb-2">
-                    Filter by Date
-                  </label>
-                  <input
-                    type="date"
-                    value={filterDate}
-                    onChange={(e) => setFilterDate(e.target.value)}
-                    className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
-                  />
+              <div className="flex items-center gap-4">
+                {!isAdmin && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-200 mb-2">
+                      Filter by Date
+                    </label>
+                    <input
+                      type="date"
+                      value={filterDate}
+                      onChange={(e) => setFilterDate(e.target.value)}
+                      className="input-premium px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                    />
+                  </div>
+                )}
+                <div className="flex items-end">
+                  <button
+                    onClick={generateReport}
+                    disabled={isGeneratingReport || activities.length === 0}
+                    className="px-6 py-2 bg-gradient-to-r from-premium-gold to-dark-gold text-white font-semibold rounded-lg shadow-lg hover:shadow-premium-gold/50 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {isGeneratingReport ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        📊 Generate Report
+                      </>
+                    )}
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
