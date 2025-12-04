@@ -120,8 +120,14 @@ export default function ThrieBeamPage() {
                                customerName.trim() !== '' &&
                                contactId !== null;
   
+  // Check if user is MBCB or Admin (price checking only, no save)
+  const isMBCBUser = username === 'MBCB';
+  const isAdminUser = username === 'Admin';
+  const isViewOnlyUser = isMBCBUser || isAdminUser;
+  
   // Track if quotation information is confirmed
-  const [isQuotationConfirmed, setIsQuotationConfirmed] = useState<boolean>(false);
+  // For MBCB and Admin users, always treat as confirmed (they skip quotation details)
+  const [isQuotationConfirmed, setIsQuotationConfirmed] = useState<boolean>(isViewOnlyUser);
   const [isEditingQuotation, setIsEditingQuotation] = useState<boolean>(false);
   
   // Progressive disclosure steps
@@ -622,7 +628,8 @@ export default function ThrieBeamPage() {
     <div className="min-h-screen flex flex-col items-start py-12 pt-16 pb-32 relative">
       <div className="w-full max-w-6xl mx-auto px-4">
 
-        {/* Quotation Information Card - Uniform Style */}
+        {/* Quotation Information Card - Uniform Style - Hidden for MBCB and Admin users */}
+        {!isViewOnlyUser && (
         <div className="glassmorphic-premium rounded-3xl p-12 animate-fade-up card-hover-gold mb-10 card-3d card-depth" style={{ overflow: 'visible' }}>
           <h2 className="text-3xl font-extrabold text-white mb-3 drop-shadow-lg">Quotation Information</h2>
           <p className="text-sm text-slate-300 mb-8">Enter quotation details. You can type manually or select from dropdown suggestions.</p>
@@ -870,6 +877,7 @@ export default function ThrieBeamPage() {
             </div>
           )}
         </div>
+        )}
 
         {/* Part Selection Toggles - Only show when quotation is confirmed */}
         {isQuotationConfirmed && fastenerMode === 'default' && (
@@ -1932,8 +1940,8 @@ export default function ThrieBeamPage() {
           </div>
         )}
 
-        {/* Save Quotation Button - Only show when quotation, cost, and quantity are confirmed */}
-        {isQuotationConfirmed && isCostConfirmed && isQuantityConfirmed && ((fastenerMode === 'manual' && calculateFastenerWeight() > 0 && ratePerKg !== null && ratePerKg > 0) || 
+        {/* Save Quotation Button - Only show when quotation, cost, and quantity are confirmed - Hidden for MBCB and Admin users */}
+        {!isViewOnlyUser && isQuotationConfirmed && isCostConfirmed && isQuantityConfirmed && ((fastenerMode === 'manual' && calculateFastenerWeight() > 0 && ratePerKg !== null && ratePerKg > 0) || 
           (fastenerMode === 'default' && totalWeight > 0 && ratePerKg !== null && ratePerKg > 0)) && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button

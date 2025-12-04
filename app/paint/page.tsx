@@ -1,11 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import SmartDropdown from '@/components/forms/SmartDropdown';
 import CustomerSelect from '@/components/forms/CustomerSelect';
 import PlaceOfSupplySelect from '@/components/forms/PlaceOfSupplySelect';
+import { useUser } from '@/contexts/UserContext';
 
 export default function PaintPage() {
+  const { username } = useUser();
+  
+  // Check if user is MBCB or Admin (price checking only, no save)
+  const isMBCBUser = username === 'MBCB';
+  const isAdminUser = username === 'Admin';
+  const isViewOnlyUser = isMBCBUser || isAdminUser;
   // Quotation header fields (mandatory)
   const [placeOfSupply, setPlaceOfSupply] = useState<string>('');
   const [quotationDate, setQuotationDate] = useState<string>(() => {
@@ -28,7 +35,8 @@ export default function PaintPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4 py-20 relative">
       <div className="w-full max-w-6xl mx-auto">
-        {/* Quotation Header Fields - Mandatory */}
+        {/* Quotation Header Fields - Mandatory - Hidden for MBCB and Admin users */}
+        {!isViewOnlyUser && (
         <div className="glassmorphic-premium rounded-3xl p-8 mb-10 slide-up card-hover-gold border-2 border-premium-gold/30">
           <h3 className="text-2xl font-extrabold text-white mb-6 drop-shadow-lg">Quotation Details</h3>
           
@@ -92,8 +100,9 @@ export default function PaintPage() {
             </div>
           </div>
         </div>
+        )}
       </div>
-      <div className={`text-center title-glow fade-up ${!isQuotationComplete ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className={`text-center title-glow fade-up ${!isViewOnlyUser && !isQuotationComplete ? 'opacity-50 pointer-events-none' : ''}`}>
         <h1 className="text-7xl md:text-8xl font-extrabold text-white mb-8 tracking-tight drop-shadow-2xl text-neon-gold" style={{ 
           textShadow: '0 0 40px rgba(209, 168, 90, 0.4), 0 0 80px rgba(209, 168, 90, 0.2), 0 0 120px rgba(116, 6, 13, 0.1)',
           letterSpacing: '-0.02em'

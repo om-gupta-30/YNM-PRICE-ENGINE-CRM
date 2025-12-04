@@ -109,9 +109,24 @@ export default function PriceEnginePage() {
         <ButtonCarousel
           items={(() => {
             // Sales Department - Price Engine
-            // Admin: Only Quotation History and Quotation Status
+            // Admin: MBCB, Signages, Paint, Quotation History, and Quotation Status (price checking only, no save)
             if (isAdmin && username === 'Admin') {
               return [
+                {
+                  title: "Metal Beam Crash Barriers (MBCB)",
+                  href: "/mbcb",
+                  icon: "⚡"
+                },
+                {
+                  title: "Signages",
+                  href: "/signages",
+                  icon: "🚦"
+                },
+                {
+                  title: "Thermoplastic Paint",
+                  href: "/paint",
+                  icon: "🎨"
+                },
                 {
                   title: "Quotation History",
                   href: "/history",
@@ -121,6 +136,27 @@ export default function PriceEnginePage() {
                   title: "Quotation Status",
                   href: "/quotation-status",
                   icon: "📊"
+                }
+              ];
+            }
+            
+            // MBCB User: Only price checking access - MBCB, Paint, Signages (no save functionality)
+            if (username === 'MBCB') {
+              return [
+                {
+                  title: "Metal Beam Crash Barriers (MBCB)",
+                  href: "/mbcb",
+                  icon: "⚡"
+                },
+                {
+                  title: "Signages",
+                  href: "/signages",
+                  icon: "🚦"
+                },
+                {
+                  title: "Thermoplastic Paint",
+                  href: "/paint",
+                  icon: "🎨"
                 }
               ];
             }
