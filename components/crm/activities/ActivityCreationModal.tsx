@@ -12,11 +12,20 @@ export default function ActivityCreationModal({ isOpen, onClose, onCreated }: Pr
   // Auto-scroll window to top when modal opens
   useEffect(() => {
     if (isOpen) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Immediately scroll window to top so modal is visible
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      
+      // Prevent body scroll
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.classList.remove('modal-open');
     };
   }, [isOpen]);
 

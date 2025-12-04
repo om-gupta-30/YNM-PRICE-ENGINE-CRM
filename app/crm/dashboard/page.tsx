@@ -210,40 +210,33 @@ export default function DashboardPage() {
 
   const loadEmployees = async () => {
     try {
-      // Fetch employees from accounts
-      const accountsRes = await fetch('/api/accounts');
-      const accountsData = await accountsRes.json();
+      // Fetch employees from the employees API (returns only valid sales employees)
+      const response = await fetch('/api/employees');
+      const data = await response.json();
       
-      const employeeSet = new Set<string>();
-      if (accountsData.accounts) {
-        accountsData.accounts.forEach((acc: any) => {
-          if (acc.assigned_employee && typeof acc.assigned_employee === 'string') {
-            employeeSet.add(acc.assigned_employee);
-          }
-        });
-      }
-
-      // Fetch employees from activities
-      const activitiesRes = await fetch('/api/crm/activities?isAdmin=true');
-      const activitiesData = await activitiesRes.json();
-      
-      if (activitiesData.data) {
-        activitiesData.data.forEach((act: any) => {
-          if (act.employee_id && typeof act.employee_id === 'string') {
-            employeeSet.add(act.employee_id);
-          }
-        });
-      }
-
-      const employeeList = Array.from(employeeSet).filter(Boolean).sort();
-      setEmployees(employeeList);
-      
-      // Auto-select first employee if available
-      if (employeeList.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(employeeList[0]);
+      if (data.success && data.employees && data.employees.length > 0) {
+        setEmployees(data.employees);
+        
+        // Auto-select first employee if available
+        if (data.employees.length > 0 && !selectedEmployee) {
+          setSelectedEmployee(data.employees[0]);
+        }
+      } else {
+        // Fallback to default employees
+        const defaultEmployees = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
+        setEmployees(defaultEmployees);
+        if (!selectedEmployee) {
+          setSelectedEmployee(defaultEmployees[0]);
+        }
       }
     } catch (err: any) {
       console.error('Error loading employees:', err);
+      // Fallback to default employees on error
+      const defaultEmployees = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
+      setEmployees(defaultEmployees);
+      if (!selectedEmployee) {
+        setSelectedEmployee(defaultEmployees[0]);
+      }
     }
   };
 

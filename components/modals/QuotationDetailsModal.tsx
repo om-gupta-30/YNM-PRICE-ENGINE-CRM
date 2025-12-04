@@ -31,17 +31,27 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
   
   // Prevent body scroll when modal is open and auto-scroll to top
   useEffect(() => {
-    // Scroll window to top so modal is visible
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Immediately scroll window to top so modal is visible
+    window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    
+    // Prevent body scroll
     document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.classList.add('modal-open');
+    
     // Auto-scroll to top of modal when opened
     setTimeout(() => {
       if (modalRef.current) {
         modalRef.current.scrollTop = 0;
       }
-    }, 100);
+    }, 10);
+    
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.classList.remove('modal-open');
     };
   }, []);
 

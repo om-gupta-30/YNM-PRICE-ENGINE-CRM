@@ -33,12 +33,32 @@ export default function EngagementScoreBadge({ score, maxScore = 100 }: Engageme
 
   // Auto-scroll modal into view when it opens
   useEffect(() => {
-    if (showModal && modalRef.current) {
+    if (showModal) {
+      // Immediately scroll window to top so modal is visible
+      window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      
+      // Prevent body scroll
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
+      
       // Small delay to ensure modal is rendered
       setTimeout(() => {
-        modalRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' });
-      }, 100);
+        if (modalRef.current) {
+          modalRef.current.scrollTop = 0;
+        }
+      }, 10);
     }
+    
+    return () => {
+      if (!showModal) {
+        document.body.style.overflow = '';
+        document.documentElement.style.overflow = '';
+        document.body.classList.remove('modal-open');
+      }
+    };
   }, [showModal]);
 
   // Ensure score is within bounds (0-100)

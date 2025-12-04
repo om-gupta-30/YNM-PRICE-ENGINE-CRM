@@ -158,47 +158,32 @@ export default function CRMDashboard() {
   };
 
   const loadAdminData = async () => {
-    // Load employee list from both accounts and activities
+    // Load employee list from the employees API (returns only valid sales employees)
     try {
-      const employeeSet = new Set<string>();
+      const response = await fetch('/api/employees');
+      const data = await response.json();
       
-      // Fetch employees from accounts
-      try {
-        const accountsRes = await fetch('/api/accounts');
-        const accountsData = await accountsRes.json();
-        if (accountsData.accounts) {
-          accountsData.accounts.forEach((acc: any) => {
-            if (acc.assigned_employee && typeof acc.assigned_employee === 'string') {
-              employeeSet.add(acc.assigned_employee);
-            }
-          });
+      if (data.success && data.employees && data.employees.length > 0) {
+        setEmployees(data.employees);
+        if (data.employees.length > 0 && !selectedEmployee) {
+          setSelectedEmployee(data.employees[0]);
         }
-      } catch (err) {
-        console.error('Error fetching employees from accounts:', err);
-      }
-
-      // Fetch employees from activities
-      try {
-        const activitiesRes = await fetch('/api/crm/activities?isAdmin=true');
-        const activitiesData = await activitiesRes.json();
-        if (activitiesData.data) {
-          activitiesData.data.forEach((act: any) => {
-            if (act.employee_id && typeof act.employee_id === 'string') {
-              employeeSet.add(act.employee_id);
-            }
-          });
+      } else {
+        // Fallback to default employees
+        const defaultEmployees = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
+        setEmployees(defaultEmployees);
+        if (!selectedEmployee) {
+          setSelectedEmployee(defaultEmployees[0]);
         }
-      } catch (err) {
-        console.error('Error fetching employees from activities:', err);
-      }
-      
-      const empList = Array.from(employeeSet).filter(Boolean).sort();
-      setEmployees(empList);
-      if (empList.length > 0 && !selectedEmployee) {
-        setSelectedEmployee(empList[0]);
       }
     } catch (err) {
       console.error('Error loading employees:', err);
+      // Fallback to default employees on error
+      const defaultEmployees = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
+      setEmployees(defaultEmployees);
+      if (!selectedEmployee) {
+        setSelectedEmployee(defaultEmployees[0]);
+      }
     }
 
     // Load admin notifications
