@@ -41,11 +41,14 @@ export default function AdminSubAccountsPage() {
   const [filterCityId, setFilterCityId] = useState<number | null>(null);
   const [filterOfficeType, setFilterOfficeType] = useState<string>('all');
   const [filterIsActive, setFilterIsActive] = useState<string>('all');
+  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
+  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
 
   // Accounts list for filter
   const [accounts, setAccounts] = useState<Array<{ id: number; accountName: string }>>([]);
   const [states, setStates] = useState<Array<{ id: number; name: string }>>([]);
   const [cities, setCities] = useState<Array<{ id: number; name: string }>>([]);
+  const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -62,8 +65,9 @@ export default function AdminSubAccountsPage() {
       fetchSubAccounts();
       fetchAccounts();
       fetchStates();
+      fetchIndustries();
     }
-  }, [isAdmin, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive]);
+  }, [isAdmin, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId]);
 
   useEffect(() => {
     if (filterStateId) {
@@ -72,6 +76,13 @@ export default function AdminSubAccountsPage() {
       setCities([]);
     }
   }, [filterStateId]);
+
+  useEffect(() => {
+    // Reset sub-industry filter when industry changes
+    if (!filterIndustryId) {
+      setFilterSubIndustryId(null);
+    }
+  }, [filterIndustryId]);
 
   const fetchSubAccounts = async () => {
     try {
@@ -83,6 +94,8 @@ export default function AdminSubAccountsPage() {
       if (filterCityId) params.append('city_id', filterCityId.toString());
       if (filterOfficeType !== 'all') params.append('office_type', filterOfficeType);
       if (filterIsActive !== 'all') params.append('is_active', filterIsActive);
+      if (filterIndustryId) params.append('industry_id', filterIndustryId.toString());
+      if (filterSubIndustryId) params.append('sub_industry_id', filterSubIndustryId.toString());
 
       const response = await fetch(`/api/admin/subaccounts?${params}`);
       const data = await response.json();
@@ -147,6 +160,20 @@ export default function AdminSubAccountsPage() {
       }
     } catch (error) {
       console.error('Error fetching cities:', error);
+    }
+  };
+
+  const fetchIndustries = async () => {
+    try {
+      const response = await fetch('/api/industries');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setIndustries(data.industries || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching industries:', error);
     }
   };
 
@@ -257,6 +284,44 @@ export default function AdminSubAccountsPage() {
                 </select>
               </div>
 
+              {/* Industry Filter */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">Industry</label>
+                <select
+                  value={filterIndustryId || ''}
+                  onChange={(e) => {
+                    setFilterIndustryId(e.target.value ? parseInt(e.target.value) : null);
+                    setFilterSubIndustryId(null);
+                  }}
+                  className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                >
+                  <option value="">All Industries</option>
+                  {industries.map((industry) => (
+                    <option key={industry.id} value={industry.id}>
+                      {industry.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sub-Industry Filter */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">Sub-Industry</label>
+                <select
+                  value={filterSubIndustryId || ''}
+                  onChange={(e) => setFilterSubIndustryId(e.target.value ? parseInt(e.target.value) : null)}
+                  disabled={!filterIndustryId}
+                  className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="">All Sub-Industries</option>
+                  {filterIndustryId && industries.find(i => i.id === filterIndustryId)?.subIndustries.map((subIndustry) => (
+                    <option key={subIndustry.id} value={subIndustry.id}>
+                      {subIndustry.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Clear Filters */}
               <div className="flex items-end">
                 <button
@@ -266,6 +331,8 @@ export default function AdminSubAccountsPage() {
                     setFilterCityId(null);
                     setFilterOfficeType('all');
                     setFilterIsActive('all');
+                    setFilterIndustryId(null);
+                    setFilterSubIndustryId(null);
                   }}
                   className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
                 >

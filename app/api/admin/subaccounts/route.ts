@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
     const cityId = searchParams.get('city_id');
     const officeType = searchParams.get('office_type');
     const isActive = searchParams.get('is_active');
+    const industryId = searchParams.get('industry_id');
+    const subIndustryId = searchParams.get('sub_industry_id');
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
         is_active,
         created_at,
         updated_at,
-        accounts:account_id(account_name, assigned_employee)
+        accounts:account_id(account_name, assigned_employee, industries)
       `)
       .order('sub_account_name', { ascending: true });
 
@@ -71,9 +73,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Filter by industry/sub-industry if specified
+    let filteredSubAccounts = subAccounts || [];
+    if (industryId || subIndustryId) {
+      filteredSubAccounts = filteredSubAccounts.filter((sub: any) => {
+        const accountIndustries = sub.accounts?.industries || [];
+        if (!accountIndustries || accountIndustries.length === 0) return false;
+        
+        // Filter by industry only
+        if (industryId && !subIndustryId) {
+          return accountIndustries.some((ind: any) => 
+            ind.industry_id === parseInt(industryId)
+          );
+        }
+        
+        // Filter by both industry and sub-industry
+        if (industryId && subIndustryId) {
+          return accountIndustries.some((ind: any) => 
+            ind.industry_id === parseInt(industryId) && 
+            ind.sub_industry_id === parseInt(subIndustryId)
+          );
+        }
+        
+        return false;
+      });
+    }
+
     // Format sub-accounts with state and city names
     const formattedSubAccounts = await Promise.all(
-      (subAccounts || []).map(async (sub: any) => {
+      filteredSubAccounts.map(async (sub: any) => {
         let stateName = null;
         let cityName = null;
 
