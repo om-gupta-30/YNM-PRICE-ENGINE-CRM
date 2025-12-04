@@ -147,10 +147,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate scores and build leaderboard entries
+    // Helper function to check if an employee is an admin
+    const isAdminUser = (employeeName: string): boolean => {
+      const lowerName = employeeName.toLowerCase().trim();
+      return lowerName === 'admin' || 
+             lowerName.startsWith('admin_') || 
+             lowerName.endsWith('_admin') ||
+             lowerName.includes('administrator');
+    };
+
+    // Calculate scores and build leaderboard entries (excluding admin users)
     const leaderboard: LeaderboardEntry[] = [];
 
     for (const employee in employeeStats) {
+      // Skip admin users - they should not be part of gamification/leaderboard
+      if (isAdminUser(employee)) {
+        continue;
+      }
+      
       const stats = employeeStats[employee];
       const streak = streakMap[employee] || 0;
 

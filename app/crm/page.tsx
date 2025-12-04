@@ -97,29 +97,47 @@ export default function CRMDashboard() {
     }
   }, []);
 
+  // Helper function to check if an employee is an admin (should not be in leaderboard)
+  const isAdminUser = (employeeName: string): boolean => {
+    const lowerName = employeeName.toLowerCase().trim();
+    return lowerName === 'admin' || 
+           lowerName.startsWith('admin_') || 
+           lowerName.endsWith('_admin') ||
+           lowerName.includes('administrator');
+  };
+
   const loadDashboardData = async (user: string, admin: boolean, analyst: boolean) => {
-    // Load leaderboard for everyone
+    // Load leaderboard for everyone (filtered to exclude admin users)
     try {
       const leaderboardRes = await fetch('/api/leaderboard?days=30');
       const leaderboardData = await leaderboardRes.json();
       if (leaderboardData.success && leaderboardData.data) {
-        setLeaderboard(leaderboardData.data);
-        const rank = leaderboardData.data.findIndex((e: LeaderboardEntry) => e.employee === user) + 1;
-        if (rank > 0) setMyRank(rank);
+        // Filter out admin users from leaderboard - admin should not be part of gamification
+        const filteredLeaderboard = leaderboardData.data.filter(
+          (entry: LeaderboardEntry) => !isAdminUser(entry.employee)
+        );
+        setLeaderboard(filteredLeaderboard);
+        // Only set rank if user is not admin (admins shouldn't have leaderboard rank)
+        if (!isAdminUser(user)) {
+          const rank = filteredLeaderboard.findIndex((e: LeaderboardEntry) => e.employee === user) + 1;
+          if (rank > 0) setMyRank(rank);
+        }
       }
     } catch (err) {
       console.error('Error loading leaderboard:', err);
     }
 
-    // Load streak
-    try {
-      const streakRes = await fetch(`/api/streaks?employee=${user}`);
-      const streakData = await streakRes.json();
-      if (streakData.success && streakData.streak) {
-        setStreak(streakData.streak);
+    // Load streak (only for non-admin users - admin should not be part of gamification)
+    if (!isAdminUser(user)) {
+      try {
+        const streakRes = await fetch(`/api/streaks?employee=${user}`);
+        const streakData = await streakRes.json();
+        if (streakData.success && streakData.streak) {
+          setStreak(streakData.streak);
+        }
+      } catch (err) {
+        console.error('Error loading streak:', err);
       }
-    } catch (err) {
-      console.error('Error loading streak:', err);
     }
 
     if (admin && !analyst) {
@@ -293,20 +311,23 @@ export default function CRMDashboard() {
                     {isAdmin ? '🔐 Admin Dashboard' : isDataAnalyst ? '📊 Data Analyst Dashboard' : '💼 Sales Dashboard'} • AI-Powered Insights
                   </p>
                 </div>
-                <div className="flex items-center gap-4">
-                  {streak && (
-                    <div className="bg-orange-500/20 border border-orange-500/50 rounded-xl px-4 py-2 text-center">
-                      <div className="text-2xl">🔥</div>
-                      <div className="text-orange-300 font-bold">{streak.streak_count} day streak!</div>
-                    </div>
-                  )}
-                  {myRank && (
-                    <div className="bg-premium-gold/20 border border-premium-gold/50 rounded-xl px-4 py-2 text-center">
-                      <div className="text-2xl">{getRankBadge(myRank)}</div>
-                      <div className="text-premium-gold font-bold">Rank #{myRank}</div>
-                    </div>
-                  )}
-                </div>
+                {/* Only show gamification elements (streak & rank) for non-admin users */}
+                {!isAdmin && (
+                  <div className="flex items-center gap-4">
+                    {streak && (
+                      <div className="bg-orange-500/20 border border-orange-500/50 rounded-xl px-4 py-2 text-center">
+                        <div className="text-2xl">🔥</div>
+                        <div className="text-orange-300 font-bold">{streak.streak_count} day streak!</div>
+                      </div>
+                    )}
+                    {myRank && (
+                      <div className="bg-premium-gold/20 border border-premium-gold/50 rounded-xl px-4 py-2 text-center">
+                        <div className="text-2xl">{getRankBadge(myRank)}</div>
+                        <div className="text-premium-gold font-bold">Rank #{myRank}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -557,7 +578,7 @@ export default function CRMDashboard() {
               {/* Leaderboard */}
               <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
                 <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  <span>🏆</span> Team Leaderboard
+                  <span>🏆</span> Employee Leaderboard
                 </h2>
                 
                 {leaderboard.length === 0 ? (

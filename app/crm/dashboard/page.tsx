@@ -106,6 +106,15 @@ export default function DashboardPage() {
     }
   };
 
+  // Helper function to check if an employee is an admin (should not be in leaderboard)
+  const isAdminUser = (employeeName: string): boolean => {
+    const lowerName = employeeName.toLowerCase().trim();
+    return lowerName === 'admin' || 
+           lowerName.startsWith('admin_') || 
+           lowerName.endsWith('_admin') ||
+           lowerName.includes('administrator');
+  };
+
   const fetchLeaderboard = async () => {
     setLoadingLeaderboard(true);
     setErrorLeaderboard(null);
@@ -113,7 +122,11 @@ export default function DashboardPage() {
       const res = await fetch('/api/leaderboard?days=30');
       const data = await res.json();
       if (data.success && data.data) {
-        setLeaderboard(data.data);
+        // Filter out admin users - admin should not be part of gamification/leaderboard
+        const filteredLeaderboard = data.data.filter(
+          (entry: any) => !isAdminUser(entry.employee)
+        );
+        setLeaderboard(filteredLeaderboard);
       } else {
         setErrorLeaderboard(data.error || 'Failed to load leaderboard');
       }
@@ -526,9 +539,9 @@ export default function DashboardPage() {
             {/* Team Leaderboard Section */}
             <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
               <div className="mb-4">
-                <h2 className="text-xl font-bold text-white mb-2">Team Leaderboard</h2>
+                <h2 className="text-xl font-bold text-white mb-2">Employee Leaderboard</h2>
                 <p className="text-slate-400 text-sm">
-                  Performance rankings based on activity, closures, and streaks (Last 30 days)
+                  Employee performance rankings based on activity, closures, and streaks (Last 30 days)
                 </p>
               </div>
 

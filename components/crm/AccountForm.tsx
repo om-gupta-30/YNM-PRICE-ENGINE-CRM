@@ -18,6 +18,7 @@ export interface AccountFormData {
   notes?: string;
   industries?: SelectedIndustry[];
   industryProjects?: Record<string, number>; // Key: "industry_id-sub_industry_id", Value: number of projects
+  assignedEmployee?: string | null; // For admin to assign accounts to employees
 }
 
 interface AccountFormProps {
@@ -68,8 +69,40 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     notes: '',
     industries: [],
     industryProjects: {},
+    assignedEmployee: null,
   });
   const [industryProjects, setIndustryProjects] = useState<Record<string, number>>({});
+  
+  // Employees list for admin assignment
+  const [employees, setEmployees] = useState<string[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+
+  // Load employees list for admin assignment
+  const loadEmployees = async () => {
+    if (!isAdmin || isDataAnalyst) return; // Only admin (not data analyst) can assign
+    
+    setLoadingEmployees(true);
+    try {
+      const response = await fetch('/api/employees');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.employees) {
+          setEmployees(data.employees);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading employees:', error);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  // Load employees when modal opens for admin
+  useEffect(() => {
+    if (isOpen && isAdmin && !isDataAnalyst) {
+      loadEmployees();
+    }
+  }, [isOpen, isAdmin, isDataAnalyst]);
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -78,6 +111,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         ...initialData,
         industries: initialData.industries || [],
         industryProjects: initialData.industryProjects || {},
+        assignedEmployee: (initialData as any).assignedEmployee || null,
       });
       setIndustryProjects(initialData.industryProjects || {});
     } else {
@@ -88,6 +122,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         notes: '',
         industries: [],
         industryProjects: {},
+        assignedEmployee: null,
       });
       setIndustryProjects({});
     }
@@ -231,6 +266,31 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                 rows={4}
               />
             </div>
+
+            {/* Assign Employee - Only visible for Admin (not Data Analyst) */}
+            {isAdmin && !isDataAnalyst && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Assign to Employee
+                </label>
+                <select
+                  value={formData.assignedEmployee || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, assignedEmployee: e.target.value || null }))}
+                  className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                  disabled={loadingEmployees}
+                >
+                  <option value="">Unassigned</option>
+                  {employees.map((emp) => (
+                    <option key={emp} value={emp}>
+                      {emp}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">
+                  {loadingEmployees ? 'Loading employees...' : 'Select an employee to assign this account to, or leave unassigned'}
+                </p>
+              </div>
+            )}
 
           </div>
 

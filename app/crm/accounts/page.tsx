@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
@@ -76,6 +76,10 @@ export default function AccountsPage() {
   // Account details modal state
   const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+
+  // Projects breakdown modal state
+  const [projectsBreakdownAccount, setProjectsBreakdownAccount] = useState<Account | null>(null);
+  const [isProjectsBreakdownOpen, setIsProjectsBreakdownOpen] = useState(false);
 
   // Sort states
   type SortField = 'accountName' | 'engagementScore' | null;
@@ -174,17 +178,27 @@ export default function AccountsPage() {
       const currentIsDataAnalyst = typeof window !== 'undefined' ? localStorage.getItem('isDataAnalyst') === 'true' : false;
       const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
       
+      // Determine assigned employee based on user role:
+      // - Admin (not data analyst): Can assign to any employee via form, use formData.assignedEmployee
+      // - Data analyst: Cannot assign accounts - keep existing or null
+      // - Employee: Auto-assign to themselves
+      const determineAssignedEmployee = (existingAssignment?: string | null) => {
+        if (currentIsDataAnalyst) {
+          // Data analysts cannot assign - keep existing
+          return existingAssignment || null;
+        }
+        if (currentIsAdmin) {
+          // Admin can assign via form - use the value from form (can be null for unassigned)
+          return formData.assignedEmployee || null;
+        }
+        // Regular employee - auto-assign to themselves
+        return currentUsername || null;
+      };
+      
       if (editAccount) {
         // Update account
         try {
-          // Data analysts cannot assign accounts - keep existing assignment
-          // Admin can assign to any employee (but form doesn't have assignment field, so keep existing)
-          // Employees cannot change assignment - keep their own assignment
-          const assignedEmployee = currentIsDataAnalyst 
-            ? (editAccount?.assignedEmployee || null) 
-            : (!currentIsAdmin && currentUsername 
-              ? currentUsername 
-              : editAccount?.assignedEmployee || null);
+          const assignedEmployee = determineAssignedEmployee(editAccount?.assignedEmployee);
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -192,7 +206,7 @@ export default function AccountsPage() {
               accountName: formData.accountName,
               companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
               companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
-              assignedEmployee: assignedEmployee || null,
+              assignedEmployee: assignedEmployee,
               notes: formData.notes || null,
               industries: formData.industries || [],
               industryProjects: formData.industryProjects || {},
@@ -217,11 +231,8 @@ export default function AccountsPage() {
         }
       }
 
-      // For employees, always use their username as assignedEmployee (auto-assigned)
-      // For admin, set to null (form doesn't have assignment field for create)
-      // Data analysts cannot assign accounts - always set to null
-      const assignedEmployee = currentIsDataAnalyst ? null : (!currentIsAdmin && currentUsername ? currentUsername : null);
       // Create new account
+      const assignedEmployee = determineAssignedEmployee(null);
       const response = await fetch('/api/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -229,7 +240,7 @@ export default function AccountsPage() {
             accountName: formData.accountName,
             companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
             companyTag: formData.companyTag && formData.companyTag.trim() !== '' ? formData.companyTag : null,
-            assignedEmployee: assignedEmployee || null,
+            assignedEmployee: assignedEmployee,
             notes: formData.notes || null,
             industries: formData.industries || [],
             industryProjects: formData.industryProjects || {},
@@ -515,8 +526,11 @@ export default function AccountsPage() {
             <p className="text-sm text-slate-300 mb-2">
               <span className="font-semibold text-premium-gold">💡 Tip:</span> Click on <span className="font-semibold text-white">"Account Name"</span> or <span className="font-semibold text-white">"Engagement Score"</span> column headers to sort ascending (↑) or descending (↓)
             </p>
-            <p className="text-sm text-slate-300">
+            <p className="text-sm text-slate-300 mb-2">
               <span className="font-semibold text-premium-gold">💡 Tip:</span> Click on any <span className="font-semibold text-white">engagement score badge</span> to view detailed score breakdown and improvement tips
+            </p>
+            <p className="text-sm text-slate-300">
+              <span className="font-semibold text-premium-gold">💡 Tip:</span> Click on <span className="font-semibold text-white">Total Projects</span> number (with 📊 icon) to see breakdown by industry and sub-industry
             </p>
           </div>
           {loading ? (
@@ -553,11 +567,10 @@ export default function AccountsPage() {
               >
                 <colgroup>
                   <col style={{ width: '80px' }} />
-                  <col style={{ width: '250px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '180px' }} />
-                  <col style={{ width: '120px' }} />
+                  <col style={{ width: '280px' }} />
+                  <col style={{ width: '140px' }} />
                   <col style={{ width: '200px' }} />
+                  <col style={{ width: '180px' }} />
                   <col style={{ width: '280px' }} />
                 </colgroup>
                 <thead>
@@ -569,9 +582,7 @@ export default function AccountsPage() {
                         {sortField === 'accountName' && <span className="text-premium-gold ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>}
                       </button>
                     </th>
-                    <th className="crm-th">Industry</th>
-                    <th className="crm-th">Sub Industry</th>
-                    <th className="crm-th">Projects</th>
+                    <th className="crm-th">Total Projects</th>
                     <th className="crm-th score-col">
                       <button onClick={() => handleSort('engagementScore')} className="hover:text-premium-gold transition-colors">
                         <span>Engagement Score</span>
@@ -585,19 +596,30 @@ export default function AccountsPage() {
                 <tbody>
                   {paginatedAccounts.map((account, idx) => {
                     const globalIndex = (currentPage - 1) * itemsPerPage + idx;
-                    // Get first industry and sub-industry for display
-                    const firstIndustry = account.industries && account.industries.length > 0 ? account.industries[0] : null;
-                    const industryName = firstIndustry?.industry_name || 'N/A';
-                    const subIndustryName = firstIndustry?.sub_industry_name || 'N/A';
                     // Calculate total number of projects
                     const totalProjects = account.industryProjects ? Object.values(account.industryProjects).reduce((sum: number, count: any) => sum + (Number(count) || 0), 0) : 0;
+                    const hasProjectsBreakdown = account.industries && account.industries.length > 0 && totalProjects > 0;
                     return (
                     <tr key={account.id} className="crm-tr">
                       <td className="crm-td sr-col">{globalIndex + 1}</td>
                       <td className="crm-td acc-col" title={account.accountName}>{account.accountName}</td>
-                      <td className="crm-td" title={industryName}>{industryName}</td>
-                      <td className="crm-td" title={subIndustryName}>{subIndustryName}</td>
-                      <td className="crm-td">{totalProjects}</td>
+                      <td className="crm-td">
+                        {hasProjectsBreakdown ? (
+                          <button
+                            onClick={() => {
+                              setProjectsBreakdownAccount(account);
+                              setIsProjectsBreakdownOpen(true);
+                            }}
+                            className="px-3 py-1 bg-premium-gold/20 hover:bg-premium-gold/30 border border-premium-gold/40 rounded-lg text-premium-gold font-semibold transition-all duration-200 flex items-center gap-1.5"
+                            title="Click to view breakdown by industry"
+                          >
+                            <span>{totalProjects}</span>
+                            <span className="text-xs">📊</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">{totalProjects}</span>
+                        )}
+                      </td>
                       <td className="crm-td score-col">
                         <EngagementScoreBadge score={account.engagementScore || 0} />
                       </td>
@@ -664,6 +686,7 @@ export default function AccountsPage() {
           companyTag: editAccount.companyTag || '',
           notes: editAccount.notes || '',
           industries: editAccount.industries || [],
+          assignedEmployee: editAccount.assignedEmployee || null,
         } : null}
         mode={editAccount ? 'edit' : 'create'}
       />
@@ -676,6 +699,168 @@ export default function AccountsPage() {
           onClose={() => setToast(null)}
         />
       )}
+
+      {/* Projects Breakdown Modal */}
+      {isProjectsBreakdownOpen && projectsBreakdownAccount && (
+        <ProjectsBreakdownModal
+          isOpen={isProjectsBreakdownOpen}
+          onClose={() => {
+            setIsProjectsBreakdownOpen(false);
+            setProjectsBreakdownAccount(null);
+          }}
+          account={projectsBreakdownAccount}
+        />
+      )}
+    </div>
+  );
+}
+
+// Projects Breakdown Modal Component
+function ProjectsBreakdownModal({ 
+  isOpen, 
+  onClose, 
+  account 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  account: Account;
+}) {
+  const modalRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll when modal opens
+  React.useEffect(() => {
+    if (isOpen) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => {
+        if (modalRef.current) {
+          modalRef.current.scrollTop = 0;
+        }
+      }, 50);
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  // Get project breakdown data
+  const industries = account.industries || [];
+  const industryProjects = account.industryProjects || {};
+  
+  // Calculate total
+  const totalProjects = Object.values(industryProjects).reduce((sum: number, count: any) => sum + (Number(count) || 0), 0);
+
+  // Group projects by industry
+  const groupedByIndustry: Record<string, { name: string; subIndustries: Array<{ name: string; projects: number }> }> = {};
+  
+  industries.forEach((ind) => {
+    const key = `${ind.industry_id}-${ind.sub_industry_id}`;
+    const projectCount = industryProjects[key] || 0;
+    
+    if (!groupedByIndustry[ind.industry_name]) {
+      groupedByIndustry[ind.industry_name] = {
+        name: ind.industry_name,
+        subIndustries: []
+      };
+    }
+    
+    groupedByIndustry[ind.industry_name].subIndustries.push({
+      name: ind.sub_industry_name,
+      projects: projectCount
+    });
+  });
+
+  return (
+    <div 
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
+      onClick={onClose}
+    >
+      <div 
+        ref={modalRef}
+        className="glassmorphic-premium rounded-3xl p-6 md:p-8 max-w-2xl w-full border-2 border-premium-gold/30 shadow-2xl"
+        style={{ maxHeight: '85vh', overflowY: 'auto' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-extrabold text-white drop-shadow-lg">Projects Breakdown</h2>
+            <p className="text-slate-400 text-sm mt-1">{account.accountName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white text-3xl font-bold transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Total Projects Summary */}
+        <div className="bg-premium-gold/20 border border-premium-gold/40 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <span className="text-white font-semibold">Total Projects</span>
+            <span className="text-2xl font-bold text-premium-gold">{totalProjects}</span>
+          </div>
+        </div>
+
+        {/* Breakdown by Industry */}
+        <div className="space-y-4">
+          {Object.entries(groupedByIndustry).length > 0 ? (
+            Object.entries(groupedByIndustry).map(([industryName, data]) => {
+              const industryTotal = data.subIndustries.reduce((sum, si) => sum + si.projects, 0);
+              return (
+                <div key={industryName} className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                  {/* Industry Header */}
+                  <div className="bg-slate-700/50 px-4 py-3 flex items-center justify-between">
+                    <span className="text-white font-semibold flex items-center gap-2">
+                      <span className="text-lg">🏭</span>
+                      {industryName}
+                    </span>
+                    <span className="text-premium-gold font-bold bg-premium-gold/20 px-3 py-1 rounded-full text-sm">
+                      {industryTotal} projects
+                    </span>
+                  </div>
+                  
+                  {/* Sub-industries */}
+                  <div className="p-4 space-y-2">
+                    {data.subIndustries.map((si, idx) => (
+                      <div 
+                        key={idx} 
+                        className="flex items-center justify-between px-3 py-2 bg-slate-900/50 rounded-lg border border-slate-700/30"
+                      >
+                        <span className="text-slate-300 flex items-center gap-2">
+                          <span className="text-slate-500">↳</span>
+                          {si.name}
+                        </span>
+                        <span className="text-white font-semibold bg-slate-700/50 px-2 py-0.5 rounded text-sm">
+                          {si.projects}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="text-center py-8 text-slate-400">
+              <div className="text-4xl mb-3">📋</div>
+              <p>No industry breakdown available</p>
+            </div>
+          )}
+        </div>
+
+        {/* Close Button */}
+        <div className="mt-6 pt-4 border-t border-white/10">
+          <button
+            onClick={onClose}
+            className="w-full px-6 py-3 text-sm font-semibold text-white bg-slate-600/80 hover:bg-slate-700 rounded-lg transition-all duration-200"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
