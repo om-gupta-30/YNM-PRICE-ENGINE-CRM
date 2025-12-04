@@ -61,10 +61,10 @@ export async function GET(request: NextRequest) {
     const accountsWithScores = await Promise.all(
       (accounts || []).map(async (account) => {
         try {
-          // Get sub-accounts to calculate engagement score
+          // Get sub-accounts to calculate engagement score and get state/city
           const { data: subAccounts, error: subAccountsError } = await supabase
             .from('sub_accounts')
-            .select('id, engagement_score, sub_account_name')
+            .select('id, engagement_score, sub_account_name, state_id, city_id')
             .eq('account_id', account.id)
             .eq('is_active', true)
             .order('engagement_score', { ascending: false });
@@ -81,6 +81,10 @@ export async function GET(request: NextRequest) {
               industries: account.industries || [],
               industryProjects: account.industry_projects || {},
               assignedEmployee: account.assigned_employee || null,
+              stateId: null,
+              cityId: null,
+              stateName: null,
+              cityName: null,
               createdAt: formatTimestampIST(account.created_at),
               updatedAt: formatTimestampIST(account.updated_at),
             };
@@ -90,6 +94,46 @@ export async function GET(request: NextRequest) {
             (sum, sub) => sum + (parseFloat(sub.engagement_score?.toString() || '0') || 0),
             0
           ) || 0;
+
+          // Get state and city from first sub-account (since all accounts have only one sub-account for now)
+          let stateId = null;
+          let cityId = null;
+          let stateName = null;
+          let cityName = null;
+
+          if (subAccounts && subAccounts.length > 0) {
+            const firstSubAccount = subAccounts[0];
+            stateId = firstSubAccount.state_id || null;
+            cityId = firstSubAccount.city_id || null;
+
+            // Fetch state name if state_id exists
+            if (stateId) {
+              try {
+                const { data: stateData } = await supabase
+                  .from('states')
+                  .select('state_name')
+                  .eq('id', stateId)
+                  .single();
+                stateName = stateData?.state_name || null;
+              } catch (err) {
+                console.error(`Error fetching state for account ${account.id}:`, err);
+              }
+            }
+
+            // Fetch city name if city_id exists
+            if (cityId) {
+              try {
+                const { data: cityData } = await supabase
+                  .from('cities')
+                  .select('city_name')
+                  .eq('id', cityId)
+                  .single();
+                cityName = cityData?.city_name || null;
+              } catch (err) {
+                console.error(`Error fetching city for account ${account.id}:`, err);
+              }
+            }
+          }
 
           return {
             id: account.id,
@@ -101,6 +145,10 @@ export async function GET(request: NextRequest) {
             industries: account.industries || [],
             industryProjects: account.industry_projects || {},
             assignedEmployee: account.assigned_employee || null,
+            stateId,
+            cityId,
+            stateName,
+            cityName,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };
@@ -117,6 +165,10 @@ export async function GET(request: NextRequest) {
             industries: account.industries || [],
             industryProjects: account.industry_projects || {},
             assignedEmployee: account.assigned_employee || null,
+            stateId: null,
+            cityId: null,
+            stateName: null,
+            cityName: null,
             createdAt: formatTimestampIST(account.created_at),
             updatedAt: formatTimestampIST(account.updated_at),
           };

@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface PdfPreviewModalProps {
   pdfBlob: Blob | null;
@@ -16,6 +18,12 @@ export default function PdfPreviewModal({
   fileName = 'preview.pdf',
 }: PdfPreviewModalProps) {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (pdfBlob && isOpen) {
@@ -30,26 +38,24 @@ export default function PdfPreviewModal({
     }
   }, [pdfBlob, isOpen]);
 
-  // Prevent body scroll when modal is open
+  // Bring modal into view when it opens
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen || !pdfUrl) {
+  if (!isOpen || !pdfUrl || !mounted) {
     return null;
   }
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
+        ref={modalRef}
         className="relative w-full h-full max-w-6xl max-h-[90vh] bg-white rounded-lg shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -105,5 +111,7 @@ export default function PdfPreviewModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

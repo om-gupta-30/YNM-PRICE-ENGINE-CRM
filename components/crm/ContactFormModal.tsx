@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Contact, CallStatus } from '@/lib/constants/types';
-import useModalAutoScroll from '@/hooks/useModalAutoScroll';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface ContactFormModalProps {
   accountId?: number;
@@ -14,8 +15,20 @@ interface ContactFormModalProps {
 }
 
 export default function ContactFormModal({ accountId, subAccountId, contact, subAccounts = [], onClose, onSuccess }: ContactFormModalProps) {
-  // Auto-scroll when modal opens (always true since component is mounted when open)
-  const modalContentRef = useModalAutoScroll(true);
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (modalRef.current) {
+      bringElementIntoView(modalRef.current);
+    }
+  }, []);
 
   const [formData, setFormData] = useState({
     name: contact?.name || '',
@@ -84,9 +97,11 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
     setShowCalendar(true);
   };
 
-  return (
+  if (!mounted) return null;
+
+  const modalContent = (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div ref={modalContentRef} className="glassmorphic-premium rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div ref={modalRef} className="glassmorphic-premium rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold text-white">
             {contact ? 'Edit Contact' : 'Add Contact'}
@@ -225,5 +240,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface DeleteConfirmationModalProps {
   isOpen: boolean;
@@ -25,17 +27,21 @@ export default function DeleteConfirmationModal({
   message,
   isDeleting = false,
 }: DeleteConfirmationModalProps) {
-  // Prevent body scroll when modal is open
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleCancel = onCancel || onClose || (() => {});
   const displayTitle = title || 'Delete Quotation?';
@@ -56,12 +62,13 @@ export default function DeleteConfirmationModal({
     </>
   );
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-up"
       onClick={handleCancel}
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl p-8 max-w-md w-full border-2 border-red-500/30 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -109,5 +116,7 @@ export default function DeleteConfirmationModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

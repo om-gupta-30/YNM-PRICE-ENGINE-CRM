@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Lead } from '@/app/crm/leads/page';
 import LeadQuickActions from '@/components/crm/LeadQuickActions';
 import LeadActivityTimeline from '@/components/crm/LeadActivityTimeline';
 import AddNoteModal from '@/components/crm/AddNoteModal';
 import SetFollowUpModal from '@/components/crm/SetFollowUpModal';
 import { calculateLeadScore } from '@/lib/utils/leadScore';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface LeadDetailsModalProps {
   isOpen: boolean;
@@ -24,24 +26,20 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
   const [employees, setEmployees] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   const modalRef = React.useRef<HTMLDivElement>(null);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
       loadEmployees();
-      
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 10);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
   const loadEmployees = async () => {
@@ -63,7 +61,7 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
     }
   };
 
-  if (!isOpen || !lead) return null;
+  if (!isOpen || !lead || !mounted) return null;
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return '-';
@@ -247,12 +245,11 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
 
   const leadScore = calculateLeadScore(lead);
 
-  return (
+  const modalContent = (
     <>
     <div 
       className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
-      style={{ overflowY: 'auto' }}
     >
       <div 
           ref={modalRef}
@@ -526,4 +523,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
       />
     </>
   );
+
+  return createPortal(modalContent, document.body);
 }

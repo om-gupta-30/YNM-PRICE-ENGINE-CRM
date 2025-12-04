@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface SetFollowUpModalProps {
   isOpen: boolean;
@@ -14,24 +16,21 @@ interface SetFollowUpModalProps {
 export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, currentFollowUpDate, onFollowUpSet }: SetFollowUpModalProps) {
   const [followUpDate, setFollowUpDate] = useState(currentFollowUpDate || '');
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 10);
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,7 +100,7 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
@@ -172,5 +171,7 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

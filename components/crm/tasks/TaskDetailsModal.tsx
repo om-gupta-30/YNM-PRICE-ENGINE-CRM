@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Task } from '@/lib/constants/types';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface TaskDetailsModalProps {
   task: Task | null;
@@ -10,24 +12,29 @@ interface TaskDetailsModalProps {
 }
 
 export default function TaskDetailsModal({ task, isOpen, onClose }: TaskDetailsModalProps) {
-  // Prevent body scroll when modal is open
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen || !task) return null;
+  if (!isOpen || !task || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl border border-white/10 p-6 w-full max-w-lg shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -69,4 +76,6 @@ export default function TaskDetailsModal({ task, isOpen, onClose }: TaskDetailsM
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

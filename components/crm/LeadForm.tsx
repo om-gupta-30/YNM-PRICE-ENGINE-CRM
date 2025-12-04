@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import useModalAutoScroll from '@/hooks/useModalAutoScroll';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 export interface LeadFormData {
   lead_name: string;
@@ -29,8 +30,20 @@ const LEAD_SOURCES = ['Website', 'Referral', 'Inbound Call', 'Existing Customer'
 const LEAD_STATUSES = ['New', 'In Progress', 'Quotation Sent', 'Follow-up', 'Closed', 'Lost'];
 
 export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode = 'create' }: LeadFormProps) {
-  // Auto-scroll when modal opens
-  const modalContentRef = useModalAutoScroll(isOpen);
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
+    }
+  }, [isOpen]);
 
   const [formData, setFormData] = useState<LeadFormData>({
     lead_name: '',
@@ -274,14 +287,15 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     onSubmit(formData);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div 
-      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fade-up overflow-hidden"
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl max-w-2xl w-full border-2 border-premium-gold/30 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -548,5 +562,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

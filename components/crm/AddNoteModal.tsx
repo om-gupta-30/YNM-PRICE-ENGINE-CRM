@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface AddNoteModalProps {
   isOpen: boolean;
@@ -13,24 +15,21 @@ interface AddNoteModalProps {
 export default function AddNoteModal({ isOpen, onClose, leadId, leadName, onNoteAdded }: AddNoteModalProps) {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 10);
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +71,7 @@ export default function AddNoteModal({ isOpen, onClose, leadId, leadName, onNote
     }
   };
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
@@ -128,5 +127,7 @@ export default function AddNoteModal({ isOpen, onClose, leadId, leadName, onNote
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

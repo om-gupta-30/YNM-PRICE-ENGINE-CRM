@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import IndustrySelector from './IndustrySelector';
-import useModalAutoScroll from '@/hooks/useModalAutoScroll';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -33,8 +34,20 @@ interface AccountFormProps {
 }
 
 export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, isDataAnalyst = false, currentUser = '' }: AccountFormProps) {
-  // Auto-scroll when modal opens
-  const modalContentRef = useModalAutoScroll(isOpen);
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const modalContentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
+    }
+  }, [isOpen]);
 
   // Company Stage options (from enum)
   const companyStageOptions = [
@@ -165,14 +178,15 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
     }));
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div 
-      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fade-up overflow-hidden"
+      className="fixed inset-0 z-[10001] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl max-w-4xl w-full border-2 border-premium-gold/30 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -190,7 +204,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
         </div>
 
         {/* Scrollable Form Content */}
-        <div ref={modalContentRef} className="flex-1 overflow-y-auto px-6 py-4 modal-scrollable">
+        <div ref={modalContentRef} className="flex-1 overflow-y-auto px-6 py-4">
           <form onSubmit={handleSubmit} className="space-y-6">
           {/* Company Details Section */}
           <div className="space-y-4">
@@ -365,5 +379,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

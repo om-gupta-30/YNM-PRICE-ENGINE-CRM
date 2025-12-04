@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface ComingSoonModalProps {
   isOpen: boolean;
@@ -9,24 +11,29 @@ interface ComingSoonModalProps {
 }
 
 export default function ComingSoonModal({ isOpen, onClose, feature }: ComingSoonModalProps) {
-  // Prevent body scroll when modal is open
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl p-8 max-w-md w-full border-2 border-premium-gold/30 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -46,5 +53,7 @@ export default function ComingSoonModal({ isOpen, onClose, feature }: ComingSoon
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 

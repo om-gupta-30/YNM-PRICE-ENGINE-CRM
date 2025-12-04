@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface EngagementScoreBadgeProps {
   score: number;
@@ -31,22 +32,11 @@ export default function EngagementScoreBadge({ score, maxScore = 100 }: Engageme
     setMounted(true);
   }, []);
 
-  // Prevent body scroll when modal is open
+  // Bring modal into view when it opens
   useEffect(() => {
-    if (showModal) {
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 10);
+    if (showModal && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    
-    return () => {
-      if (!showModal) {
-        document.body.style.overflow = '';
-      }
-    };
   }, [showModal]);
 
   // Ensure score is within bounds (0-100)

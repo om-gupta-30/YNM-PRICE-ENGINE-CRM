@@ -1,34 +1,19 @@
-'use client';
+/**
+ * @deprecated This hook is no longer used. Modals now use portals and bringElementIntoView
+ * instead of locking body scroll. This hook is kept for backwards compatibility but does nothing.
+ * 
+ * Use bringElementIntoView utility and React portals instead.
+ */
 
-import { useEffect, useRef, RefObject } from 'react';
+import { useRef, RefObject } from 'react';
 
 /**
- * Custom hook for modal behavior
- * - Simply prevents body scroll while modal is open
- * - Scrolls modal content to top
+ * @deprecated - Returns a ref but does not lock scroll. Kept for backwards compatibility.
+ * Use bringElementIntoView utility and React portals instead.
  */
 export function useModalAutoScroll(isOpen: boolean): RefObject<HTMLDivElement> {
   const modalRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Just hide overflow on body
-      document.body.style.overflow = 'hidden';
-      
-      // Scroll modal content to top
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 10);
-    }
-    
-    return () => {
-      // Restore body scroll
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
-
+  // No scroll locking - modals use portals and bringElementIntoView instead
   return modalRef;
 }
 

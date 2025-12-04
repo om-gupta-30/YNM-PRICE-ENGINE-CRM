@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface Props {
   isOpen: boolean;
@@ -9,24 +11,29 @@ interface Props {
 }
 
 export default function ActivityCreationModal({ isOpen, onClose, onCreated }: Props) {
-  // Prevent body scroll when modal is open
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl border border-white/10 p-6 w-full max-w-xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -56,4 +63,6 @@ export default function ActivityCreationModal({ isOpen, onClose, onCreated }: Pr
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

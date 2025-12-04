@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface InactivityReasonModalProps {
   isOpen: boolean;
@@ -12,18 +14,21 @@ interface InactivityReasonModalProps {
 export default function InactivityReasonModal({ isOpen, onClose, onSubmit, username }: InactivityReasonModalProps) {
   const [reason, setReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +47,12 @@ export default function InactivityReasonModal({ isOpen, onClose, onSubmit, usern
     }
   };
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10002] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-up"
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl max-w-2xl w-full border-2 border-premium-gold/30 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -96,4 +102,6 @@ export default function InactivityReasonModal({ isOpen, onClose, onSubmit, usern
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }

@@ -24,6 +24,10 @@ interface Account {
   notes: string | null;
   industries?: SelectedIndustry[];
   industryProjects?: Record<string, number>;
+  stateId?: number | null;
+  cityId?: number | null;
+  stateName?: string | null;
+  cityName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -72,6 +76,10 @@ export default function AccountsPage() {
   const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
   const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterStateId, setFilterStateId] = useState<number | null>(null);
+  const [filterCityId, setFilterCityId] = useState<number | null>(null);
+  const [states, setStates] = useState<Array<{ id: number; name: string }>>([]);
+  const [cities, setCities] = useState<Array<{ id: number; name: string; state_id: number }>>([]);
 
   // Account details modal state
   const [selectedAccountDetails, setSelectedAccountDetails] = useState<Account | null>(null);
@@ -135,6 +143,32 @@ export default function AccountsPage() {
       }
     } catch (error) {
       console.error('Error fetching industries:', error);
+    }
+  };
+
+  // Fetch states
+  const fetchStates = async () => {
+    try {
+      const response = await fetch('/api/states');
+      const data = await response.json();
+      if (data.success && Array.isArray(data.states)) {
+        setStates(data.states);
+      }
+    } catch (error) {
+      console.error('Error fetching states:', error);
+    }
+  };
+
+  // Fetch cities for selected state
+  const fetchCities = async (stateId: number) => {
+    try {
+      const response = await fetch(`/api/cities?state_id=${stateId}`);
+      const data = await response.json();
+      if (data.success && Array.isArray(data.cities)) {
+        setCities(data.cities);
+      }
+    } catch (error) {
+      console.error('Error fetching cities:', error);
     }
   };
 
@@ -341,6 +375,16 @@ export default function AccountsPage() {
       });
     }
     
+    // Apply state filter
+    if (filterStateId) {
+      filtered = filtered.filter(account => account.stateId === filterStateId);
+    }
+    
+    // Apply city filter
+    if (filterCityId) {
+      filtered = filtered.filter(account => account.cityId === filterCityId);
+    }
+    
     // Apply sorting
     if (sortField) {
       filtered.sort((a, b) => {
@@ -357,7 +401,7 @@ export default function AccountsPage() {
     }
     
     return filtered;
-  }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery]);
+  }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId]);
   
   // Paginated accounts for performance (only render visible items)
   const paginatedAccounts = useMemo(() => {
@@ -392,6 +436,7 @@ export default function AccountsPage() {
     if (currentUsername || currentIsAdmin || currentIsDataAnalyst) {
       fetchAccounts();
       fetchIndustries();
+      fetchStates();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, isAdmin, isDataAnalyst]);
@@ -407,10 +452,20 @@ export default function AccountsPage() {
     }
   }, [filterIndustryId, industries]);
 
+  // Fetch cities when state filter changes
+  useEffect(() => {
+    if (filterStateId) {
+      fetchCities(filterStateId);
+    } else {
+      setCities([]);
+      setFilterCityId(null);
+    }
+  }, [filterStateId]);
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery]);
+  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId]);
 
   // ========== RENDER ==========
   return (
@@ -462,7 +517,7 @@ export default function AccountsPage() {
         {/* Filters */}
         <div className="mb-6 bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
           <h3 className="text-sm font-semibold text-white mb-3">Filters</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Industry Filter */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-2">Industry</label>
@@ -501,13 +556,54 @@ export default function AccountsPage() {
               </select>
             </div>
 
+            {/* State Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-2">State</label>
+              <select
+                value={filterStateId || ''}
+                onChange={(e) => {
+                  const newStateId = e.target.value ? parseInt(e.target.value) : null;
+                  setFilterStateId(newStateId);
+                  setFilterCityId(null); // Reset city when state changes
+                }}
+                className="input-premium w-full px-3 py-2 text-sm text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+              >
+                <option value="">All States</option>
+                {states.map((state) => (
+                  <option key={state.id} value={state.id}>
+                    {state.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* City Filter */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-2">City</label>
+              <select
+                value={filterCityId || ''}
+                onChange={(e) => setFilterCityId(e.target.value ? parseInt(e.target.value) : null)}
+                disabled={!filterStateId}
+                className="input-premium w-full px-3 py-2 text-sm text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="">All Cities</option>
+                {cities.map((city) => (
+                  <option key={city.id} value={city.id}>
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Clear Filters */}
-            {(filterIndustryId || filterSubIndustryId || searchQuery.trim()) && (
-              <div className="flex items-end">
+            {(filterIndustryId || filterSubIndustryId || filterStateId || filterCityId || searchQuery.trim()) && (
+              <div className="flex items-end md:col-span-2 lg:col-span-4">
                 <button
                   onClick={() => {
                     setFilterIndustryId(null);
                     setFilterSubIndustryId(null);
+                    setFilterStateId(null);
+                    setFilterCityId(null);
                     setSearchQuery('');
                   }}
                   className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
@@ -727,20 +823,14 @@ function ProjectsBreakdownModal({
 }) {
   const modalRef = React.useRef<HTMLDivElement>(null);
 
-  // Auto-scroll when modal opens
+  // Bring modal into view when it opens
   React.useEffect(() => {
-    if (isOpen) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => {
-        if (modalRef.current) {
-          modalRef.current.scrollTop = 0;
-        }
-      }, 50);
+    if (isOpen && modalRef.current) {
+      // Dynamic import to avoid SSR issues
+      import('@/lib/utils/bringElementIntoView').then(({ bringElementIntoView }) => {
+        bringElementIntoView(modalRef.current);
+      });
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
   }, [isOpen]);
 
   if (!isOpen) return null;

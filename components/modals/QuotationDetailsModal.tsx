@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Quote } from '@/lib/constants/types';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface QuotationDetailsModalProps {
   quote: Quote;
@@ -9,7 +11,20 @@ interface QuotationDetailsModalProps {
 }
 
 export default function QuotationDetailsModal({ quote, onClose }: QuotationDetailsModalProps) {
+  const [mounted, setMounted] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (modalRef.current) {
+      bringElementIntoView(modalRef.current);
+    }
+  }, []);
+
   const formatIndianUnits = (value: number): string => {
     const formatted = value.toLocaleString('en-IN', { 
       minimumFractionDigits: 0, 
@@ -28,26 +43,13 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
     const crores = value / 10000000;
     return `${crores.toFixed(1)} Crores`;
   };
-  
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    setTimeout(() => {
-      if (modalRef.current) {
-        modalRef.current.scrollTop = 0;
-      }
-    }, 10);
-    
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
 
-  return (
+  if (!mounted) return null;
+
+  const modalContent = (
     <div 
       className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-up"
       onClick={onClose}
-      style={{ overflowY: 'auto' }}
     >
       <div 
         ref={modalRef}
@@ -145,5 +147,7 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
 
