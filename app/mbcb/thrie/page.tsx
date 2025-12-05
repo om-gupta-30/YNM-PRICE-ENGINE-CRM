@@ -16,6 +16,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { PortalPopperContainer } from '@/components/ui/PortalPopperContainer';
+import { generateQuotationPDF, getHSNCode as getPDFHSNCode, loadLogoAsBase64 } from '@/lib/utils/quotationPdf';
 
 type PartInput = {
   thickness?: number;
@@ -107,6 +108,23 @@ export default function ThrieBeamPage() {
   const [contactId, setContactId] = useState<number | null>(null);
   const [customerName, setCustomerName] = useState<string>(''); // Contact name
   
+  // Address states for PDF
+  const [shipToAddress, setShipToAddress] = useState<{
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+  } | null>(null);
+  const [billToAddress, setBillToAddress] = useState<{
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    gstNumber?: string;
+  } | null>(null);
+  
   // Check if all quotation fields are filled
   const isQuotationComplete = stateId !== null && 
                                cityId !== null && 
@@ -135,6 +153,60 @@ export default function ThrieBeamPage() {
   const showAccountSelection = showDates && estimateDate !== null && expiryDate !== null;
   const showCustomerAndPurpose = showAccountSelection && accountId !== null;
   const showTermsAndConditions = showCustomerAndPurpose && subAccountId !== null && contactId !== null && customerName.trim() !== '' && purpose.trim() !== '';
+  
+  // Fetch sub-account addresses when sub-account is selected
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      if (!accountId || !subAccountId) {
+        setShipToAddress(null);
+        setBillToAddress(null);
+        return;
+      }
+      
+      try {
+        const response = await fetch(`/api/subaccounts?account_id=${accountId}`);
+        const data = await response.json();
+        
+        if (data.success && data.subAccounts) {
+          const selectedSubAccount = data.subAccounts.find((sa: any) => sa.id === subAccountId);
+          if (selectedSubAccount) {
+            setShipToAddress({
+              name: selectedSubAccount.subAccountName,
+              address: selectedSubAccount.address || '',
+              city: selectedSubAccount.cityName || '',
+              state: selectedSubAccount.stateName || '',
+              pincode: selectedSubAccount.pincode || '',
+            });
+          }
+          
+          const headquarter = data.subAccounts.find((sa: any) => sa.isHeadquarter === true);
+          if (headquarter) {
+            setBillToAddress({
+              name: headquarter.subAccountName,
+              address: headquarter.address || '',
+              city: headquarter.cityName || '',
+              state: headquarter.stateName || '',
+              pincode: headquarter.pincode || '',
+              gstNumber: headquarter.gstNumber || '',
+            });
+          } else if (selectedSubAccount) {
+            setBillToAddress({
+              name: selectedSubAccount.subAccountName,
+              address: selectedSubAccount.address || '',
+              city: selectedSubAccount.cityName || '',
+              state: selectedSubAccount.stateName || '',
+              pincode: selectedSubAccount.pincode || '',
+              gstNumber: selectedSubAccount.gstNumber || '',
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching sub-account addresses:', error);
+      }
+    };
+    
+    fetchAddresses();
+  }, [accountId, subAccountId]);
   
   // Fetch estimate number when quotation is confirmed
   useEffect(() => {
@@ -498,6 +570,37 @@ export default function ThrieBeamPage() {
   
   const { materialCostPerRm, transportCostPerRm, installationCostPerRmValue, totalCostPerRm, finalTotal, fastenerMaterialCostPerRm, fastenerTransportCostPerRm } = costCalculations;
 
+  // Calculate GST based on place of supply
+  // CORRECT: Telangana (intra-state) = SGST + CGST, Other states (inter-state) = IGST
+  const gstCalculations = useMemo(() => {
+    if (!finalTotal || finalTotal <= 0) return null;
+    
+    const isTelangana = stateName.toLowerCase().includes('telangana');
+    
+    if (isTelangana) {
+      // For Telangana (intra-state), apply 9% SGST + 9% CGST
+      const sgst = finalTotal * 0.09;
+      const cgst = finalTotal * 0.09;
+      return {
+        sgst,
+        cgst,
+        igst: 0,
+        totalWithGST: finalTotal + sgst + cgst,
+        isTelangana: true,
+      };
+    } else {
+      // For other states (inter-state), apply 18% IGST
+      const igst = finalTotal * 0.18;
+      return {
+        sgst: 0,
+        cgst: 0,
+        igst,
+        totalWithGST: finalTotal + igst,
+        isTelangana: false,
+      };
+    }
+  }, [finalTotal, stateName]);
+
   // Save Quotation Function (separate from PDF)
   const handleSaveQuotation = async () => {
     // Prevent duplicate saves
@@ -621,6 +724,144 @@ export default function ThrieBeamPage() {
       setToast({ message: 'Error saving quotation. Please try again.', type: 'error' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // Generate PDF Function (Employee Only)
+  const handleGeneratePDF = async () => {
+    if (!isQuotationComplete) {
+      setToast({ message: 'Please complete all mandatory quotation fields', type: 'error' });
+      return;
+    }
+
+    if (!finalTotal || !gstCalculations) {
+      setToast({ message: 'Please complete all calculations before generating PDF', type: 'error' });
+      return;
+    }
+
+    try {
+      // Fetch a NEW estimate number for each PDF generated
+      let pdfEstimateNumber = estimateNumber;
+      try {
+        const estResponse = await fetch('/api/estimate/next-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (estResponse.ok) {
+          const estData = await estResponse.json();
+          if (estData.estimateNumber) {
+            pdfEstimateNumber = estData.estimateNumber;
+            setEstimateNumber(pdfEstimateNumber);
+          }
+        }
+      } catch (e) {
+        console.log('Could not fetch new estimate number, using existing');
+      }
+      
+      // Load logo
+      const logoBase64 = await loadLogoAsBase64();
+      
+      const items = [];
+      
+      // Build description for crash barrier components (clubbed together)
+      const components = [];
+      if (includeThrieBeam && thrieBeamResult?.found) {
+        components.push(`Thrie-Beam (${thrieBeam.thickness}mm, ${thrieBeam.coatingGsm} GSM)`);
+      }
+      if (includePost && postResult?.found) {
+        components.push(`Post (${post.thickness}mm, ${post.length}mm, ${post.coatingGsm} GSM)`);
+      }
+      if (includeSpacer && spacerResult?.found) {
+        components.push(`Spacer (${spacer.thickness}mm, ${spacer.length}mm, ${spacer.coatingGsm} GSM)`);
+      }
+      if (fastenerMode === 'default') {
+        components.push('Fasteners (Standard)');
+      } else if (fastenerMode === 'manual' && (hexBoltQty > 0 || buttonBoltQty > 0)) {
+        components.push(`Fasteners (Hex: ${hexBoltQty}, Button: ${buttonBoltQty})`);
+      }
+      
+      const materialOnlyCost = (materialCostPerRm || 0) * (quantityRm || 0);
+      
+      // Add main crash barrier item (clubbed together)
+      if (components.length > 0) {
+        items.push({
+          description: `Metal Beam Crash Barrier (Thrie Beam)\n${components.join(', ')}`,
+          quantity: quantityRm || 0,
+          unit: 'RM',
+          hsnCode: getPDFHSNCode('Crash Barrier', 'MBCB'),
+          rate: materialCostPerRm || 0,
+          amount: materialOnlyCost,
+        });
+      }
+
+      // Add Transportation if included (separate line item)
+      if (includeTransportation && transportCostPerRm && transportCostPerRm > 0) {
+        items.push({
+          description: 'Transportation Charges',
+          quantity: quantityRm || 0,
+          unit: 'RM',
+          hsnCode: '9965',
+          rate: transportCostPerRm,
+          amount: transportCostPerRm * (quantityRm || 0),
+        });
+      }
+
+      // Add Installation if included (separate line item)
+      if (includeInstallation && installationCostPerRm && installationCostPerRm > 0) {
+        items.push({
+          description: 'Installation Charges',
+          quantity: quantityRm || 0,
+          unit: 'RM',
+          hsnCode: '9954',
+          rate: installationCostPerRm,
+          amount: installationCostPerRm * (quantityRm || 0),
+        });
+      }
+
+      const formatDate = (date: Date | null) => {
+        if (!date) return '';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      const pdfData = {
+        estimateNumber: pdfEstimateNumber,
+        estimateDate: formatDate(estimateDate),
+        expiryDate: formatDate(expiryDate),
+        placeOfSupply: `${cityName}, ${stateName}`,
+        billTo: billToAddress || {
+          name: accountName || subAccountName,
+          address: '',
+          city: cityName,
+          state: stateName,
+          pincode: '',
+          gstNumber: '',
+        },
+        shipTo: shipToAddress || {
+          name: subAccountName,
+          address: '',
+          city: cityName,
+          state: stateName,
+          pincode: '',
+        },
+        items: items,
+        subtotal: finalTotal,
+        sgst: gstCalculations.sgst,
+        cgst: gstCalculations.cgst,
+        igst: gstCalculations.igst,
+        totalAmount: gstCalculations.totalWithGST,
+        termsAndConditions: termsAndConditions,
+      };
+
+      const pdf = generateQuotationPDF(pdfData, logoBase64 || undefined);
+      pdf.save(`Quotation_${pdfEstimateNumber.replace(/\//g, '-')}_${Date.now()}.pdf`);
+      
+      setToast({ message: 'PDF generated successfully', type: 'success' });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setToast({ message: 'Error generating PDF. Please try again.', type: 'error' });
     }
   };
 
@@ -1812,13 +2053,55 @@ export default function ThrieBeamPage() {
                   
                   {/* Final Total */}
                   {finalTotal !== null && finalTotal > 0 && (
-                    <div className="pt-6 border-t-2 border-premium-gold/50 mt-6">
-                      <p className="text-slate-300 text-sm mb-2 font-medium">Final Total Price</p>
-                      <p className="text-4xl font-extrabold text-premium-gold drop-shadow-lg">
-                        ₹{finalTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                      <p className="text-xl text-premium-gold/90 mt-2">({formatIndianUnits(finalTotal)})</p>
-                    </div>
+                    <>
+                      <div className="pt-6 border-t-2 border-premium-gold/50 mt-6">
+                        <p className="text-slate-300 text-sm mb-2 font-medium">Subtotal (Before GST)</p>
+                        <p className="text-3xl font-bold text-white">
+                          ₹{finalTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                      
+                      {gstCalculations && (
+                        <>
+                          <div className="pt-4 border-t border-white/20 mt-4">
+                            <p className="text-slate-300 text-sm mb-3 font-medium">GST Breakdown</p>
+                            {gstCalculations.isTelangana ? (
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-300 text-sm">SGST (9%)</span>
+                                  <span className="text-white font-bold">
+                                    ₹{gstCalculations.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-300 text-sm">CGST (9%)</span>
+                                  <span className="text-white font-bold">
+                                    ₹{gstCalculations.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-slate-300 text-sm">IGST (18%)</span>
+                                  <span className="text-white font-bold">
+                                    ₹{gstCalculations.igst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="pt-4 border-t-2 border-premium-gold/50 mt-4">
+                            <p className="text-slate-300 text-sm mb-2 font-medium">Final Total (Including GST)</p>
+                            <p className="text-4xl font-extrabold text-premium-gold drop-shadow-lg">
+                              ₹{gstCalculations.totalWithGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                            <p className="text-xl text-premium-gold/90 mt-2">({formatIndianUnits(gstCalculations.totalWithGST)})</p>
+                          </div>
+                        </>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1925,13 +2208,55 @@ export default function ThrieBeamPage() {
                     )}
                     
                     {isQuantityConfirmed && finalTotal !== null && finalTotal > 0 && (
-                      <div className="pt-4 border-t border-white/20 mt-4">
-                        <p className="text-slate-300 text-sm mb-2 font-medium">Final Total</p>
-                        <p className="text-3xl font-extrabold text-premium-gold drop-shadow-lg">
-                          ₹{finalTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-lg text-premium-gold/90 mt-1">({formatIndianUnits(finalTotal)})</p>
-                      </div>
+                      <>
+                        <div className="pt-4 border-t border-white/20 mt-4">
+                          <p className="text-slate-300 text-sm mb-2 font-medium">Subtotal (Before GST)</p>
+                          <p className="text-2xl font-bold text-white">
+                            ₹{finalTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        </div>
+                        
+                        {gstCalculations && (
+                          <>
+                            <div className="pt-4 border-t border-white/20 mt-4">
+                              <p className="text-slate-300 text-sm mb-3 font-medium">GST Breakdown</p>
+                              {gstCalculations.isTelangana ? (
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 text-sm">IGST (18%)</span>
+                                    <span className="text-white font-bold">
+                                      ₹{gstCalculations.igst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 text-sm">SGST (9%)</span>
+                                    <span className="text-white font-bold">
+                                      ₹{gstCalculations.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-slate-300 text-sm">CGST (9%)</span>
+                                    <span className="text-white font-bold">
+                                      ₹{gstCalculations.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="pt-4 border-t-2 border-premium-gold/50 mt-4">
+                              <p className="text-slate-300 text-sm mb-2 font-medium">Final Total (Including GST)</p>
+                              <p className="text-3xl font-extrabold text-premium-gold drop-shadow-lg">
+                                ₹{gstCalculations.totalWithGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                              <p className="text-lg text-premium-gold/90 mt-1">({formatIndianUnits(gstCalculations.totalWithGST)})</p>
+                            </div>
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -1954,6 +2279,19 @@ export default function ThrieBeamPage() {
             >
               {isSaving ? '⏳ Saving...' : '💾 Save Quotation'}
             </button>
+            
+            {/* Generate PDF Button - Employee Only */}
+            {!isViewOnlyUser && gstCalculations && (
+              <button
+                onClick={handleGeneratePDF}
+                className="btn-premium-gold px-12 py-4 text-lg shimmer relative overflow-hidden"
+                style={{
+                  boxShadow: '0 0 20px rgba(209, 168, 90, 0.3)',
+                }}
+              >
+                📄 Generate PDF
+              </button>
+            )}
           </div>
         )}
         

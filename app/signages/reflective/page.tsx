@@ -14,6 +14,7 @@ import { useUser } from '@/contexts/UserContext';
 import { calculateArea, Shape } from '@/lib/calculations/areaCalculations';
 import { MS_PIPE_OPTIONS, MsPipeOption } from '@/data/config/msPipeOptions';
 import { MS_ANGLE_OPTIONS, MsAngleOption } from '@/data/config/msAngleOptions';
+import { generateQuotationPDF, getHSNCode as getPDFHSNCode, loadLogoAsBase64 } from '@/lib/utils/quotationPdf';
 
 // Dropdown options
 const SHAPES: Shape[] = ['Circular', 'Rectangular', 'Triangle', 'Octagonal'];
@@ -157,6 +158,23 @@ export default function ReflectivePartPage() {
   const [contactId, setContactId] = useState<number | null>(null);
   const [customerName, setCustomerName] = useState<string>(''); // Contact name
   
+  // Address states for PDF
+  const [shipToAddress, setShipToAddress] = useState<{
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+  } | null>(null);
+  const [billToAddress, setBillToAddress] = useState<{
+    name: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    pincode?: string;
+    gstNumber?: string;
+  } | null>(null);
+  
   // Check if all quotation fields are filled
   const isQuotationComplete = stateId !== null && 
                                cityId !== null && 
@@ -186,6 +204,66 @@ export default function ReflectivePartPage() {
   const showAccountSelection = showDates && estimateDate !== null && expiryDate !== null;
   const showCustomerAndPurpose = showAccountSelection && accountId !== null;
   const showTermsAndConditions = showCustomerAndPurpose && subAccountId !== null && contactId !== null && customerName.trim() !== '' && purpose.trim() !== '';
+  
+  // Fetch sub-account addresses when sub-account is selected
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      if (!accountId || !subAccountId) {
+        setShipToAddress(null);
+        setBillToAddress(null);
+        return;
+      }
+      
+      try {
+        // Fetch all sub-accounts for this account
+        const response = await fetch(`/api/subaccounts?account_id=${accountId}`);
+        const data = await response.json();
+        
+        if (data.success && data.subAccounts) {
+          // Find the selected sub-account for Ship To
+          const selectedSubAccount = data.subAccounts.find((sa: any) => sa.id === subAccountId);
+          if (selectedSubAccount) {
+            setShipToAddress({
+              name: selectedSubAccount.subAccountName,
+              address: selectedSubAccount.address || '',
+              city: selectedSubAccount.cityName || '',
+              state: selectedSubAccount.stateName || '',
+              pincode: selectedSubAccount.pincode || '',
+            });
+          }
+          
+          // Find headquarter sub-account for Bill To
+          const headquarter = data.subAccounts.find((sa: any) => sa.isHeadquarter === true);
+          if (headquarter) {
+            setBillToAddress({
+              name: headquarter.subAccountName,
+              address: headquarter.address || '',
+              city: headquarter.cityName || '',
+              state: headquarter.stateName || '',
+              pincode: headquarter.pincode || '',
+              gstNumber: headquarter.gstNumber || '',
+            });
+          } else {
+            // If no headquarter, use the selected sub-account as bill to as well
+            if (selectedSubAccount) {
+              setBillToAddress({
+                name: selectedSubAccount.subAccountName,
+                address: selectedSubAccount.address || '',
+                city: selectedSubAccount.cityName || '',
+                state: selectedSubAccount.stateName || '',
+                pincode: selectedSubAccount.pincode || '',
+                gstNumber: selectedSubAccount.gstNumber || '',
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching sub-account addresses:', error);
+      }
+    };
+    
+    fetchAddresses();
+  }, [accountId, subAccountId]);
   
   // Fetch estimate number when quotation is confirmed
   useEffect(() => {
@@ -491,6 +569,38 @@ export default function ReflectivePartPage() {
     return finalTotal + totalMsCost;
   }, [finalTotal, totalMsCost]);
   
+  // Calculate GST based on place of supply
+  // CORRECT: Telangana (intra-state) = SGST + CGST, Other states (inter-state) = IGST
+  const gstCalculations = useMemo(() => {
+    const baseTotal = combinedTotal || finalTotal;
+    if (!baseTotal || baseTotal <= 0) return null;
+    
+    const isTelangana = stateName.toLowerCase().includes('telangana');
+    
+    if (isTelangana) {
+      // For Telangana (intra-state), apply 9% SGST + 9% CGST
+      const sgst = baseTotal * 0.09;
+      const cgst = baseTotal * 0.09;
+      return {
+        sgst,
+        cgst,
+        igst: 0,
+        totalWithGST: baseTotal + sgst + cgst,
+        isTelangana: true,
+      };
+    } else {
+      // For other states (inter-state), apply 18% IGST
+      const igst = baseTotal * 0.18;
+      return {
+        sgst: 0,
+        cgst: 0,
+        igst,
+        totalWithGST: baseTotal + igst,
+        isTelangana: false,
+      };
+    }
+  }, [combinedTotal, finalTotal, stateName]);
+  
   // Confirm handlers
   const handleConfirmBoardSpecs = () => {
     if (shape === 'Rectangular') {
@@ -698,6 +808,120 @@ export default function ReflectivePartPage() {
       setToast({ message: 'Error saving quotation. Please try again.', type: 'error' });
     } finally {
       setIsSaving(false);
+    }
+  };
+  
+  // Generate PDF Function (Employee Only)
+  const handleGeneratePDF = async () => {
+    if (!isQuotationComplete) {
+      setToast({ message: 'Please complete all mandatory quotation fields', type: 'error' });
+      return;
+    }
+
+    if (!finalTotal || !gstCalculations) {
+      setToast({ message: 'Please complete all calculations before generating PDF', type: 'error' });
+      return;
+    }
+
+    try {
+      // Fetch a NEW estimate number for each PDF generated
+      let pdfEstimateNumber = estimateNumber;
+      try {
+        const estResponse = await fetch('/api/estimate/next-number', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (estResponse.ok) {
+          const estData = await estResponse.json();
+          if (estData.estimateNumber) {
+            pdfEstimateNumber = estData.estimateNumber;
+            setEstimateNumber(pdfEstimateNumber);
+          }
+        }
+      } catch (e) {
+        console.log('Could not fetch new estimate number, using existing');
+      }
+      
+      // Load logo
+      const logoBase64 = await loadLogoAsBase64();
+      
+      const items = [];
+      
+      // Reflective Board
+      const sizeDescription = shape === 'Rectangular' 
+        ? `${width}x${height}mm` 
+        : `${size}mm`;
+      
+      items.push({
+        description: `${boardType} - ${shape} (${sizeDescription})\n${sheetingType}, ${acpThickness}mm ACP, ${printingType}`,
+        quantity: quantity,
+        unit: 'Nos',
+        hsnCode: getPDFHSNCode('Board', 'Signages'),
+        rate: costPerPiece || 0,
+        amount: finalTotal || 0,
+      });
+
+      // MS Structure (if enabled)
+      if (msEnabled && msCostPerStructure > 0) {
+        const frameDesc = msFrameSpec && msLengths?.frameLengthM 
+          ? `, Frame: ${msFrameSpec}, ${msLengths.frameLengthM}m` 
+          : '';
+        
+        items.push({
+          description: `MS Structure\nPost: ${msPostSpec}, ${msLengths?.postLengthM}m${frameDesc}`,
+          quantity: quantity,
+          unit: 'Nos',
+          hsnCode: '7308',
+          rate: msCostPerStructure,
+          amount: totalMsCost,
+        });
+      }
+
+      // Format dates for PDF
+      const formatDate = (date: Date | null) => {
+        if (!date) return '';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      const pdfData = {
+        estimateNumber: pdfEstimateNumber,
+        estimateDate: formatDate(estimateDate),
+        expiryDate: formatDate(expiryDate),
+        placeOfSupply: `${cityName}, ${stateName}`,
+        billTo: billToAddress || {
+          name: accountName || subAccountName,
+          address: '',
+          city: cityName,
+          state: stateName,
+          pincode: '',
+          gstNumber: '',
+        },
+        shipTo: shipToAddress || {
+          name: subAccountName,
+          address: '',
+          city: cityName,
+          state: stateName,
+          pincode: '',
+        },
+        items: items,
+        subtotal: combinedTotal || finalTotal,
+        sgst: gstCalculations.sgst,
+        cgst: gstCalculations.cgst,
+        igst: gstCalculations.igst,
+        totalAmount: gstCalculations.totalWithGST,
+        termsAndConditions: termsAndConditions,
+      };
+
+      const pdf = generateQuotationPDF(pdfData, logoBase64 || undefined);
+      pdf.save(`Quotation_${pdfEstimateNumber.replace(/\//g, '-')}_${Date.now()}.pdf`);
+      
+      setToast({ message: 'PDF generated successfully', type: 'success' });
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      setToast({ message: 'Error generating PDF. Please try again.', type: 'error' });
     }
   };
   
@@ -1732,12 +1956,52 @@ export default function ReflectivePartPage() {
                 </div>
               )}
               <div className="pt-4 border-t border-premium-gold/50">
-                <p className="text-slate-300 text-sm mb-2 font-medium">Final Total Price</p>
-                <p className="text-4xl font-extrabold text-premium-gold drop-shadow-lg">
+                <p className="text-slate-300 text-sm mb-2 font-medium">Subtotal (Before GST)</p>
+                <p className="text-3xl font-bold text-white">
                   ₹{(combinedTotal || finalTotal).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </p>
-                <p className="text-xl text-premium-gold/90 mt-2">({formatIndianUnits(combinedTotal || finalTotal)})</p>
               </div>
+              
+              {gstCalculations && (
+                <>
+                  <div className="pt-4 border-t border-white/20 mt-4">
+                    <p className="text-slate-300 text-sm mb-3 font-medium">GST Breakdown</p>
+                    {gstCalculations.isTelangana ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-300 text-sm">SGST (9%)</span>
+                          <span className="text-white font-bold">
+                            ₹{gstCalculations.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-300 text-sm">CGST (9%)</span>
+                          <span className="text-white font-bold">
+                            ₹{gstCalculations.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-300 text-sm">IGST (18%)</span>
+                          <span className="text-white font-bold">
+                            ₹{gstCalculations.igst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="pt-4 border-t-2 border-premium-gold/50 mt-4">
+                    <p className="text-slate-300 text-sm mb-2 font-medium">Final Total (Including GST)</p>
+                    <p className="text-4xl font-extrabold text-premium-gold drop-shadow-lg">
+                      ₹{gstCalculations.totalWithGST.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xl text-premium-gold/90 mt-2">({formatIndianUnits(gstCalculations.totalWithGST)})</p>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1755,6 +2019,19 @@ export default function ReflectivePartPage() {
             >
               {isSaving ? '⏳ Saving...' : '💾 Save Quotation'}
             </button>
+            
+            {/* Generate PDF Button - Employee Only */}
+            {!isViewOnlyUser && gstCalculations && (
+              <button
+                onClick={handleGeneratePDF}
+                className="btn-premium-gold btn-ripple btn-press btn-3d px-12 py-4 text-lg shimmer relative overflow-hidden"
+                style={{
+                  boxShadow: '0 0 20px rgba(209, 168, 90, 0.3)',
+                }}
+              >
+                📄 Generate PDF
+              </button>
+            )}
           </div>
         )}
         

@@ -7,13 +7,13 @@
 --   - states
 --   - cities
 -- And resets all ID sequences to start from 1
+-- Also resets estimate_counter for PDF generation (YNM/EST-1)
 -- ============================================
 
 -- ============================================
--- STEP 1: DISABLE FOREIGN KEY CHECKS (Temporarily)
+-- STEP 1: DISABLE TRIGGERS (to avoid foreign key issues)
 -- ============================================
--- Note: PostgreSQL doesn't support disabling foreign keys like MySQL,
--- so we'll use TRUNCATE CASCADE or DELETE in the correct order
+SET session_replication_role = 'replica';
 
 -- ============================================
 -- STEP 2: DELETE DATA FROM ALL TABLES (except protected ones)
@@ -90,6 +90,23 @@ BEGIN
         TRUNCATE TABLE merged_quotations CASCADE;
     END IF;
     
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'quotes') THEN
+        TRUNCATE TABLE quotes CASCADE;
+    END IF;
+    
+    -- Delete from AI/analytics tables
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ai_queries') THEN
+        TRUNCATE TABLE ai_queries CASCADE;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ai_coaching_reports') THEN
+        TRUNCATE TABLE ai_coaching_reports CASCADE;
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'ai_weekly_insights') THEN
+        TRUNCATE TABLE ai_weekly_insights CASCADE;
+    END IF;
+    
     -- Delete from account tables (sub_accounts before accounts due to FK)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sub_accounts') THEN
         TRUNCATE TABLE sub_accounts CASCADE;
@@ -112,10 +129,25 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'purposes') THEN
         TRUNCATE TABLE purposes CASCADE;
     END IF;
+    
+    -- ============================================
+    -- RESET ESTIMATE COUNTER FOR PDF GENERATION
+    -- ============================================
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'estimate_counter') THEN
+        -- Reset the counter to 0 so next PDF will be YNM/EST-1
+        UPDATE estimate_counter SET current_number = 0, updated_at = NOW() WHERE id = 1;
+        RAISE NOTICE '✅ Estimate counter reset - next PDF will be YNM/EST-1';
+    END IF;
+    
 END $$;
 
 -- ============================================
--- STEP 3: RESET ALL ID SEQUENCES
+-- STEP 3: RE-ENABLE TRIGGERS
+-- ============================================
+SET session_replication_role = 'origin';
+
+-- ============================================
+-- STEP 4: RESET ALL ID SEQUENCES
 -- ============================================
 -- Reset sequences for all tables
 -- Note: For protected tables (users, industries, sub_industries, states, cities),
@@ -131,7 +163,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users') THEN
         SELECT COALESCE(MAX(id), 0) INTO max_id FROM users;
         IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'users_id_seq') THEN
-            PERFORM setval('users_id_seq', GREATEST(max_id, 1), false);
+            PERFORM setval('users_id_seq', GREATEST(max_id, 1), max_id > 0);
         END IF;
     END IF;
     
@@ -139,7 +171,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'industries') THEN
         SELECT COALESCE(MAX(id), 0) INTO max_id FROM industries;
         IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'industries_id_seq') THEN
-            PERFORM setval('industries_id_seq', GREATEST(max_id, 1), false);
+            PERFORM setval('industries_id_seq', GREATEST(max_id, 1), max_id > 0);
         END IF;
     END IF;
     
@@ -147,7 +179,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sub_industries') THEN
         SELECT COALESCE(MAX(id), 0) INTO max_id FROM sub_industries;
         IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'sub_industries_id_seq') THEN
-            PERFORM setval('sub_industries_id_seq', GREATEST(max_id, 1), false);
+            PERFORM setval('sub_industries_id_seq', GREATEST(max_id, 1), max_id > 0);
         END IF;
     END IF;
     
@@ -155,7 +187,7 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'states') THEN
         SELECT COALESCE(MAX(id), 0) INTO max_id FROM states;
         IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'states_id_seq') THEN
-            PERFORM setval('states_id_seq', GREATEST(max_id, 1), false);
+            PERFORM setval('states_id_seq', GREATEST(max_id, 1), max_id > 0);
         END IF;
     END IF;
     
@@ -163,13 +195,12 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'cities') THEN
         SELECT COALESCE(MAX(id), 0) INTO max_id FROM cities;
         IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'cities_id_seq') THEN
-            PERFORM setval('cities_id_seq', GREATEST(max_id, 1), false);
+            PERFORM setval('cities_id_seq', GREATEST(max_id, 1), max_id > 0);
         END IF;
     END IF;
 END $$;
 
 -- Reset sequences for cleared tables (always restart at 1)
--- Using setval to ensure sequences are properly reset
 DO $$
 BEGIN
     -- Reset all cleared table sequences to 1 (only if sequence exists)
@@ -225,11 +256,14 @@ BEGIN
         PERFORM setval('quotes_paint_id_seq', 1, false);
     END IF;
     
+    IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'quotes_id_seq') THEN
+        PERFORM setval('quotes_id_seq', 1, false);
+    END IF;
+    
     IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'employee_customer_id_seq') THEN
         PERFORM setval('employee_customer_id_seq', 1, false);
     END IF;
     
-    -- Reset optional table sequences (if they exist)
     IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'employee_streaks_id_seq') THEN
         PERFORM setval('employee_streaks_id_seq', 1, false);
     END IF;
@@ -253,62 +287,52 @@ BEGIN
     IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'merged_quotations_id_seq') THEN
         PERFORM setval('merged_quotations_id_seq', 1, false);
     END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'ai_queries_id_seq') THEN
+        PERFORM setval('ai_queries_id_seq', 1, false);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'ai_coaching_reports_id_seq') THEN
+        PERFORM setval('ai_coaching_reports_id_seq', 1, false);
+    END IF;
+    
+    IF EXISTS (SELECT 1 FROM pg_sequences WHERE sequencename = 'ai_weekly_insights_id_seq') THEN
+        PERFORM setval('ai_weekly_insights_id_seq', 1, false);
+    END IF;
 END $$;
 
 -- ============================================
--- STEP 4: VERIFICATION QUERIES
+-- STEP 5: VERIFICATION QUERIES (Uncomment to run)
 -- ============================================
--- Uncomment to verify the cleanup:
 
--- Check row counts for protected tables
--- SELECT 'users' as table_name, COUNT(*) as row_count FROM users
--- UNION ALL
--- SELECT 'industries', COUNT(*) FROM industries
--- UNION ALL
--- SELECT 'sub_industries', COUNT(*) FROM sub_industries
--- UNION ALL
--- SELECT 'states', COUNT(*) FROM states
--- UNION ALL
--- SELECT 'cities', COUNT(*) FROM cities;
+-- Check row counts for protected tables (should have data)
+SELECT 'PROTECTED TABLES (data preserved):' as info;
+SELECT 'users' as table_name, COUNT(*) as row_count FROM users
+UNION ALL SELECT 'industries', COUNT(*) FROM industries
+UNION ALL SELECT 'sub_industries', COUNT(*) FROM sub_industries
+UNION ALL SELECT 'states', COUNT(*) FROM states
+UNION ALL SELECT 'cities', COUNT(*) FROM cities;
 
--- Check row counts for cleared tables (should all be 0)
--- SELECT 'accounts' as table_name, COUNT(*) as row_count FROM accounts
--- UNION ALL
--- SELECT 'sub_accounts', COUNT(*) FROM sub_accounts
--- UNION ALL
--- SELECT 'contacts', COUNT(*) FROM contacts
--- UNION ALL
--- SELECT 'activities', COUNT(*) FROM activities
--- UNION ALL
--- SELECT 'leads', COUNT(*) FROM leads
--- UNION ALL
--- SELECT 'tasks', COUNT(*) FROM tasks
--- UNION ALL
--- SELECT 'notifications', COUNT(*) FROM notifications
--- UNION ALL
--- SELECT 'customers', COUNT(*) FROM customers
--- UNION ALL
--- SELECT 'quotes_mbcb', COUNT(*) FROM quotes_mbcb
--- UNION ALL
--- SELECT 'quotes_signages', COUNT(*) FROM quotes_signages
--- UNION ALL
--- SELECT 'quotes_paint', COUNT(*) FROM quotes_paint;
-
--- Check sequence values
--- SELECT 
---     schemaname,
---     sequencename,
---     last_value
--- FROM pg_sequences
--- WHERE sequencename LIKE '%_id_seq'
--- ORDER BY sequencename;
+-- Check estimate counter status
+SELECT 'ESTIMATE COUNTER STATUS:' as info;
+SELECT * FROM estimate_counter;
 
 -- ============================================
 -- COMPLETION MESSAGE
 -- ============================================
 DO $$
 BEGIN
-    RAISE NOTICE '✅ Data cleared successfully!';
+    RAISE NOTICE '';
+    RAISE NOTICE '============================================';
+    RAISE NOTICE '✅ ALL DATA CLEARED SUCCESSFULLY!';
+    RAISE NOTICE '============================================';
     RAISE NOTICE '✅ All ID sequences reset to start from 1';
-    RAISE NOTICE '✅ Protected tables (users, industries, sub_industries, states, cities) preserved';
+    RAISE NOTICE '✅ Estimate counter reset - next PDF: YNM/EST-1';
+    RAISE NOTICE '✅ Protected tables preserved:';
+    RAISE NOTICE '   - users';
+    RAISE NOTICE '   - industries';
+    RAISE NOTICE '   - sub_industries';
+    RAISE NOTICE '   - states';
+    RAISE NOTICE '   - cities';
+    RAISE NOTICE '============================================';
 END $$;

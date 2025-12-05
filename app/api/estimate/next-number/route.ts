@@ -10,38 +10,94 @@ export async function POST() {
   try {
     // Check if Supabase is configured
     if (!supabaseUrl || !supabaseKey) {
-      // Return fallback without logging error
       return NextResponse.json({
-        estimateNumber: 'YNM/EST-1'
+        estimateNumber: 'YNM/EST-1',
+        error: 'Supabase not configured'
       });
     }
 
-    // Try to get next estimate number using the function
-    // If the function or table doesn't exist, silently use fallback
-    const { data, error } = await supabase.rpc('get_next_estimate_number');
+    // First, try to use the database function (most reliable, atomic)
+    const { data: funcData, error: funcError } = await supabase.rpc('get_next_estimate_number');
 
-    // If error occurs (function/table doesn't exist), silently use fallback
-    // No need to log - this is expected behavior when database function doesn't exist
-    if (error) {
+    if (!funcError && funcData) {
+      return NextResponse.json({ estimateNumber: funcData });
+    }
+
+    // Fallback: Try direct table update if function doesn't exist
+    // First, try to increment the counter
+    const { data: updateData, error: updateError } = await supabase
+      .from('estimate_counter')
+      .update({ 
+        current_number: supabase.rpc('increment_counter'),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', 1)
+      .select('current_number, prefix')
+      .single();
+
+    if (!updateError && updateData) {
       return NextResponse.json({ 
-        estimateNumber: 'YNM/EST-1'
+        estimateNumber: `${updateData.prefix}${updateData.current_number}` 
       });
     }
 
-    // Ensure we return a valid estimate number
-    if (!data) {
+    // If table exists but update failed, try a manual increment
+    const { data: currentData } = await supabase
+      .from('estimate_counter')
+      .select('current_number, prefix')
+      .eq('id', 1)
+      .single();
+
+    if (currentData) {
+      const newNumber = (currentData.current_number || 0) + 1;
+      await supabase
+        .from('estimate_counter')
+        .update({ current_number: newNumber, updated_at: new Date().toISOString() })
+        .eq('id', 1);
+      
       return NextResponse.json({ 
-        estimateNumber: 'YNM/EST-1'
+        estimateNumber: `${currentData.prefix}${newNumber}` 
       });
     }
 
-    return NextResponse.json({ estimateNumber: data });
-  } catch (error: any) {
-    // Silently return fallback for any errors
-    // This endpoint is designed to gracefully degrade
+    // Last resort: Return fallback
     return NextResponse.json({ 
-      estimateNumber: 'YNM/EST-1'
+      estimateNumber: 'YNM/EST-1',
+      warning: 'Using fallback. Please run CREATE_ESTIMATE_COUNTER.sql in Supabase.'
+    });
+
+  } catch (error: any) {
+    console.error('Error getting next estimate number:', error);
+    return NextResponse.json({ 
+      estimateNumber: 'YNM/EST-1',
+      error: error.message
     });
   }
 }
 
+// GET endpoint to check current estimate number without incrementing
+export async function GET() {
+  try {
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ currentNumber: 0, prefix: 'YNM/EST-' });
+    }
+
+    const { data, error } = await supabase
+      .from('estimate_counter')
+      .select('current_number, prefix')
+      .eq('id', 1)
+      .single();
+
+    if (error || !data) {
+      return NextResponse.json({ currentNumber: 0, prefix: 'YNM/EST-' });
+    }
+
+    return NextResponse.json({ 
+      currentNumber: data.current_number,
+      prefix: data.prefix,
+      nextEstimate: `${data.prefix}${data.current_number + 1}`
+    });
+  } catch (error) {
+    return NextResponse.json({ currentNumber: 0, prefix: 'YNM/EST-' });
+  }
+}
