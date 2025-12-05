@@ -30,6 +30,8 @@ export interface Quote {
   customer_name: string;
   sub_account_name?: string | null; // Sub-account name for employee quotations
   sub_account_id?: number | null; // Link to sub_accounts table
+  contact_id?: number | null; // Link to contacts table
+  contact_name?: string | null; // Contact name for display
   purpose: string | null;
   date: string;
   // MBCB fields

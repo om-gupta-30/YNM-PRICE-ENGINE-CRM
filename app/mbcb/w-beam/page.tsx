@@ -652,6 +652,7 @@ export default function WBeamPage() {
         city_id: cityId,
         account_id: accountId, // Add account ID
         sub_account_id: subAccountId,
+        contact_id: contactId, // Add contact ID for merge validation
         customer_name: customerName || subAccountName, // Contact name for quotation
         sub_account_name: subAccountName, // Actual sub-account name
         purpose: purpose,

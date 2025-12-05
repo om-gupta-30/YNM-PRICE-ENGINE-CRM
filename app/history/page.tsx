@@ -13,6 +13,19 @@ import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 
 type SectionTab = 'mbcb' | 'signages' | 'paint';
 
+// Type for tracking selections with source table
+interface QuoteSelection {
+  id: number;
+  table: SectionTab;
+  final_total_cost: number | null;
+  section: string;
+  state_id: number | null;
+  city_id: number | null;
+  sub_account_id: number | null;
+  date: string;
+  raw_payload: any;
+}
+
 export default function HistoryPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -55,9 +68,14 @@ export default function HistoryPage() {
   
   // Status update state
   
-  // Merge state
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  // Merge state - tracks selections by unique key (table:id) to avoid cross-table conflicts
+  const [selectedQuotesForMerge, setSelectedQuotesForMerge] = useState<QuoteSelection[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+  
+  // Check if a quote is selected (by table and id, not just id)
+  const isQuoteSelected = (id: number, table: SectionTab) => {
+    return selectedQuotesForMerge.some(s => s.id === id && s.table === table);
+  };
   
   // Helper function to determine if a quote is MBCB
   const isMBCBQuote = (quote: Quote): boolean => {
@@ -270,114 +288,184 @@ export default function HistoryPage() {
     if (currentUsername) { // Only load when we have user info
       loadQuotes();
     }
-    // Clear selections when tab changes
-    setSelectedIds([]);
+    // Note: We no longer clear all selections when tab changes to support cross-product merging
+    // Selections are preserved across tabs
   }, [activeTab, currentUsername, isAdmin]); // Reload when tab changes
   
-  // Handle checkbox toggle
-  const handleToggleSelect = (quoteId: number) => {
-    setSelectedIds(prev => 
-      prev.includes(quoteId) 
-        ? prev.filter(id => id !== quoteId)
-        : [...prev, quoteId]
-    );
+  // Handle checkbox toggle - tracks selection for merge PDF generation
+  const handleToggleSelect = (quote: Quote) => {
+    const quoteId = quote.id;
+    const sourceTable = activeTab; // Use activeTab since quotes are filtered by tab
+    
+    setSelectedQuotesForMerge(prev => {
+      const exists = prev.some(s => s.id === quoteId && s.table === sourceTable);
+      if (exists) {
+        // Remove this specific quote
+        return prev.filter(s => !(s.id === quoteId && s.table === sourceTable));
+      } else {
+        // Add this quote with all required fields for validation
+        return [...prev, {
+          id: quoteId,
+          table: sourceTable,
+          final_total_cost: quote.final_total_cost,
+          section: quote.section,
+          state_id: quote.state_id || null,
+          city_id: quote.city_id || null,
+          sub_account_id: quote.sub_account_id || null,
+          date: quote.date,
+          raw_payload: quote.raw_payload,
+        }];
+      }
+    });
   };
   
-  // Handle select all
+  // Handle select all in current tab
   const handleSelectAll = () => {
-    if (selectedIds.length === filteredQuotes.length) {
-      setSelectedIds([]);
+    const allCurrentSelected = filteredQuotes.every(q => isQuoteSelected(q.id, activeTab));
+    
+    if (allCurrentSelected) {
+      // Deselect all from current tab only
+      setSelectedQuotesForMerge(prev => prev.filter(s => s.table !== activeTab));
     } else {
-      setSelectedIds(filteredQuotes.map(q => q.id));
+      // Select all from current tab (keep other tabs' selections)
+      const otherTabSelections = selectedQuotesForMerge.filter(s => s.table !== activeTab);
+      const currentTabSelections = filteredQuotes.map(q => ({
+        id: q.id,
+        table: activeTab,
+        final_total_cost: q.final_total_cost,
+        section: q.section,
+        state_id: q.state_id || null,
+        city_id: q.city_id || null,
+        sub_account_id: q.sub_account_id || null,
+        date: q.date,
+        raw_payload: q.raw_payload,
+      }));
+      
+      setSelectedQuotesForMerge([...otherTabSelections, ...currentTabSelections]);
     }
   };
   
-  // Handle merge
+  // Validation with restrictions: same place of supply, same estimate date, same expiry date
+  const mergeValidation = useMemo(() => {
+    if (selectedQuotesForMerge.length === 0) {
+      return { canMerge: false, message: 'Select quotations to generate merged PDF' };
+    }
+    
+    if (selectedQuotesForMerge.length < 2) {
+      return { canMerge: false, message: 'Select at least 2 quotations to merge' };
+    }
+    
+    // Check all have same place of supply (state_id + city_id)
+    const placeOfSupplyKeys = selectedQuotesForMerge.map(s => `${s.state_id || 'null'}-${s.city_id || 'null'}`);
+    const uniquePlaces = new Set(placeOfSupplyKeys);
+    if (uniquePlaces.size > 1) {
+      return { canMerge: false, message: '⚠️ All quotations must have the same Place of Supply' };
+    }
+    
+    // Check all have same estimate date (from raw_payload or date field)
+    const estimateDates = selectedQuotesForMerge.map(s => {
+      const payload = s.raw_payload || {};
+      return payload.estimateDate || payload.quotationDate || s.date || '';
+    });
+    const uniqueEstimateDates = new Set(estimateDates.filter(d => d));
+    if (uniqueEstimateDates.size > 1) {
+      return { canMerge: false, message: '⚠️ All quotations must have the same Estimate Date' };
+    }
+    
+    // Check all have same expiry date (from raw_payload)
+    const expiryDates = selectedQuotesForMerge.map(s => {
+      const payload = s.raw_payload || {};
+      return payload.expiryDate || '';
+    });
+    const uniqueExpiryDates = new Set(expiryDates.filter(d => d));
+    if (uniqueExpiryDates.size > 1) {
+      return { canMerge: false, message: '⚠️ All quotations must have the same Expiry Date' };
+    }
+    
+    // Check if cross-product merge
+    const productTypes = new Set(selectedQuotesForMerge.map(s => s.table));
+    const isCrossProduct = productTypes.size > 1;
+    
+    // Calculate combined total
+    const combinedTotal = selectedQuotesForMerge.reduce((sum, s) => sum + (s.final_total_cost || 0), 0);
+    
+    return { 
+      canMerge: true, 
+      message: isCrossProduct 
+        ? `✅ ${selectedQuotesForMerge.length} quotations ready to merge (${Array.from(productTypes).join(' + ')})`
+        : `✅ ${selectedQuotesForMerge.length} quotations ready to merge`,
+      isCrossProduct,
+      productTypes: Array.from(productTypes),
+      combinedTotal,
+    };
+  }, [selectedQuotesForMerge]);
+  
+  // Handle merge - generates and downloads merged PDF
   const handleMergeQuotations = async () => {
-    if (selectedIds.length === 0) {
-      setToast({ message: 'Please select at least one quotation', type: 'error' });
+    if (!mergeValidation.canMerge) {
+      setToast({ message: mergeValidation.message, type: 'error' });
       return;
     }
-    
-    // Validate all selected quotes are from the same product type
-    const selectedQuotes = filteredQuotes.filter(q => selectedIds.includes(q.id));
-    const productTypes = new Set(selectedQuotes.map(q => {
-      if (isMBCBQuote(q)) return 'mbcb';
-      if (isSignagesQuote(q)) return 'signages';
-      return 'paint';
-    }));
-    
-    if (productTypes.size > 1) {
-      setToast({ message: 'Cannot merge quotations from different product types. Please select quotations from the same section only.', type: 'error' });
-      return;
-    }
-    
-    const productType = Array.from(productTypes)[0] as 'mbcb' | 'signages' | 'paint';
     
     try {
       setIsMerging(true);
       
+      // Prepare request body
+      const quoteSources = selectedQuotesForMerge.map(s => ({ id: s.id, table: s.table }));
+      
       const response = await fetch('/api/merge-quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: selectedIds, productType }),
+        body: JSON.stringify({ quoteSources }),
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to merge quotations');
+        // Try to get error message from JSON response
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to generate PDF');
+        }
+        throw new Error('Failed to generate merged PDF');
       }
       
-      // Get PDF blob
+      // Get PDF blob and download
       const blob = await response.blob();
-      
-      // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const today = new Date().toISOString().split('T')[0];
-      a.download = `YNM-Merged-Quotations-${today}.pdf`;
+      a.download = `YNM-Merged-Quotations-${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      setToast({ message: 'Merged PDF generated successfully', type: 'success' });
-      setSelectedIds([]);
+      setToast({ 
+        message: `✅ Merged PDF downloaded! (${selectedQuotesForMerge.length} quotations, Total: ₹${mergeValidation.combinedTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 })})`, 
+        type: 'success' 
+      });
       
-      // TODO: Save merged quotation to database
-      // await saveMergedQuotation(selectedIds, productType);
+      // Clear selections after successful download
+      setSelectedQuotesForMerge([]);
       
     } catch (error: any) {
-      console.error('Error merging quotations:', error);
-      setToast({ message: error.message || 'Failed to merge quotations', type: 'error' });
+      console.error('Error generating merged PDF:', error);
+      setToast({ message: error.message || 'Failed to generate merged PDF', type: 'error' });
     } finally {
       setIsMerging(false);
     }
   };
   
-  // Normalize IDs only once on initial mount
-  useEffect(() => {
-    const normalizeOnLoad = async () => {
-      try {
-        console.log('🔄 Normalizing IDs on page load...');
-        const normalizeResponse = await fetch('/api/admin/normalize-ids', {
-          method: 'POST',
-        });
-        
-        if (normalizeResponse.ok) {
-          const normalizeData = await normalizeResponse.json();
-          console.log('✅ IDs normalized on page load:', normalizeData);
-        } else {
-          console.warn('⚠️ ID normalization failed on page load');
-        }
-      } catch (error) {
-        console.warn('⚠️ Error normalizing IDs on page load:', error);
-      }
-    };
-    
-    normalizeOnLoad();
-  }, []); // Only run once on mount
+  // Clear all merge selections
+  const clearMergeSelections = () => {
+    setSelectedQuotesForMerge([]);
+  };
+  
+  // ID normalization disabled - was causing foreign key constraint errors
+  // The normalize-ids API tries to renumber IDs which conflicts with foreign keys
+  // useEffect(() => {
+  //   normalizeOnLoad();
+  // }, []);
   
   // Filtered and sorted quotes
   const filteredQuotes = useMemo(() => {
@@ -748,29 +836,9 @@ export default function HistoryPage() {
       setDeleteConfirmOpen(false);
       setQuoteToDelete(null);
       
-      // Trigger ID normalization (renumbers all IDs to be continuous)
-      try {
-        console.log('🔄 Starting ID normalization after deletion...');
-        const normalizeResponse = await fetch('/api/admin/normalize-ids', {
-          method: 'POST',
-        });
-        
-        if (normalizeResponse.ok) {
-          const normalizeData = await normalizeResponse.json();
-          console.log('✅ ID normalization completed:', normalizeData);
-          
-          // Refetch quotes to get normalized IDs
-          await loadQuotes();
-          console.log('✅ Quotation list refreshed with normalized IDs');
-        } else {
-          const errorData = await normalizeResponse.json();
-          console.warn('⚠️ ID normalization failed:', errorData);
-          // Still show success for deletion, but warn about normalization
-        }
-      } catch (normalizeError) {
-        // Don't fail the deletion if normalization fails
-        console.warn('⚠️ Error during ID normalization:', normalizeError);
-      }
+      // Refetch quotes after deletion
+      await loadQuotes();
+      console.log('✅ Quotation list refreshed');
       
       // Show success toast
       setToast({ message: 'Quotation deleted successfully', type: 'success' });
@@ -808,7 +876,7 @@ export default function HistoryPage() {
             <th className="text-left py-4 px-4 text-sm font-bold text-white">
               <input
                 type="checkbox"
-                checked={selectedIds.length === filteredQuotes.length && filteredQuotes.length > 0}
+                checked={filteredQuotes.length > 0 && filteredQuotes.every(q => isQuoteSelected(q.id, activeTab))}
                 onChange={handleSelectAll}
                 className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
               />
@@ -856,10 +924,10 @@ export default function HistoryPage() {
             >
               <td className="py-4 px-4">
                 <input
-                  type="checkbox"
-                  checked={selectedIds.includes(quote.id)}
-                  onChange={() => handleToggleSelect(quote.id)}
-                  className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
+                      type="checkbox"
+                      checked={isQuoteSelected(quote.id, activeTab)}
+                      onChange={() => handleToggleSelect(quote)}
+                      className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                 />
               </td>
               <td className="py-4 px-4 text-slate-200 font-semibold">{quote.id}</td>
@@ -953,7 +1021,7 @@ export default function HistoryPage() {
               <th className="text-left py-4 px-4 text-sm font-bold text-white">
                 <input
                   type="checkbox"
-                  checked={selectedIds.length === filteredQuotes.length && filteredQuotes.length > 0}
+                  checked={filteredQuotes.length > 0 && filteredQuotes.every(q => isQuoteSelected(q.id, activeTab))}
                   onChange={handleSelectAll}
                   className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                 />
@@ -995,8 +1063,8 @@ export default function HistoryPage() {
                   <td className="py-4 px-4">
                     <input
                       type="checkbox"
-                      checked={selectedIds.includes(quote.id)}
-                      onChange={() => handleToggleSelect(quote.id)}
+                      checked={isQuoteSelected(quote.id, activeTab)}
+                      onChange={() => handleToggleSelect(quote)}
                       className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                     />
                   </td>
@@ -1247,9 +1315,74 @@ export default function HistoryPage() {
               </div>
             </div>
             
+            {/* Merge Selection Panel - Shows when quotations are selected */}
+            {selectedQuotesForMerge.length > 0 && (
+              <div className="glassmorphic-premium rounded-xl p-4 mb-4 slide-up border-2 border-cyan-500/30 bg-gradient-to-r from-cyan-900/20 to-purple-900/20">
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className="text-lg font-bold text-white">📄 Generate Merged PDF</span>
+                      <span className="px-3 py-1 bg-cyan-500/20 text-cyan-300 rounded-full text-sm font-semibold">
+                        {selectedQuotesForMerge.length} selected
+                      </span>
+                      {mergeValidation.isCrossProduct && (
+                        <span className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-full text-sm font-semibold">
+                          Multi-Product
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-green-300">
+                      {mergeValidation.message}
+                    </p>
+                    {mergeValidation.combinedTotal !== undefined && mergeValidation.combinedTotal > 0 && (
+                      <p className="text-sm text-slate-300 mt-1">
+                        Combined Total: <span className="text-premium-gold font-bold">₹{mergeValidation.combinedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                      </p>
+                    )}
+                    {/* Show which product types are selected */}
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {['mbcb', 'signages', 'paint'].map(type => {
+                        const count = selectedQuotesForMerge.filter(s => s.table === type).length;
+                        if (count === 0) return null;
+                        return (
+                          <span key={type} className="px-2 py-1 bg-white/10 text-slate-200 rounded text-xs">
+                            {type.toUpperCase()}: {count}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 flex-wrap">
+                    <button
+                      onClick={clearMergeSelections}
+                      className="px-4 py-2 text-sm font-semibold text-slate-200 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg transition-all duration-200"
+                    >
+                      Clear All
+                    </button>
+                    <button
+                      onClick={handleMergeQuotations}
+                      disabled={!mergeValidation.canMerge || isMerging}
+                      className={`px-6 py-2 text-sm font-bold rounded-lg transition-all duration-200 ${
+                        mergeValidation.canMerge 
+                          ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:shadow-lg hover:shadow-green-500/50' 
+                          : 'bg-gray-500/50 text-gray-300 cursor-not-allowed'
+                      }`}
+                    >
+                      {isMerging ? '⏳ Generating PDF...' : '📥 Download Merged PDF'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Results Count */}
             <div className="mb-4 text-slate-300">
               Showing {filteredQuotes.length} of {quotesForActiveTab.length} quotations
+              {selectedQuotesForMerge.length > 0 && (
+                <span className="ml-2 text-cyan-300">
+                  • {selectedQuotesForMerge.filter(s => s.table === activeTab).length} selected in this tab
+                </span>
+              )}
             </div>
             
             {/* Table Card */}

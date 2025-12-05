@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       account_id,
       sub_account_name,
       sub_account_id,
+      contact_id,
       purpose,
       date,
       quantity_rm,
@@ -112,6 +113,10 @@ export async function POST(request: NextRequest) {
       state_id,
       city_id,
       sub_account_id: finalSubAccountId,
+      contact_id: contact_id || null,
+      // Legacy field - provide fallback value for backward compatibility
+      place_of_supply: `State:${state_id}, City:${city_id}`,
+      customer_name: sub_account_name || 'N/A',
       purpose: purpose || null,
       date,
       final_total_cost: final_total_cost || null,
