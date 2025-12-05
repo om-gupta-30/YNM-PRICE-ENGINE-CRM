@@ -70,6 +70,13 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /who are the contacts/i,
     /get contacts/i,
     /find contacts/i,
+    /what contacts/i,
+    /tell me about contacts/i,
+    /my contacts/i,
+    /contact details/i,
+    /contact information/i,
+    /^contacts$/i, // Just "contacts"
+    /^contact$/i, // Just "contact"
   ],
   accounts: [
     /how many accounts/i,
@@ -83,6 +90,12 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /get accounts/i,
     /find accounts/i,
     /accounts with/i,
+    /what accounts/i,
+    /tell me about accounts/i,
+    /my accounts/i,
+    /account details/i,
+    /^accounts$/i, // Just "accounts"
+    /^account$/i, // Just "account"
   ],
   subaccounts: [
     /how many sub.?accounts/i,
@@ -97,6 +110,12 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /get sub.?accounts/i,
     /find sub.?accounts/i,
     /does .+ have/i, // "Does Megha have..." pattern
+    /what sub.?accounts/i,
+    /tell me about sub.?accounts/i,
+    /my sub.?accounts/i,
+    /sub.?account details/i,
+    /^sub.?accounts$/i, // Just "subaccounts"
+    /^sub.?account$/i, // Just "subaccount"
   ],
   followups: [
     /how many follow.?ups/i,
@@ -110,6 +129,12 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /overdue follow.?ups/i,
     /today.?s follow.?ups/i,
     /follow.?ups for today/i,
+    /what follow.?ups/i,
+    /tell me about follow.?ups/i,
+    /my follow.?ups/i,
+    /follow.?up details/i,
+    /^follow.?ups$/i, // Just "followups"
+    /^follow.?up$/i, // Just "followup"
   ],
   activities: [
     /how many activities/i,
@@ -122,6 +147,11 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /what activities/i,
     /activities this week/i,
     /activities today/i,
+    /tell me about activities/i,
+    /my activities/i,
+    /activity details/i,
+    /^activities$/i, // Just "activities"
+    /^activity$/i, // Just "activity"
   ],
   quotations: [
     /how many quotations/i,
@@ -134,6 +164,14 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /quotations for/i,
     /quotes for/i,
     /quote value/i,
+    /what quotations/i,
+    /tell me about quotations/i,
+    /my quotations/i,
+    /quotation details/i,
+    /^quotations$/i, // Just "quotations"
+    /^quotation$/i, // Just "quotation"
+    /^quotes$/i, // Just "quotes"
+    /^quote$/i, // Just "quote"
   ],
   leads: [
     /how many leads/i,
@@ -144,6 +182,12 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /leads for/i,
     /open leads/i,
     /new leads/i,
+    /what leads/i,
+    /tell me about leads/i,
+    /my leads/i,
+    /lead details/i,
+    /^leads$/i, // Just "leads"
+    /^lead$/i, // Just "lead"
   ],
   metrics: [
     /engagement score/i,
@@ -152,6 +196,11 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
     /total value/i,
     /conversion rate/i,
     /activity breakdown/i,
+    /what is my/i,
+    /my metrics/i,
+    /my performance/i,
+    /my stats/i,
+    /statistics/i,
   ],
   unknown: [],
 };
@@ -174,17 +223,57 @@ const OPERATION_PATTERNS = {
 export function parseQueryIntent(text: string): QueryIntent {
   const normalizedText = text.toLowerCase().trim();
   
-  // Detect entity type
+  // Detect entity type - try exact matches first, then patterns
   let detectedEntity: QueryEntityType = 'unknown';
-  for (const [entity, patterns] of Object.entries(ENTITY_PATTERNS)) {
-    if (entity === 'unknown') continue;
-    for (const pattern of patterns) {
-      if (pattern.test(normalizedText)) {
-        detectedEntity = entity as QueryEntityType;
-        break;
-      }
+  
+  // First, check for exact entity mentions (more reliable)
+  const entityKeywords: Record<string, QueryEntityType> = {
+    'contact': 'contacts',
+    'contacts': 'contacts',
+    'account': 'accounts',
+    'accounts': 'accounts',
+    'subaccount': 'subaccounts',
+    'sub-account': 'subaccounts',
+    'subaccounts': 'subaccounts',
+    'sub-accounts': 'subaccounts',
+    'followup': 'followups',
+    'follow-up': 'followups',
+    'followups': 'followups',
+    'follow-ups': 'followups',
+    'activity': 'activities',
+    'activities': 'activities',
+    'quotation': 'quotations',
+    'quotations': 'quotations',
+    'quote': 'quotations',
+    'quotes': 'quotations',
+    'lead': 'leads',
+    'leads': 'leads',
+  };
+  
+  // Check for exact keyword matches
+  for (const [keyword, entity] of Object.entries(entityKeywords)) {
+    // Match whole word or at start/end of sentence
+    const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'i');
+    if (keywordRegex.test(normalizedText)) {
+      detectedEntity = entity;
+      console.log(`[QueryEngine] Detected entity "${entity}" from keyword "${keyword}"`);
+      break;
     }
-    if (detectedEntity !== 'unknown') break;
+  }
+  
+  // If no exact match, try patterns
+  if (detectedEntity === 'unknown') {
+    for (const [entity, patterns] of Object.entries(ENTITY_PATTERNS)) {
+      if (entity === 'unknown') continue;
+      for (const pattern of patterns) {
+        if (pattern.test(normalizedText)) {
+          detectedEntity = entity as QueryEntityType;
+          console.log(`[QueryEngine] Detected entity "${entity}" from pattern`);
+          break;
+        }
+      }
+      if (detectedEntity !== 'unknown') break;
+    }
   }
 
   // Detect operation type
@@ -297,47 +386,93 @@ export async function executeCRMQuery(
   userRole: 'admin' | 'employee',
   userId: string
 ): Promise<CRMQueryResult> {
+  console.log(`[QueryEngine] Processing query: "${textQuery}" for user: ${userId} (${userRole})`);
+  
   const intent = parseQueryIntent(textQuery);
-  const supabase = createSupabaseServerClient();
-
   console.log(`[QueryEngine] Parsed intent:`, JSON.stringify(intent, null, 2));
 
+  // Validate Supabase connection
+  let supabase;
   try {
-    switch (intent.entity) {
-      case 'contacts':
-        return await queryContacts(supabase, intent, userRole, userId);
-      case 'accounts':
-        return await queryAccounts(supabase, intent, userRole, userId);
-      case 'subaccounts':
-        return await querySubAccounts(supabase, intent, userRole, userId);
-      case 'followups':
-        return await queryFollowups(supabase, intent, userRole, userId);
-      case 'activities':
-        return await queryActivities(supabase, intent, userRole, userId);
-      case 'quotations':
-        return await queryQuotations(supabase, intent, userRole, userId);
-      case 'leads':
-        return await queryLeads(supabase, intent, userRole, userId);
-      case 'metrics':
-        return await queryMetrics(supabase, intent, userRole, userId);
-      default:
-        return {
-          success: false,
-          entity: 'unknown',
-          operation: intent.operation,
-          raw: null,
-          formatted: "I couldn't understand what CRM data you're looking for. Try asking about contacts, accounts, sub-accounts, follow-ups, activities, quotations, or leads.",
-          message: 'Unknown entity type',
-        };
-    }
+    supabase = createSupabaseServerClient();
+    console.log(`[QueryEngine] Supabase client created successfully`);
   } catch (error: any) {
-    console.error('[QueryEngine] Error executing query:', error);
+    console.error('[QueryEngine] Failed to create Supabase client:', error);
     return {
       success: false,
       entity: intent.entity,
       operation: intent.operation,
       raw: null,
-      formatted: `Error executing query: ${error.message}`,
+      formatted: 'Database connection error. Please check your configuration.',
+      message: error.message,
+    };
+  }
+
+  try {
+    let result: CRMQueryResult;
+    
+    switch (intent.entity) {
+      case 'contacts':
+        result = await queryContacts(supabase, intent, userRole, userId);
+        break;
+      case 'accounts':
+        result = await queryAccounts(supabase, intent, userRole, userId);
+        break;
+      case 'subaccounts':
+        result = await querySubAccounts(supabase, intent, userRole, userId);
+        break;
+      case 'followups':
+        result = await queryFollowups(supabase, intent, userRole, userId);
+        break;
+      case 'activities':
+        result = await queryActivities(supabase, intent, userRole, userId);
+        break;
+      case 'quotations':
+        result = await queryQuotations(supabase, intent, userRole, userId);
+        break;
+      case 'leads':
+        result = await queryLeads(supabase, intent, userRole, userId);
+        break;
+      case 'metrics':
+        result = await queryMetrics(supabase, intent, userRole, userId);
+        break;
+      default:
+        console.log(`[QueryEngine] Unknown entity type, providing helpful suggestions`);
+        return {
+          success: false,
+          entity: 'unknown',
+          operation: intent.operation,
+          raw: null,
+          formatted: `I couldn't understand what CRM data you're looking for. 
+
+Try asking about:
+• "Show my contacts" or "How many contacts do I have?"
+• "List my accounts" or "What accounts are assigned to me?"
+• "Show my sub-accounts" or "List sub-accounts"
+• "What are my follow-ups?" or "Show follow-ups due today"
+• "List my activities" or "Show recent activities"
+• "What quotations do I have?" or "Show my pipeline value"
+• "List my leads" or "Show active leads"
+
+Or ask for coaching advice like:
+• "How can I improve my performance?"
+• "What should I focus on today?"
+• "Give me tips to close more deals"`,
+          message: 'Unknown entity type',
+        };
+    }
+    
+    console.log(`[QueryEngine] Query result: success=${result.success}, count=${result.count || 0}`);
+    return result;
+  } catch (error: any) {
+    console.error('[QueryEngine] Error executing query:', error);
+    console.error('[QueryEngine] Error stack:', error.stack);
+    return {
+      success: false,
+      entity: intent.entity,
+      operation: intent.operation,
+      raw: null,
+      formatted: `I encountered an error while fetching data: ${error.message}. Please try rephrasing your question or contact support if the issue persists.`,
       message: error.message,
     };
   }
@@ -402,13 +537,18 @@ async function queryContacts(
   }
 
   const count = contacts?.length || 0;
+  console.log(`[QueryEngine] Contacts query: found ${count} contacts`);
 
   // Format results
   let formatted = '';
   if (count === 0) {
-    formatted = filters.subaccountName
-      ? `No contacts found for sub-account "${filters.subaccountName}".`
-      : 'No contacts found matching your criteria.';
+    if (filters.subaccountName) {
+      formatted = `No contacts found for sub-account "${filters.subaccountName}". You may need to add contacts to this sub-account first.`;
+    } else if (userRole === 'employee') {
+      formatted = 'No contacts found in your assigned sub-accounts. You may need to add contacts to your sub-accounts first.';
+    } else {
+      formatted = 'No contacts found matching your criteria. The database may be empty or the filters may be too restrictive.';
+    }
   } else {
     const contactList = (contacts || []).map((c: any) => ({
       id: c.id,
@@ -509,12 +649,17 @@ async function querySubAccounts(
   }
 
   const count = subAccounts?.length || 0;
+  console.log(`[QueryEngine] SubAccounts query: found ${count} sub-accounts`);
 
   let formatted = '';
   if (count === 0) {
-    formatted = filters.subaccountName
-      ? `No sub-account found matching "${filters.subaccountName}".`
-      : 'No sub-accounts found matching your criteria.';
+    if (filters.subaccountName) {
+      formatted = `No sub-account found matching "${filters.subaccountName}". Try checking the exact spelling or ask "list all sub-accounts" to see available ones.`;
+    } else if (userRole === 'employee') {
+      formatted = 'No sub-accounts are currently assigned to you. Contact your administrator to get sub-accounts assigned.';
+    } else {
+      formatted = 'No sub-accounts found in the database. The database may be empty.';
+    }
   } else {
     if (operation === 'count') {
       formatted = `Found ${count} sub-account(s).`;
@@ -731,10 +876,15 @@ async function queryFollowups(
   });
 
   const count = followups?.length || 0;
+  console.log(`[QueryEngine] Followups query: found ${count} follow-ups`);
 
   let formatted = '';
   if (count === 0) {
-    formatted = 'No follow-ups scheduled.';
+    if (userRole === 'employee') {
+      formatted = 'No follow-ups scheduled for your contacts. You can schedule follow-ups by updating contact records.';
+    } else {
+      formatted = 'No follow-ups scheduled in the system.';
+    }
   } else {
     formatted = `Found ${count} follow-up(s): ${overdue.length} overdue, ${dueToday.length} due today, ${upcoming.length} upcoming.`;
   }
@@ -802,10 +952,17 @@ async function queryActivities(
   });
 
   const count = activities?.length || 0;
+  console.log(`[QueryEngine] Activities query: found ${count} activities`);
 
   let formatted = '';
   if (count === 0) {
-    formatted = 'No activities found for the specified period.';
+    if (filters.dateRange?.start) {
+      formatted = `No activities found for the specified time period. Try asking "show all activities" or "list my activities" without a date filter.`;
+    } else if (userRole === 'employee') {
+      formatted = 'No activities found in your account. Start logging activities to track your work!';
+    } else {
+      formatted = 'No activities found in the system.';
+    }
   } else {
     const breakdownStr = Object.entries(breakdown)
       .map(([type, cnt]) => `${type}: ${cnt}`)
@@ -898,6 +1055,7 @@ async function queryQuotations(
   allQuotations = allQuotations.slice(0, filters.limit || 50);
 
   const count = allQuotations.length;
+  console.log(`[QueryEngine] Quotations query: found ${count} quotations, total value: ₹${totalValue.toLocaleString('en-IN')}`);
 
   // Status breakdown
   const statusBreakdown: Record<string, number> = {};
@@ -907,7 +1065,11 @@ async function queryQuotations(
 
   let formatted = '';
   if (count === 0) {
-    formatted = 'No quotations found.';
+    if (userRole === 'employee') {
+      formatted = 'No quotations found in your account. Create quotations using the price engine to build your pipeline!';
+    } else {
+      formatted = 'No quotations found in the system.';
+    }
   } else {
     formatted = `Found ${count} quotation(s) with total pipeline value of ₹${totalValue.toLocaleString('en-IN')}.`;
   }
@@ -975,10 +1137,15 @@ async function queryLeads(
   });
 
   const count = leads?.length || 0;
+  console.log(`[QueryEngine] Leads query: found ${count} leads`);
 
   let formatted = '';
   if (count === 0) {
-    formatted = 'No leads found.';
+    if (userRole === 'employee') {
+      formatted = 'No leads found in your account. Add leads to start tracking potential opportunities!';
+    } else {
+      formatted = 'No leads found in the system.';
+    }
   } else {
     const statusStr = Object.entries(statusBreakdown)
       .map(([status, cnt]) => `${status}: ${cnt}`)

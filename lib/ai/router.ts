@@ -53,6 +53,20 @@ const QUERY_PATTERNS = [
   /(?:get|find) follow.?ups/i,
   /(?:get|find) leads/i,
   
+  // What/Tell me patterns (data queries)
+  /what (?:are|is) (?:my|the) contacts/i,
+  /what (?:are|is) (?:my|the) accounts/i,
+  /what (?:are|is) (?:my|the) sub.?accounts/i,
+  /what (?:are|is) (?:my|the) follow.?ups/i,
+  /what (?:are|is) (?:my|the) leads/i,
+  /what (?:are|is) (?:my|the) activities/i,
+  /what (?:are|is) (?:my|the) quotations/i,
+  /tell me (?:about|my) contacts/i,
+  /tell me (?:about|my) accounts/i,
+  /tell me (?:about|my) sub.?accounts/i,
+  /tell me (?:about|my) follow.?ups/i,
+  /tell me (?:about|my) leads/i,
+  
   // Specific data queries
   /what is (?:the )?engagement score/i,
   /what(?:'s| is) (?:the )?total pipeline/i,
@@ -87,6 +101,9 @@ const QUERY_PATTERNS = [
   /which accounts/i,
   /which contacts/i,
   /which leads/i,
+  
+  // Simple entity mentions (if user just says "contacts", "accounts", etc.)
+  /^(?:contacts|accounts|sub.?accounts|follow.?ups|leads|activities|quotations|quotes)$/i,
 ];
 
 /**
@@ -187,8 +204,15 @@ export function routeAIRequest(inputText: string): AIMode {
   const text = inputText.toLowerCase().trim();
   
   // Empty or very short queries default to coach mode
-  if (text.length < 5) {
+  if (text.length < 2) {
     return 'COACH';
+  }
+
+  // Check for simple entity mentions first (most reliable)
+  const simpleEntityPattern = /^(?:contacts?|accounts?|sub.?accounts?|follow.?ups?|leads?|activities?|quotations?|quotes?)$/i;
+  if (simpleEntityPattern.test(text)) {
+    console.log(`[Router] QUERY mode triggered by simple entity mention: "${text}"`);
+    return 'QUERY';
   }
 
   // First, check for strong QUERY keywords
@@ -220,6 +244,16 @@ export function routeAIRequest(inputText: string): AIMode {
     if (pattern.test(text)) {
       console.log(`[Router] COACH mode triggered by pattern: ${pattern}`);
       return 'COACH';
+    }
+  }
+
+  // If query contains entity keywords but no clear pattern, default to QUERY
+  // (user likely wants data, not advice)
+  const entityKeywords = ['contact', 'account', 'subaccount', 'followup', 'lead', 'activity', 'quotation', 'quote'];
+  for (const keyword of entityKeywords) {
+    if (text.includes(keyword)) {
+      console.log(`[Router] QUERY mode triggered by entity keyword: "${keyword}"`);
+      return 'QUERY';
     }
   }
 

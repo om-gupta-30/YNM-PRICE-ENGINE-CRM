@@ -129,13 +129,44 @@ async function handleQueryMode(
   role: 'employee' | 'admin'
 ): Promise<CoachResponse> {
   console.log(`[AI Coach] Processing QUERY mode for: "${question.substring(0, 50)}..."`);
+  console.log(`[AI Coach] User: ${user}, Role: ${role}`);
   
   // Execute CRM query
-  const queryResult = await executeCRMQuery(question, role, user);
+  let queryResult: CRMQueryResult;
+  try {
+    queryResult = await executeCRMQuery(question, role, user);
+    console.log(`[AI Coach] Query executed: success=${queryResult.success}, entity=${queryResult.entity}, count=${queryResult.count || 0}`);
+  } catch (error: any) {
+    console.error('[AI Coach] Query execution failed:', error);
+    return {
+      reply: `I encountered an error while fetching data: ${error.message}. Please try rephrasing your question.`,
+      tone: 'warning',
+      mode: 'QUERY',
+      queryResult: {
+        success: false,
+        entity: 'unknown',
+        operation: 'get',
+        raw: null,
+        formatted: error.message,
+      },
+    };
+  }
   
   if (!queryResult.success) {
+    console.log(`[AI Coach] Query returned unsuccessful result: ${queryResult.message || 'Unknown error'}`);
     return {
-      reply: queryResult.formatted || 'No matching records found in CRM.',
+      reply: queryResult.formatted || 'No matching records found in CRM. Try asking about contacts, accounts, sub-accounts, follow-ups, activities, quotations, or leads.',
+      tone: 'informational',
+      mode: 'QUERY',
+      queryResult,
+    };
+  }
+  
+  // Check if we got empty results
+  if (queryResult.count === 0 || (!queryResult.raw || (Array.isArray(queryResult.raw) && queryResult.raw.length === 0))) {
+    console.log(`[AI Coach] Query returned empty results for entity: ${queryResult.entity}`);
+    return {
+      reply: queryResult.formatted || `No ${queryResult.entity} found matching your criteria. Try asking about a different entity or check your filters.`,
       tone: 'informational',
       mode: 'QUERY',
       queryResult,
