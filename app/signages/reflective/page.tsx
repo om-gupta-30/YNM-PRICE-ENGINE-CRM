@@ -829,7 +829,7 @@ export default function ReflectivePartPage() {
       
       // Store AI suggestion data for persistence
       if (aiResult) {
-        setAiSuggestedPrice(aiResult.recommendedPrice);
+        setAiSuggestedPrice(aiResult.guaranteedWinPrice);
         setAiWinProbability(aiResult.winProbability);
         setAiPricingInsights({
           reasoning: aiResult.reasoning,

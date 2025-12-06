@@ -740,7 +740,7 @@ export default function ThrieBeamPage() {
         
         // Store AI suggestion data for persistence
         if (aiResult) {
-          setAiSuggestedPrice(aiResult.recommendedPrice);
+          setAiSuggestedPrice(aiResult.guaranteedWinPrice);
           setAiWinProbability(aiResult.winProbability);
           setAiPricingInsights({
             reasoning: aiResult.reasoning,
@@ -762,7 +762,7 @@ export default function ThrieBeamPage() {
   const handleCloseAIModal = () => {
     // Store AI suggestion data even if user doesn't apply it
     if (aiResult && !userAppliedAI) {
-      setAiSuggestedPrice(aiResult.recommendedPrice);
+      setAiSuggestedPrice(aiResult.guaranteedWinPrice);
       setAiWinProbability(aiResult.winProbability);
       setAiPricingInsights({
         reasoning: aiResult.reasoning,

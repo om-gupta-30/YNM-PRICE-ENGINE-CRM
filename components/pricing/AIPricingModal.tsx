@@ -29,7 +29,7 @@ export default function AIPricingModal({
 
   const handleApply = (price?: number) => {
     if (result) {
-      onApplyPrice(price || result.recommendedPrice);
+      onApplyPrice(price || result.guaranteedWinPrice);
       onClose();
     }
   };
@@ -115,9 +115,7 @@ export default function AIPricingModal({
                         })}{priceUnit !== '₹' ? ` ${priceUnit}` : ''}
                       </p>
                       <p className="text-xs text-slate-400 mt-2">
-                        {result.guaranteedWinPrice < result.recommendedPrice
-                          ? `₹${(result.recommendedPrice - result.guaranteedWinPrice).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lower than recommended`
-                          : 'Same as recommended price'}
+                        Price that guarantees 100% win probability
                       </p>
                     </div>
                     <div className="text-right">

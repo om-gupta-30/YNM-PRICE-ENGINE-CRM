@@ -20,6 +20,37 @@ export async function GET(request: NextRequest) {
       { name: 'leads', sequence: 'leads_id_seq' },
     ];
 
+    // Reset estimate counter to start from 1
+    try {
+      const { error: estimateError } = await supabase
+        .from('estimate_counter')
+        .update({ current_number: 0, updated_at: new Date().toISOString() })
+        .eq('id', 1);
+
+      if (estimateError) {
+        console.error('Error resetting estimate counter:', estimateError);
+        resetResults['estimate_counter'] = {
+          reset: false,
+          count: -1,
+          message: `Error: ${estimateError.message}`,
+        };
+      } else {
+        console.log('✅ Successfully reset estimate counter to 0 (next will be YNM/EST-1)');
+        resetResults['estimate_counter'] = {
+          reset: true,
+          count: 0,
+          message: 'Estimate counter reset to 0 (next estimate will be YNM/EST-1)',
+        };
+      }
+    } catch (error: any) {
+      console.error('Error resetting estimate counter:', error);
+      resetResults['estimate_counter'] = {
+        reset: false,
+        count: -1,
+        message: `Error: ${error.message}`,
+      };
+    }
+
     for (const table of tables) {
       try {
         // Check row count
