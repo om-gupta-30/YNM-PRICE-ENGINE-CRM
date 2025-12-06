@@ -186,6 +186,8 @@ Examples:
         category: IntentCategory.CONTACT_QUERY,
         tables: ['contacts'],
         filters: {},
+        aggregationType: undefined,
+        timeRange: undefined,
       },
       confidence: 0.3,
       explanation: `Failed to classify intent: ${error.message}. Defaulting to CONTACT_QUERY.`,

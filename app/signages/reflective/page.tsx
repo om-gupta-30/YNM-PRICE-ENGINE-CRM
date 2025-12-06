@@ -850,7 +850,7 @@ export default function ReflectivePartPage() {
   const handleCloseAIModal = () => {
     // Store AI suggestion data even if user doesn't apply it
     if (aiResult && !userAppliedAI) {
-      setAiSuggestedPrice(aiResult.recommendedPrice);
+      setAiSuggestedPrice(aiResult.guaranteedWinPrice);
       setAiWinProbability(aiResult.winProbability);
       setAiPricingInsights({
         reasoning: aiResult.reasoning,

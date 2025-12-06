@@ -34,8 +34,8 @@ export default function AIPricingModal({
     }
   };
 
-  // Determine confidence level (use prop or result value)
-  const confidence = confidenceLevel || result?.confidenceLevel || null;
+  // Determine confidence level (use prop value)
+  const confidence = confidenceLevel || null;
   
   // Get confidence color and label
   const getConfidenceDisplay = (conf: number | null) => {

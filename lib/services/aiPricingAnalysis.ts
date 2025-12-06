@@ -701,16 +701,20 @@ export async function analyzePricingWithAI(
     console.log(`[AI] Pricing AI: Fetching pricingMemory (findSimilarPastPrice)`);
     let previousPricing: Awaited<ReturnType<typeof findSimilarPastPrice>> | null = null;
     try {
-      previousPricing = await findSimilarPastPrice({
-        productType: input.productType,
-        specs: input.productSpecs,
-        quantity: input.quantity,
-      });
-      if (previousPricing) {
-        console.log('[AI Pricing] Found similar past price:', previousPricing.lastPrice);
-        console.log(`[AI] Pricing AI: pricingMemory returned: ₹${previousPricing.lastPrice} from ${previousPricing.createdAt}`);
+      if (input.quantity !== undefined && input.quantity !== null) {
+        previousPricing = await findSimilarPastPrice({
+          productType: input.productType,
+          specs: input.productSpecs,
+          quantity: input.quantity,
+        });
+        if (previousPricing) {
+          console.log('[AI Pricing] Found similar past price:', previousPricing.lastPrice);
+          console.log(`[AI] Pricing AI: pricingMemory returned: ₹${previousPricing.lastPrice} from ${previousPricing.createdAt}`);
+        } else {
+          console.log(`[AI] Pricing AI: pricingMemory returned: no similar past price found`);
+        }
       } else {
-        console.log(`[AI] Pricing AI: pricingMemory returned: no similar past price found`);
+        console.log(`[AI] Pricing AI: Skipping pricingMemory - quantity not provided`);
       }
     } catch (error) {
       console.warn('[AI Pricing] Failed to fetch similar past price, continuing without it:', error);
