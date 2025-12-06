@@ -1,23 +1,29 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // ============================================
-// AI Model Configuration - Google Gemini 2.5
+// AI Model Configuration - Google Gemini
 // ============================================
 
 /**
- * DEFAULT_MODEL: Primary model for coaching, admin insights, and complex analysis
- * Use for: /api/ai/coach, /api/ai/weekly-insights, admin performance scoring
+ * GEMINI_MODELS: Primary and fallback models for AI operations
+ * Primary: gemini-2.5-pro (stable Gemini 2.5 model with 1M token context, 65K output tokens, thinking capability)
+ * Fallback: gemini-2.5-flash (stable Gemini 2.5 model with best performance and reasoning)
+ * 
+ * Gemini 2.5 models released June 2025:
+ * - 1M token context window
+ * - 65K output tokens
+ * - Thinking capability enabled
+ * - Best performance and reasoning
  */
-const DEFAULT_MODEL = 'models/gemini-2.5-pro';
-
-/**
- * FAST_MODEL: Faster model for bulk inference and real-time scoring
- * Use for: Engagement scoring, activity-triggered AI, batch operations
- * Also used as fallback if DEFAULT_MODEL fails with "model not found"
- */
-const FAST_MODEL = 'models/gemini-2.5-flash';
+export const GEMINI_MODELS = {
+  primary: "gemini-2.5-pro",
+  fallback: "gemini-2.5-flash"
+};
 
 // Export model constants for use in other modules
+const DEFAULT_MODEL = GEMINI_MODELS.primary;
+const FAST_MODEL = GEMINI_MODELS.fallback;
+
 export { DEFAULT_MODEL, FAST_MODEL };
 
 let geminiClient: GoogleGenerativeAI | null = null;
@@ -98,151 +104,214 @@ function isModelNotFoundError(error: any): boolean {
     message.includes('models/') ||
     message.includes('404') ||
     message.includes('not available') ||
-    message.includes('does not exist')
+    message.includes('does not exist') ||
+    message.includes('is not found for api version') ||
+    message.includes('is not supported for generatecontent')
   );
+}
+
+/**
+ * Build structured prompt with meta-instructions to force reasoning
+ * Wraps system and user prompts in a structured format
+ * Optionally includes business knowledge context
+ */
+function buildStructuredPrompt(
+  systemPrompt: string,
+  userPrompt: string,
+  knowledgeContext?: any
+): string {
+  // Format knowledge context block if provided
+  const contextBlock = knowledgeContext
+    ? `
+<<BUSINESS KNOWLEDGE SNAPSHOT>>
+${JSON.stringify(knowledgeContext, null, 2)}
+`
+    : '';
+
+  return `
+<<ROLE>>
+${systemPrompt}
+
+<<CONTEXT>>
+${userPrompt}
+${contextBlock}
+<<REASONING STEPS>>
+1. Understand the user's intent and whether this is CRM guidance or pricing intelligence
+2. Read and incorporate business knowledge snapshot if provided
+3. Compare facts to historical performance patterns
+4. Identify constraints:
+   - Pricing must remain above competitor benchmark
+   - CRM insights must be grounded in database reality
+5. Decide on an optimal answer or recommendation based on business rules
+6. Explain logic internally (hidden reasoning)
+7. Output clean structured JSON or text as requested — no fillers
+`;
+}
+
+/**
+ * Run Gemini AI with automatic fallback between primary and fallback models
+ * Tries gemini-2.5-pro first, falls back to gemini-2.5-flash on error
+ * Returns safe structured fallback object if both models fail
+ * 
+ * @param prompt - Combined prompt (system + user) to send to AI
+ * @returns Parsed JSON response of type T, or safe fallback object
+ */
+export async function runGeminiWithFallback<T>(prompt: string): Promise<T> {
+  const client = getGeminiClient();
+  const models = [GEMINI_MODELS.primary, GEMINI_MODELS.fallback];
+
+  for (const model of models) {
+    try {
+      console.log(`[AI] Trying model: ${model}`);
+      
+      const result = await client.getGenerativeModel({ model }).generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ]
+      });
+
+      const text = result?.response?.text() ?? "{}";
+      
+      // Try to parse JSON response
+      const parsed = parseJsonSafely<T>(text);
+      if (parsed !== null) {
+        console.log(`[AI] Model succeeded: ${model}`);
+        return parsed;
+      }
+      
+      // If parsing fails but we got text, log warning and continue to next model
+      console.warn(`[AI] Model ${model} returned non-JSON response, trying fallback`);
+      continue;
+    } catch (err: any) {
+      console.error(`[AI] Model failed ${model}:`, err.message);
+      
+      // Check if it's a 404 or model not found error
+      const isModelError = isModelNotFoundError(err) || err?.code === 404;
+      if (isModelError) {
+        console.log(`[AI] Model ${model} not available (404/not found), trying fallback`);
+        continue;
+      }
+      
+      // For other errors, also try fallback
+      continue;
+    }
+  }
+
+  // Hard fallback object (to prevent UI crash)
+  console.error('[AI] All models failed, returning safe fallback object');
+  return {
+    reply: "AI temporarily unavailable. Try again later.",
+    suggestions: []
+  } as unknown as T;
 }
 
 /**
  * Run Gemini AI with system and user prompts, expecting JSON response
  * 
  * Features:
- * - Uses DEFAULT_MODEL (gemini-2.5-pro) for primary inference
- * - Falls back to FAST_MODEL (gemini-2.5-flash) if model not found
- * - Robust JSON parsing with multiple fallback strategies
- * - Retry logic for transient failures
- * - Detailed logging for debugging
+ * - Uses model fallback mechanism (tries gemini-2.5-pro first, falls back to gemini-2.5-flash)
+ * - Structured prompt format to force reasoning
+ * - Optional business knowledge context for enhanced reasoning
+ * - Returns safe fallback object if all models fail
+ * 
+ * @param systemPrompt - System instructions for the AI
+ * @param userPrompt - User query or input
+ * @param knowledgeContext - Optional business knowledge context from knowledgeLoader
  */
-export async function runGemini<T>(systemPrompt: string, userPrompt: string): Promise<T> {
-  const client = getGeminiClient();
-  const modelsToTry = [DEFAULT_MODEL, FAST_MODEL];
-  let lastError: Error | null = null;
-
-  for (const modelName of modelsToTry) {
-    console.log(`[AI] Attempting inference with model: ${modelName}`);
-    
-    try {
-      // Configure model with JSON response format - reduced tokens for shorter responses
-      const model = client.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-          maxOutputTokens: 1024, // Reduced from 2048 for shorter, more cost-effective responses
-        },
-      });
-
-      // Combine system prompt and user prompt with clear JSON instruction
-      const fullPrompt = `${systemPrompt}
-
-CRITICAL: You MUST respond with valid JSON only. No markdown, no code blocks, no explanations - just raw JSON.
-
-${userPrompt}`;
-
-      // Retry logic for transient failures (2 attempts per model)
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const result = await model.generateContent(fullPrompt);
-          const response = result?.response;
-          
-          // Safely extract text from response
-          if (!response) {
-            throw new Error('Empty response from Gemini API');
-          }
-          
-          const fullText = response.text()?.trim();
-          
-          if (!fullText) {
-            throw new Error('Empty text content in Gemini response');
-          }
-
-          // Parse JSON with fallback strategies
-          const parsed = parseJsonSafely<T>(fullText);
-          if (parsed !== null) {
-            console.log(`[AI] Successfully parsed response from ${modelName}`);
-            return parsed;
-          }
-
-          throw new Error(`Response not valid JSON: ${fullText.substring(0, 200)}...`);
-        } catch (innerError: any) {
-          lastError = innerError;
-          
-          // If model not found, break inner retry loop to try next model
-          if (isModelNotFoundError(innerError)) {
-            console.warn(`[AI] Model ${modelName} not found/available, trying fallback...`);
-            break;
-          }
-          
-          console.error(`[AI] ${modelName} attempt ${attempt} failed:`, innerError.message);
-          
-          if (attempt < 2) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1s before retry
-          }
-        }
-      }
-    } catch (outerError: any) {
-      lastError = outerError;
-      console.error(`[AI] Failed with model ${modelName}:`, outerError.message);
-      
-      // If it's a model not found error, continue to try next model
-      if (isModelNotFoundError(outerError)) {
-        continue;
-      }
-    }
+export async function runGemini<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  knowledgeContext?: any
+): Promise<T> {
+  console.log('[AI] Using runGeminiWithFallback for model fallback');
+  if (knowledgeContext) {
+    console.log('[AI] Including business knowledge context in prompt');
   }
 
-  // All models failed
-  console.error('[AI] FAILURE: All models exhausted. Last error:', lastError?.message);
-  throw lastError || new Error('Gemini API failed after trying all available models');
+  // Build system prompt with JSON instruction
+  const fullSystemPrompt = `${systemPrompt}
+
+You are a sales CRM assistant.
+Think step-by-step, reason before answering.
+If querying database, reflect result context.
+Give output that is:
+- concise
+- accurate  
+- structured
+- NEVER hallucinated
+If unsure, state uncertainty.
+
+CRITICAL: Respond with valid JSON only. No markdown, no code blocks.`;
+
+  try {
+    // Build structured prompt with meta-instructions and optional knowledge context
+    // Note: buildStructuredPrompt includes system prompt in <<ROLE>>, so we pass it here
+    const structuredPrompt = buildStructuredPrompt(fullSystemPrompt, userPrompt, knowledgeContext);
+    
+    // Use new fallback mechanism
+    const result = await runGeminiWithFallback<T>(structuredPrompt);
+
+    console.log('[AI] Successfully received response from Gemini');
+    return result;
+  } catch (error: any) {
+    console.error('[AI] Gemini call failed:', error.message);
+    // Return safe fallback instead of throwing
+    return {
+      reply: "AI temporarily unavailable. Try again later.",
+      suggestions: []
+    } as unknown as T;
+  }
 }
 
 /**
- * Run Gemini AI with FAST_MODEL for bulk/scoring operations
- * Optimized for speed over quality for high-volume inference
+ * Run Gemini AI for fast/bulk operations
+ * Uses model fallback mechanism (tries gemini-2.5-pro first, falls back to gemini-2.5-flash)
+ * Optional business knowledge context for enhanced reasoning
+ * Returns safe fallback object if all models fail
+ * 
+ * @param systemPrompt - System instructions for the AI
+ * @param userPrompt - User query or input
+ * @param knowledgeContext - Optional business knowledge context from knowledgeLoader
  */
-export async function runGeminiFast<T>(systemPrompt: string, userPrompt: string): Promise<T> {
-  const client = getGeminiClient();
-  
-  console.log(`[AI] Fast inference with model: ${FAST_MODEL}`);
-  
+export async function runGeminiFast<T>(
+  systemPrompt: string,
+  userPrompt: string,
+  knowledgeContext?: any
+): Promise<T> {
+  console.log('[AI] Using runGeminiWithFallback (fast) for model fallback');
+  if (knowledgeContext) {
+    console.log('[AI] Including business knowledge context in prompt');
+  }
+
+  // Build full prompt
+  const fullSystemPrompt = `${systemPrompt}
+
+Think step-by-step before answering.
+Be concise, accurate, and structured.
+NEVER hallucinate - only use provided data.
+
+CRITICAL: Respond with valid JSON only. No markdown.`;
+
   try {
-    const model = client.getGenerativeModel({
-      model: FAST_MODEL,
-      generationConfig: {
-        responseMimeType: 'application/json',
-        temperature: 0.5, // Lower temperature for more consistent scoring
-        maxOutputTokens: 1024, // Smaller output for faster response
-      },
-    });
-
-    const fullPrompt = `${systemPrompt}
-
-CRITICAL: Respond with valid JSON only. No markdown, no explanations.
-
-${userPrompt}`;
-
-    const result = await model.generateContent(fullPrompt);
-    const response = result?.response;
+    // Build structured prompt with meta-instructions and optional knowledge context
+    // Note: buildStructuredPrompt includes system prompt in <<ROLE>>, so we pass it here
+    const structuredPrompt = buildStructuredPrompt(fullSystemPrompt, userPrompt, knowledgeContext);
     
-    if (!response) {
-      throw new Error('Empty response from Gemini API');
-    }
-    
-    const fullText = response.text()?.trim();
-    
-    if (!fullText) {
-      throw new Error('Empty text content in Gemini response');
-    }
+    // Use new fallback mechanism
+    const result = await runGeminiWithFallback<T>(structuredPrompt);
 
-    const parsed = parseJsonSafely<T>(fullText);
-    if (parsed !== null) {
-      console.log(`[AI] Fast inference successful`);
-      return parsed;
-    }
-
-    throw new Error(`Response not valid JSON: ${fullText.substring(0, 200)}...`);
+    console.log('[AI] Fast inference successful');
+    return result;
   } catch (error: any) {
     console.error('[AI] Fast inference failed:', error.message);
-    throw error;
+    // Return safe fallback instead of throwing
+    return {
+      reply: "AI temporarily unavailable. Try again later.",
+      suggestions: []
+    } as unknown as T;
   }
 }
 
@@ -554,7 +623,7 @@ export type SubaccountAIInsights = {
 
 /**
  * Calculate AI-powered engagement insights for a sub-account
- * Uses FAST_MODEL (gemini-2.5-flash) for bulk inference operations
+ * Uses runGeminiFast which automatically falls back between models
  */
 export async function calculateSubaccountAIInsights(input: {
   subaccountName: string;

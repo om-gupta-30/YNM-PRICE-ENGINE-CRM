@@ -17,6 +17,11 @@ import { calculatePostWeights } from '@/lib/calculations/postCalculations';
 import { calculateSpacerWeights } from '@/lib/calculations/spacerCalculations';
 import { useDebounce } from '@/hooks/useDebounce';
 import { generateQuotationPDF, getHSNCode as getPDFHSNCode, loadLogoAsBase64 } from '@/lib/utils/quotationPdf';
+import { validateQuotationPricing, formatValidationMessage } from '@/lib/services/quotationPricingValidation';
+import { useAIPricing } from '@/hooks/useAIPricing';
+import AIPricingModal from '@/components/pricing/AIPricingModal';
+import { lookupHistoricalMBCBQuote, type HistoricalQuoteMatch } from '@/lib/services/historicalQuoteLookup';
+import HistoricalPricingAlert from '@/components/pricing/HistoricalPricingAlert';
 
 type PartInput = {
   thickness?: number;
@@ -74,6 +79,22 @@ export default function DoubleWBeamPage() {
   
   // Save state to prevent duplicate saves
   const [isSaving, setIsSaving] = useState(false);
+  
+  // AI Pricing state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const { isLoading: isAILoading, error: aiError, result: aiResult, analyzePricing, reset: resetAI } = useAIPricing();
+  
+  // AI Suggestion tracking (for persistence)
+  const [aiSuggestedPrice, setAiSuggestedPrice] = useState<number | null>(null);
+  const [aiWinProbability, setAiWinProbability] = useState<number | null>(null);
+  const [aiPricingInsights, setAiPricingInsights] = useState<Record<string, any> | null>(null);
+  const [userAppliedAI, setUserAppliedAI] = useState<boolean>(false);
+  const [overrideReason, setOverrideReason] = useState<string>('');
+  const [showOverrideReasonField, setShowOverrideReasonField] = useState<boolean>(false);
+  
+  // Historical pricing recall
+  const [historicalMatch, setHistoricalMatch] = useState<HistoricalQuoteMatch | null>(null);
+  const [isLookingUpHistory, setIsLookingUpHistory] = useState(false);
   
   // Quotation header fields (mandatory)
   const [stateId, setStateId] = useState<number | null>(null);
@@ -275,6 +296,10 @@ export default function DoubleWBeamPage() {
   const [transportCostPerKg, setTransportCostPerKg] = useState<number | null>(null);
   const [installationCostPerRm, setInstallationCostPerRm] = useState<number | null>(null);
   const [quantityRm, setQuantityRm] = useState<number | null>(null);
+  
+  // New AI pricing fields
+  const [competitorPricePerUnit, setCompetitorPricePerUnit] = useState<number | null>(null);
+  const [clientDemandPricePerUnit, setClientDemandPricePerUnit] = useState<number | null>(null);
   
   // Debounced values for calculations to prevent lag while typing
   const debouncedRatePerKg = useDebounce(ratePerKg, 300);
@@ -550,6 +575,61 @@ export default function DoubleWBeamPage() {
   
   const { materialCostPerRm, transportCostPerRm, installationCostPerRmValue, totalCostPerRm, finalTotal, fastenerMaterialCostPerRm, fastenerTransportCostPerRm } = costCalculations;
 
+  // Historical pricing lookup - triggered when key specs are entered
+  useEffect(() => {
+    const lookupHistoricalPricing = async () => {
+      if (historicalMatch || isLookingUpHistory) return;
+      
+      const hasWBeamSpecs = includeWBeam && wBeam.thickness && wBeam.coatingGsm;
+      const hasPostSpecs = includePost && post.thickness && post.length && post.coatingGsm;
+      const hasSpacerSpecs = includeSpacer && spacer.thickness && spacer.length && spacer.coatingGsm;
+      
+      if (!hasWBeamSpecs && !hasPostSpecs && !hasSpacerSpecs) return;
+      
+      setIsLookingUpHistory(true);
+      
+      try {
+        const match = await lookupHistoricalMBCBQuote({
+          wBeamThickness: wBeam.thickness,
+          wBeamCoating: wBeam.coatingGsm,
+          postThickness: post.thickness,
+          postLength: post.length ?? undefined,
+          postCoating: post.coatingGsm ?? undefined,
+          spacerThickness: spacer.thickness ?? undefined,
+          spacerLength: spacer.length ?? undefined,
+          spacerCoating: spacer.coatingGsm,
+          includeWBeam,
+          includePost,
+          includeSpacer,
+        });
+        
+        if (match) {
+          setHistoricalMatch(match);
+        }
+      } catch (error) {
+        console.error('Error looking up historical pricing:', error);
+      } finally {
+        setIsLookingUpHistory(false);
+      }
+    };
+    
+    lookupHistoricalPricing();
+  }, [
+    includeWBeam, wBeam.thickness, wBeam.coatingGsm,
+    includePost, post.thickness, post.length, post.coatingGsm,
+    includeSpacer, spacer.thickness, spacer.length, spacer.coatingGsm,
+    historicalMatch, isLookingUpHistory
+  ]);
+  
+  // Detect if user manually changes price after applying AI suggestion
+  useEffect(() => {
+    if (userAppliedAI && aiSuggestedPrice && totalCostPerRm) {
+      if (Math.abs(totalCostPerRm - aiSuggestedPrice) > 0.01) {
+        setShowOverrideReasonField(true);
+      }
+    }
+  }, [totalCostPerRm, userAppliedAI, aiSuggestedPrice]);
+
   // Calculate GST based on place of supply
   // CORRECT: Telangana (intra-state) = SGST + CGST, Other states (inter-state) = IGST
   const gstCalculations = useMemo(() => {
@@ -581,6 +661,141 @@ export default function DoubleWBeamPage() {
     }
   }, [finalTotal, stateName]);
 
+  // AI Pricing Handlers
+  const handleGetAISuggestion = async () => {
+    if (!totalCostPerRm || totalCostPerRm <= 0) {
+      setToast({ message: 'Please calculate pricing first before getting AI suggestion', type: 'error' });
+      return;
+    }
+
+    if (!quantityRm || quantityRm <= 0) {
+      setToast({ message: 'Please enter quantity before getting AI suggestion', type: 'error' });
+      return;
+    }
+
+    const productSpecs: Record<string, any> = {
+      wBeamThickness: `${wBeam.thickness}mm`,
+      wBeamCoating: `${wBeam.coatingGsm} GSM`,
+      type: 'Double W-Beam',
+    };
+    
+    if (includePost) {
+      productSpecs.postThickness = `${post.thickness}mm`;
+      productSpecs.postLength = `${post.length}mm`;
+      productSpecs.postCoating = `${post.coatingGsm} GSM`;
+    }
+    
+    if (includeSpacer) {
+      productSpecs.spacerThickness = `${spacer.thickness}mm`;
+      productSpecs.spacerLength = `${spacer.length}mm`;
+      productSpecs.spacerCoating = `${spacer.coatingGsm} GSM`;
+    }
+
+    setIsAIModalOpen(true);
+    resetAI();
+
+    try {
+      await analyzePricing({
+        productType: 'mbcb',
+        ourPricePerUnit: totalCostPerRm,
+        competitorPricePerUnit: competitorPricePerUnit || null,
+        clientDemandPricePerUnit: clientDemandPricePerUnit || null,
+        quantity: quantityRm,
+        productSpecs,
+      });
+    } catch (error: any) {
+      setToast({ message: `AI Analysis Failed: ${error.message}`, type: 'error' });
+    }
+  };
+
+  const handleApplyAIPrice = (suggestedPrice: number) => {
+    if (totalWeight && totalWeight > 0) {
+      const currentTransportCost = includeTransportation && transportCostPerKg ? totalWeight * transportCostPerKg : 0;
+      const currentInstallationCost = includeInstallation ? (installationCostPerRm || 0) : 0;
+      const newRatePerKg = (suggestedPrice - currentTransportCost - currentInstallationCost) / totalWeight;
+      
+      if (newRatePerKg > 0) {
+        setRatePerKg(parseFloat(newRatePerKg.toFixed(2)));
+        
+        // Store AI suggestion data for persistence
+        if (aiResult) {
+          setAiSuggestedPrice(aiResult.recommendedPrice);
+          setAiWinProbability(aiResult.winProbability);
+          setAiPricingInsights({
+            reasoning: aiResult.reasoning,
+            suggestions: aiResult.suggestions,
+            appliedByUser: true,
+            appliedAt: new Date().toISOString(),
+          });
+          setUserAppliedAI(true);
+          setShowOverrideReasonField(false);
+        }
+        
+        setToast({ message: `Applied AI suggested price: ₹${suggestedPrice.toFixed(2)}/rm`, type: 'success' });
+      } else {
+        setToast({ message: 'Cannot apply suggested price - would result in negative rate', type: 'error' });
+      }
+    }
+  };
+
+  const handleCloseAIModal = () => {
+    // Store AI suggestion data even if user doesn't apply it
+    if (aiResult && !userAppliedAI) {
+      setAiSuggestedPrice(aiResult.recommendedPrice);
+      setAiWinProbability(aiResult.winProbability);
+      setAiPricingInsights({
+        reasoning: aiResult.reasoning,
+        suggestions: aiResult.suggestions,
+        appliedByUser: false,
+        viewedAt: new Date().toISOString(),
+      });
+      setShowOverrideReasonField(true);
+    }
+    
+    setIsAIModalOpen(false);
+    resetAI();
+  };
+  
+  // Historical pricing handlers
+  const handleApplyHistoricalPrice = (price: number) => {
+    const fixedCosts = 
+      (includeTransportation ? (transportCostPerRm ?? 0) : 0) +
+      (includeInstallation ? (installationCostPerRm ?? 0) : 0);
+    
+    const targetMaterialCost = price - fixedCosts;
+    
+    if (targetMaterialCost <= 0) {
+      setToast({ 
+        message: 'Cannot apply historical price - it is lower than fixed costs', 
+        type: 'error' 
+      });
+      return;
+    }
+    
+    // Use the totalWeight state which already contains weight per running meter
+    const weightPerRm = totalWeight;
+    
+    if (weightPerRm <= 0) {
+      setToast({ 
+        message: 'Cannot calculate rate - total weight is zero', 
+        type: 'error' 
+      });
+      return;
+    }
+    
+    const newRatePerKg = targetMaterialCost / weightPerRm;
+    setRatePerKg(newRatePerKg);
+    
+    setToast({ 
+      message: `Applied historical price of ₹${price.toFixed(2)}/rm`, 
+      type: 'success' 
+    });
+  };
+  
+  const handleDismissHistoricalMatch = () => {
+    setHistoricalMatch(null);
+  };
+
   // Save Quotation Function (separate from PDF)
   const handleSaveQuotation = async () => {
     // Prevent duplicate saves
@@ -603,6 +818,40 @@ export default function DoubleWBeamPage() {
       if (totalWeight === 0 || !ratePerKg || ratePerKg <= 0) {
         setToast({ message: 'Please confirm parts and enter rate per kg', type: 'error' });
         return;
+      }
+    }
+
+    // ============================================
+    // PRICING VALIDATION
+    // ============================================
+    if (totalCostPerRm && totalCostPerRm > 0) {
+      const validationResult = validateQuotationPricing({
+        quoted_price_per_unit: totalCostPerRm,
+        cost_per_unit: materialCostPerRm || 0,
+        competitor_price_per_unit: competitorPricePerUnit,
+        client_demand_price_per_unit: clientDemandPricePerUnit,
+      });
+
+      // Show errors (blocking)
+      if (validationResult.errors.length > 0) {
+        const errorMessages = validationResult.errors
+          .map(err => formatValidationMessage(err))
+          .join('\n\n');
+        setToast({ message: errorMessages, type: 'error' });
+        return;
+      }
+
+      // Show warnings (non-blocking, but inform user)
+      if (validationResult.warnings.length > 0) {
+        const warningMessages = validationResult.warnings
+          .map(warn => formatValidationMessage(warn))
+          .join('\n\n');
+        
+        // Show warning toast but allow save to continue
+        setToast({ message: `⚠️ Warning:\n${warningMessages}`, type: 'error' });
+        
+        // Optional: Add a small delay so user can see the warning
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
@@ -651,6 +900,15 @@ export default function DoubleWBeamPage() {
         total_weight_per_rm: totalWeight || null,
         total_cost_per_rm: totalCostPerRm || null,
         final_total_cost: finalTotal || null,
+        competitor_price_per_unit: competitorPricePerUnit || null,
+        client_demand_price_per_unit: clientDemandPricePerUnit || null,
+        // AI Pricing fields
+        ai_suggested_price_per_unit: aiSuggestedPrice || null,
+        ai_win_probability: aiWinProbability || null,
+        ai_pricing_insights: aiPricingInsights ? {
+          ...aiPricingInsights,
+          overrideReason: overrideReason || null,
+        } : null,
         created_by: currentUsername,
         is_saved: true,
         raw_payload: {
@@ -2091,6 +2349,103 @@ export default function DoubleWBeamPage() {
                       <p className="text-lg text-premium-gold/90 mt-1">({formatIndianUnits(totalCostPerRm)})</p>
                     </div>
                     )}
+                    
+                    {/* Historical Pricing Alert */}
+                    {historicalMatch && (
+                      <HistoricalPricingAlert
+                        match={historicalMatch}
+                        priceUnit="₹/rm"
+                        onApply={handleApplyHistoricalPrice}
+                        onDismiss={handleDismissHistoricalMatch}
+                      />
+                    )}
+                    
+                    {/* Competitor and Client Demand Price Inputs */}
+                    <div className="pt-6 border-t border-white/20 mt-6 space-y-4">
+                      <h5 className="text-lg font-bold text-white mb-4">Market Pricing (Optional)</h5>
+                      
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-200 mb-2">
+                          Competitor Price Per Unit (₹/rm)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={competitorPricePerUnit || ''}
+                          onChange={(e) => setCompetitorPricePerUnit(e.target.value ? parseFloat(e.target.value) : null)}
+                          placeholder="Enter competitor price per rm"
+                          className="input-premium w-full px-4 py-3 text-white placeholder-slate-400"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-200 mb-2">
+                          Client Demand Price Per Unit (₹/rm)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={clientDemandPricePerUnit || ''}
+                          onChange={(e) => setClientDemandPricePerUnit(e.target.value ? parseFloat(e.target.value) : null)}
+                          placeholder="Enter client demand price per rm"
+                          className="input-premium w-full px-4 py-3 text-white placeholder-slate-400"
+                        />
+                      </div>
+                      
+                      {/* AI Pricing Button */}
+                      <div className="pt-4">
+                        <button
+                          type="button"
+                          onClick={handleGetAISuggestion}
+                          disabled={!totalCostPerRm || !quantityRm || isAILoading}
+                          className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 
+                                   hover:from-purple-700 hover:to-blue-700 
+                                   disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed
+                                   text-white rounded-lg transition-all duration-200 
+                                   font-semibold shadow-lg hover:shadow-xl
+                                   flex items-center justify-center gap-2"
+                        >
+                          {isAILoading ? (
+                            <>
+                              <span className="animate-spin">⚙️</span>
+                              <span>Analyzing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>🤖</span>
+                              <span>Get AI Pricing Suggestion</span>
+                            </>
+                          )}
+                        </button>
+                        {!totalCostPerRm || !quantityRm ? (
+                          <p className="text-xs text-slate-400 mt-2 text-center">
+                            Calculate pricing and enter quantity first
+                          </p>
+                        ) : null}
+                      </div>
+                      
+                      {/* Override Reason Field - shown when user modifies price after AI suggestion */}
+                      {showOverrideReasonField && (
+                        <div className="pt-4 border-t border-yellow-500/30 mt-4">
+                          <label className="block text-sm font-semibold text-yellow-300 mb-2 flex items-center gap-2">
+                            <span>⚠️</span>
+                            <span>Reason for Overriding AI Suggestion (Optional)</span>
+                          </label>
+                          <textarea
+                            value={overrideReason}
+                            onChange={(e) => setOverrideReason(e.target.value)}
+                            placeholder="e.g., Client negotiated lower price, Market conditions changed, etc."
+                            className="input-premium w-full px-4 py-3 text-white placeholder-slate-400 min-h-[80px]"
+                            rows={3}
+                          />
+                          <p className="text-xs text-slate-400 mt-2">
+                            This helps us improve AI recommendations in the future
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Right Side: Total Cost for Given Quantity */}
@@ -2246,6 +2601,16 @@ export default function DoubleWBeamPage() {
             onClose={() => setToast(null)}
           />
         )}
+        
+        {/* AI Pricing Modal */}
+        <AIPricingModal
+          isOpen={isAIModalOpen}
+          onClose={handleCloseAIModal}
+          result={aiResult}
+          isLoading={isAILoading}
+          onApplyPrice={handleApplyAIPrice}
+          priceUnit="₹/rm"
+        />
       </div>
     </div>
   );

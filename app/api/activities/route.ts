@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimeIST } from '@/lib/utils/dateFormatters';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 export async function GET(request: NextRequest) {
   try {
@@ -184,6 +185,9 @@ export async function POST(request: NextRequest) {
       console.error('Activities POST error:', error);
       return NextResponse.json({ error: 'Unable to create activity' }, { status: 500 });
     }
+
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'activity', entityId: data.id });
 
     return NextResponse.json({ success: true, activity: data });
   } catch (error: any) {

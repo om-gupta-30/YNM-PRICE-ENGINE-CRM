@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 // Helper function to determine which table to use based on section
 function getTableName(section: string): string {
@@ -138,6 +139,9 @@ export async function POST(request: NextRequest) {
         console.error('Error creating activity for status change:', activityError);
       }
     }
+
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'quotation', entityId: quoteId });
 
     return NextResponse.json({
       success: true,

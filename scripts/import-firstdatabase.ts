@@ -89,6 +89,40 @@ function normalizePhone(phone: string | number | undefined | null): string {
   return phoneStr;
 }
 
+// Split contact names that contain multiple names
+function splitContactNames(contactName: string): string[] {
+  const names: string[] = [];
+  const trimmed = contactName.trim();
+  
+  // Split by common delimiters
+  const parts = trimmed.split(/[,;\/]/).map(p => p.trim()).filter(p => p);
+  
+  for (const part of parts) {
+    // Check if part contains "Mr." or "Mrs." or "Ms." - likely a name
+    if (/^(Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.)/i.test(part)) {
+      names.push(part);
+    } else if (part.length > 0) {
+      // If no title, might still be a name
+      names.push(part);
+    }
+  }
+  
+  // If no splits found, return original
+  if (names.length === 0) {
+    return [trimmed];
+  }
+  
+  // Also check for "Mr. Name1 Mr. Name2" pattern (no delimiter)
+  if (names.length === 1 && /Mr\.\s+\w+\s+Mr\./i.test(trimmed)) {
+    const matches = trimmed.match(/(Mr\.\s+[^,;\/]+)/gi);
+    if (matches && matches.length > 1) {
+      return matches.map(m => m.trim());
+    }
+  }
+  
+  return names;
+}
+
 // Map state name corrections (handle cases where city is in state field)
 const stateCorrections: Record<string, { state: string; city: string }> = {
   'Chennai': { state: 'Tamil Nadu', city: 'Chennai' },
@@ -167,12 +201,23 @@ function groupDataByAccount(rows: ExcelRow[]): Map<string, ProcessedData> {
     const phone = normalizePhone(row['phone ']);
     
     if (contactName && currentAccountData) {
+      // Split contacts that have multiple names (e.g., "Mr. Name1, Mr. Name2")
+      const contactNames = splitContactNames(contactName);
+      const phones = phone ? phone.split('/').map(p => p.trim()).filter(p => p) : [];
+      
+      for (let i = 0; i < contactNames.length; i++) {
+        const name = contactNames[i].trim();
+        const contactPhone = phones[i] || (phones.length === 1 ? phones[0] : phone) || null;
+        
+        if (name) {
       currentAccountData.contacts.push({
-        name: contactName,
-        phone,
+            name,
+            phone: contactPhone,
         designation: normalizeText(row.designation) || null,
         email: normalizeText(row.email) || null,
       });
+        }
+      }
     }
   }
   

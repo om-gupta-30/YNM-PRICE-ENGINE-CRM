@@ -147,6 +147,8 @@ This application serves as a centralized platform for:
 │   └── layout.tsx                    # Root layout
 │
 ├── components/                       # React components
+│   ├── RAGChatInterface.tsx          # 🤖 RAG-powered chatbot interface
+│   ├── DataResultTable.tsx           # Data table with report generation
 │   ├── AIChatCoach.tsx               # 🤖 AI Coach sidebar
 │   ├── CoachButton.tsx               # AI Coach trigger button
 │   ├── animations/                   # Animation components
@@ -199,6 +201,18 @@ This application serves as a centralized platform for:
 │
 ├── lib/                              # Library code
 │   ├── ai/                           # 🤖 AI utilities
+│   │   ├── ragEngine.ts              # RAG engine (query execution & AI responses)
+│   │   ├── ragEngineStreaming.ts     # Streaming RAG engine
+│   │   ├── intentClassifier.ts       # Intent classification
+│   │   ├── dynamicQueryBuilder.ts    # SQL query generation
+│   │   ├── queryCache.ts             # Smart query caching
+│   │   ├── querySuggestions.ts      # Personalized query suggestions
+│   │   ├── conversationRouterV2.ts   # COACH vs QUERY mode routing
+│   │   ├── conversationMemory.ts     # Conversation history
+│   │   ├── sessionManager.ts         # Session management
+│   │   ├── contextFormatter.ts       # Data formatting for AI
+│   │   ├── monitoring.ts             # AI operation logging
+│   │   ├── databaseSchemaContext.ts  # Database schema metadata
 │   │   ├── engagement.ts             # Engagement scoring & AI logic
 │   │   └── engagementGuard.ts        # Activity type guards
 │   ├── calculations/                 # Price calculations
@@ -229,6 +243,9 @@ This application serves as a centralized platform for:
 │
 ├── docs/                             # Documentation & SQL
 │   ├── COMPLETE_DATABASE_SETUP.sql   # ⭐ Main database setup
+│   ├── AI_FEATURES.md                # 🤖 Comprehensive AI features guide
+│   ├── AI_PRICING.md                 # 💰 AI pricing intelligence guide
+│   ├── EXAMPLE_QUERIES.md            # 📝 Example queries for RAG chatbot
 │   └── [other SQL migrations...]
 │
 ├── middleware.ts                     # Next.js middleware
@@ -241,7 +258,30 @@ This application serves as a centralized platform for:
 
 ## 🤖 AI Features (Powered by Google Gemini)
 
-All AI features use **Google Gemini 2.5** (`models/gemini-2.5-pro` for coaching, `models/gemini-2.5-flash` for bulk scoring) for intelligent insights and coaching.
+All AI features use **Google Gemini 1.5 Pro** for intelligent insights, coaching, and natural language query processing.
+
+### 🎯 RAG-Powered Chatbot (NEW)
+
+A comprehensive natural language interface for querying CRM data using conversational AI.
+
+- **Component**: `components/RAGChatInterface.tsx`
+- **API Endpoint**: `/api/ai/rag-chat`
+- **Features**:
+  - **Natural Language Queries**: Ask questions in plain English
+  - **Two Modes**: 
+    - **COACH Mode**: Get strategic coaching and advice
+    - **QUERY Mode**: Query CRM data with natural language
+  - **Streaming Responses**: Real-time updates as AI processes
+  - **Query Suggestions**: Personalized suggestions based on your data
+  - **Report Generation**: Convert query results to professional reports
+  - **Conversation Memory**: Maintains context for follow-up questions
+  - **Smart Caching**: Fast responses with intelligent cache management
+  - **SQL Transparency**: View generated SQL queries
+  - **Export Options**: CSV, JSON, Markdown, PDF
+
+**Documentation**: See `docs/AI_FEATURES.md` for comprehensive guide
+
+**Example Queries**: See `docs/EXAMPLE_QUERIES.md` for query examples
 
 ### 1. AI Coach
 - **Endpoint**: `/api/ai/coach`
@@ -290,6 +330,47 @@ All AI features use **Google Gemini 2.5** (`models/gemini-2.5-pro` for coaching,
   - Strengths and weaknesses analysis
   - Actionable recommendations
   - Priority accounts identification
+
+### 7. AI Pricing Intelligence (NEW)
+- **Component**: `components/pricing/`
+- **Features**:
+  - Intelligent pricing recommendations based on historical data
+  - Win probability predictions
+  - Competitive benchmarking
+  - Historical learning system
+  - Pricing dashboard with analytics
+
+**Documentation**: See `docs/AI_PRICING.md` for detailed guide
+
+### 8. AI Monitoring Dashboard (NEW)
+- **Page**: `/admin/ai-monitoring`
+- **Features**:
+  - System health metrics
+  - Query performance tracking
+  - AI accuracy monitoring
+  - Error rate tracking
+  - User engagement metrics
+  - Real-time analytics
+
+### 9. Query Suggestions (NEW)
+- **Component**: Integrated in RAG Chat Interface
+- **Features**:
+  - Personalized query suggestions
+  - Role-based recommendations
+  - Trending queries from other users
+  - Action items and insights
+  - Auto-updates when chat opens
+
+### 10. Report Generation (NEW)
+- **Component**: `components/DataResultTable.tsx`
+- **API Endpoint**: `/api/ai/generate-report`
+- **Features**:
+  - Convert query results to professional reports
+  - Executive summaries
+  - Detailed analysis reports
+  - Action items with priorities
+  - Export as Markdown or PDF
+  - Company branding included
 
 ---
 
@@ -427,11 +508,16 @@ npm start
 ### AI Endpoints (Gemini-Powered)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/api/ai/rag-chat` | RAG chatbot (natural language queries) |
+| POST | `/api/ai/rag-chat?stream=true` | Streaming RAG chatbot |
+| POST | `/api/ai/generate-report` | Generate professional reports from data |
+| POST | `/api/ai/query-suggestions` | Get personalized query suggestions |
 | POST | `/api/ai/coach` | AI coaching chat |
 | GET | `/api/ai/admin-insights?employeeUsername=X` | Admin insights |
 | GET | `/api/ai/subaccount-insights?subAccountId=X` | Sub-account scoring |
 | GET | `/api/ai/weekly-insights?employee=X` | Weekly insights |
 | GET | `/api/ai/daily-coaching?employee=X` | Daily coaching |
+| GET | `/api/admin/ai-monitoring` | AI monitoring dashboard data |
 
 ### Cron Endpoints
 | Method | Endpoint | Description |

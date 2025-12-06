@@ -36,6 +36,40 @@
   }
 }
 
+/* Subtle pulse animation for icons */
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Fade-in animation for badge */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-fade-in-tooltip {
+  animation: fadeInTooltip 0.2s ease-out;
+}
+
 /* Fade-in animation for details page */
 @keyframes fadeIn {
   from {

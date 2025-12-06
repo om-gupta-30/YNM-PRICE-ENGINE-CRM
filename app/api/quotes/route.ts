@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logQuotationSaveActivity } from '@/lib/utils/activityLogger';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 // Helper function to determine which table to use based on section
 function getTableName(section: string): string {
@@ -34,6 +35,11 @@ export async function POST(request: NextRequest) {
       total_weight_per_rm,
       total_cost_per_rm,
       final_total_cost,
+      competitor_price_per_unit,
+      client_demand_price_per_unit,
+      ai_suggested_price_per_unit,
+      ai_win_probability,
+      ai_pricing_insights,
       raw_payload,
       created_by,
       is_saved,
@@ -120,6 +126,11 @@ export async function POST(request: NextRequest) {
       purpose: purpose || null,
       date,
       final_total_cost: final_total_cost || null,
+      competitor_price_per_unit: competitor_price_per_unit || null,
+      client_demand_price_per_unit: client_demand_price_per_unit || null,
+      ai_suggested_price_per_unit: ai_suggested_price_per_unit || null,
+      ai_win_probability: ai_win_probability || null,
+      ai_pricing_insights: ai_pricing_insights || null,
       raw_payload: raw_payload || null,
       created_by: created_by || null,
       is_saved: is_saved !== undefined ? is_saved : false,
@@ -246,6 +257,9 @@ export async function POST(request: NextRequest) {
     } catch (activityError) {
       console.warn('Failed to log quotation activity:', activityError);
     }
+
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'quotation', entityId: data.id });
 
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {

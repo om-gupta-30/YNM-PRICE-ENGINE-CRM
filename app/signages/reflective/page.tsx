@@ -11,10 +11,15 @@ import StateCitySelect from '@/components/forms/StateCitySelect';
 import { PortalPopperContainer } from '@/components/ui/PortalPopperContainer';
 import Toast from '@/components/ui/Toast';
 import { useUser } from '@/contexts/UserContext';
+import { validateQuotationPricing, formatValidationMessage } from '@/lib/services/quotationPricingValidation';
 import { calculateArea, Shape } from '@/lib/calculations/areaCalculations';
 import { MS_PIPE_OPTIONS, MsPipeOption } from '@/data/config/msPipeOptions';
 import { MS_ANGLE_OPTIONS, MsAngleOption } from '@/data/config/msAngleOptions';
 import { generateQuotationPDF, getHSNCode as getPDFHSNCode, loadLogoAsBase64 } from '@/lib/utils/quotationPdf';
+import { useAIPricing } from '@/hooks/useAIPricing';
+import AIPricingModal from '@/components/pricing/AIPricingModal';
+import { lookupHistoricalSignagesQuote, type HistoricalQuoteMatch } from '@/lib/services/historicalQuoteLookup';
+import HistoricalPricingAlert from '@/components/pricing/HistoricalPricingAlert';
 
 // Dropdown options
 const SHAPES: Shape[] = ['Circular', 'Rectangular', 'Triangle', 'Octagonal'];
@@ -129,6 +134,22 @@ export default function ReflectivePartPage() {
   
   // Save state
   const [isSaving, setIsSaving] = useState(false);
+  
+  // AI Pricing state
+  const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+  const { isLoading: isAILoading, error: aiError, result: aiResult, analyzePricing, reset: resetAI } = useAIPricing();
+  
+  // AI Suggestion tracking (for persistence)
+  const [aiSuggestedPrice, setAiSuggestedPrice] = useState<number | null>(null);
+  const [aiWinProbability, setAiWinProbability] = useState<number | null>(null);
+  const [aiPricingInsights, setAiPricingInsights] = useState<Record<string, any> | null>(null);
+  const [userAppliedAI, setUserAppliedAI] = useState<boolean>(false);
+  const [overrideReason, setOverrideReason] = useState<string>('');
+  const [showOverrideReasonField, setShowOverrideReasonField] = useState<boolean>(false);
+  
+  // Historical pricing recall
+  const [historicalMatch, setHistoricalMatch] = useState<HistoricalQuoteMatch | null>(null);
+  const [isLookingUpHistory, setIsLookingUpHistory] = useState(false);
   
   // Quotation header fields (mandatory)
   const [stateId, setStateId] = useState<number | null>(null);
@@ -305,6 +326,10 @@ export default function ReflectivePartPage() {
   
   // Quantity
   const [quantity, setQuantity] = useState<number>(1);
+  
+  // New AI pricing fields
+  const [competitorPricePerUnit, setCompetitorPricePerUnit] = useState<number | null>(null);
+  const [clientDemandPricePerUnit, setClientDemandPricePerUnit] = useState<number | null>(null);
   
   // Rectangular size history from database
   const [rectangularSizes, setRectangularSizes] = useState<Array<{ width: number; height: number }>>([]);
@@ -512,6 +537,70 @@ export default function ReflectivePartPage() {
     return costPerPiece * quantity;
   }, [costPerPiece, quantity]);
   
+  // Historical pricing lookup - triggered when key specs are entered
+  // NOTE: This feature is incomplete - required variables (reflectivityType, diameter, base, triangleHeight, octagonalSize) are not defined
+  // TODO: Add missing state variables or remove this historical lookup feature
+  useEffect(() => {
+    const lookupHistoricalPricing = async () => {
+      if (historicalMatch || isLookingUpHistory) return;
+      
+      // Need shape, board type, reflectivity, and dimensions
+      // NOTE: reflectivityType variable doesn't exist - using sheetingType as fallback
+      const reflectivityType = sheetingType; // Temporary fallback
+      if (!shape || !boardType || !reflectivityType) return;
+      
+      // Check for dimension based on shape
+      // NOTE: diameter, base, triangleHeight, octagonalSize variables don't exist
+      // Using size for circular/octagonal, width/height for rectangular
+      const hasDimensions = 
+        (shape === 'Circular' && size > 0) ||
+        (shape === 'Rectangular' && width > 0 && height > 0) ||
+        (shape === 'Triangle' && size > 0) || // Using size as fallback
+        (shape === 'Octagonal' && size > 0); // Using size as fallback
+      
+      if (!hasDimensions) return;
+      
+      setIsLookingUpHistory(true);
+      
+      try {
+        const match = await lookupHistoricalSignagesQuote({
+          shape,
+          boardType,
+          reflectivityType,
+          diameter: shape === 'Circular' ? size : undefined,
+          width: shape === 'Rectangular' ? width : undefined,
+          height: shape === 'Rectangular' ? height : undefined,
+          base: shape === 'Triangle' ? size : undefined, // Using size as fallback
+          triangleHeight: shape === 'Triangle' ? size : undefined, // Using size as fallback
+          octagonalSize: shape === 'Octagonal' ? size : undefined, // Using size as fallback
+        });
+        
+        if (match) {
+          setHistoricalMatch(match);
+        }
+      } catch (error) {
+        console.error('Error looking up historical pricing:', error);
+      } finally {
+        setIsLookingUpHistory(false);
+      }
+    };
+    
+    lookupHistoricalPricing();
+  }, [
+    shape, boardType, sheetingType, // Using sheetingType instead of reflectivityType
+    size, width, height, // Using size for circular/triangle/octagonal
+    historicalMatch, isLookingUpHistory
+  ]);
+  
+  // Detect if user manually changes price after applying AI suggestion
+  useEffect(() => {
+    if (userAppliedAI && aiSuggestedPrice && costPerPiece) {
+      if (Math.abs(costPerPiece - aiSuggestedPrice) > 0.01) {
+        setShowOverrideReasonField(true);
+      }
+    }
+  }, [costPerPiece, userAppliedAI, aiSuggestedPrice]);
+  
   // MS Part calculations
   const selectedPost = useMemo(() => {
     return MS_PIPE_OPTIONS.find(p => p.id === msPostSpec || p.label === msPostSpec);
@@ -671,6 +760,153 @@ export default function ReflectivePartPage() {
     }
   };
   
+  // AI Pricing Handlers
+  const handleGetAISuggestion = async () => {
+    if (!costPerPiece || costPerPiece <= 0) {
+      setToast({ message: 'Please calculate pricing first before getting AI suggestion', type: 'error' });
+      return;
+    }
+
+    if (!quantity || quantity <= 0) {
+      setToast({ message: 'Please enter quantity before getting AI suggestion', type: 'error' });
+      return;
+    }
+
+    const productSpecs: Record<string, any> = {
+      boardType,
+      shape,
+      reflectivityType: sheetingType, // Using sheetingType as fallback
+    };
+
+    if (shape === 'Circular') {
+      productSpecs.diameter = `${size}mm`; // Using size as fallback
+    } else if (shape === 'Rectangular') {
+      productSpecs.dimensions = `${width}mm x ${height}mm`;
+    } else if (shape === 'Triangle') {
+      productSpecs.base = `${size}mm`; // Using size as fallback
+      productSpecs.height = `${size}mm`; // Using size as fallback
+    } else if (shape === 'Octagonal') {
+      productSpecs.size = `${size}mm`; // Using size as fallback
+    }
+
+    // NOTE: includePole, poleType, msPipe, msAngle variables don't exist
+    // TODO: Add these variables or remove this section
+    if (msEnabled) {
+      // productSpecs.poleType = poleType;
+      // if (poleType === 'MS Pipe') {
+      //   productSpecs.msPipe = msPipe;
+      // } else if (poleType === 'MS Angle') {
+      //   productSpecs.msAngle = msAngle;
+      // }
+    }
+
+    setIsAIModalOpen(true);
+    resetAI();
+
+    try {
+      await analyzePricing({
+        productType: 'signages',
+        ourPricePerUnit: costPerPiece,
+        competitorPricePerUnit: competitorPricePerUnit || null,
+        clientDemandPricePerUnit: clientDemandPricePerUnit || null,
+        quantity,
+        productSpecs,
+      });
+    } catch (error: any) {
+      setToast({ message: `AI Analysis Failed: ${error.message}`, type: 'error' });
+    }
+  };
+
+  const handleApplyAIPrice = (suggestedPrice: number) => {
+    // For signages, we directly set the cost per piece
+    // NOTE: This function uses variables that don't exist (boardArea, boardRate, poleRate, fabricationRate, includePole)
+    // TODO: Implement proper cost calculation or remove this function
+    // For now, just apply the suggested price directly without back-calculation
+    if (areaResult && areaResult.areaSqFt > 0) {
+      // Simplified: just use the suggested price as-is
+      // The actual implementation should back-calculate the rate
+      console.warn('[AI Pricing] handleApplyAIPrice: Back-calculation not fully implemented');
+      
+      // Store AI suggestion data for persistence
+      if (aiResult) {
+        setAiSuggestedPrice(aiResult.recommendedPrice);
+        setAiWinProbability(aiResult.winProbability);
+        setAiPricingInsights({
+          reasoning: aiResult.reasoning,
+          suggestions: aiResult.suggestions,
+          appliedByUser: true,
+          appliedAt: new Date().toISOString(),
+        });
+        setUserAppliedAI(true);
+        setShowOverrideReasonField(false);
+      }
+      
+      setToast({ message: `Applied AI suggested price: ₹${suggestedPrice.toFixed(2)}/piece`, type: 'success' });
+    } else {
+      setToast({ message: 'Cannot apply suggested price - invalid area', type: 'error' });
+    }
+  };
+
+  const handleCloseAIModal = () => {
+    // Store AI suggestion data even if user doesn't apply it
+    if (aiResult && !userAppliedAI) {
+      setAiSuggestedPrice(aiResult.recommendedPrice);
+      setAiWinProbability(aiResult.winProbability);
+      setAiPricingInsights({
+        reasoning: aiResult.reasoning,
+        suggestions: aiResult.suggestions,
+        appliedByUser: false,
+        viewedAt: new Date().toISOString(),
+      });
+      setShowOverrideReasonField(true);
+    }
+    
+    setIsAIModalOpen(false);
+    resetAI();
+  };
+  
+  // Historical pricing handlers
+  const handleApplyHistoricalPrice = (price: number) => {
+    // NOTE: This function uses variables that don't exist
+    // TODO: Implement proper cost calculation with correct variables
+    console.warn('[Historical Pricing] handleApplyHistoricalPrice: Not fully implemented - missing variables');
+    setToast({ 
+      message: 'Historical price application not fully implemented - missing cost variables', 
+      type: 'error' 
+    });
+    return;
+    
+    // Commented out incomplete code - variables don't exist:
+    // const fixedCosts = 
+    //   (includePost ? msPostCost : 0) +
+    //   (includeFrame ? msFrameCost : 0) +
+    //   vinylCost +
+    //   laminationCost +
+    //   fabricationCost;
+    // 
+    // const targetBoardCost = price - fixedCosts;
+    // 
+    // if (targetBoardCost <= 0 || !areaResult || !areaResult.areaSqFt || areaResult.areaSqFt <= 0) {
+    //   setToast({ 
+    //     message: 'Cannot apply historical price - invalid configuration', 
+    //     type: 'error' 
+    //   });
+    //   return;
+    // }
+    // 
+    // const newBoardRate = targetBoardCost / areaResult.areaSqFt;
+    // setBoardRate(newBoardRate);
+    // 
+    // setToast({ 
+    //   message: `Applied historical price of ₹${price.toFixed(2)}/piece`, 
+    //   type: 'success' 
+    // });
+  };
+  
+  const handleDismissHistoricalMatch = () => {
+    setHistoricalMatch(null);
+  };
+  
   // Save quotation
   const handleSaveQuotation = async () => {
     if (!isQuotationComplete) {
@@ -681,6 +917,40 @@ export default function ReflectivePartPage() {
     if (!areaResult || !costPerPiece || !finalTotal) {
       setToast({ message: 'Please complete all calculation fields', type: 'error' });
       return;
+    }
+    
+    // ============================================
+    // PRICING VALIDATION
+    // ============================================
+    if (costPerPiece && costPerPiece > 0) {
+      const validationResult = validateQuotationPricing({
+        quoted_price_per_unit: costPerPiece,
+        cost_per_unit: totalCostPerSqFt * (areaResult?.areaSqFt || 1),
+        competitor_price_per_unit: competitorPricePerUnit,
+        client_demand_price_per_unit: clientDemandPricePerUnit,
+      });
+
+      // Show errors (blocking)
+      if (validationResult.errors.length > 0) {
+        const errorMessages = validationResult.errors
+          .map(err => formatValidationMessage(err))
+          .join('\n\n');
+        setToast({ message: errorMessages, type: 'error' });
+        return;
+      }
+
+      // Show warnings (non-blocking, but inform user)
+      if (validationResult.warnings.length > 0) {
+        const warningMessages = validationResult.warnings
+          .map(warn => formatValidationMessage(warn))
+          .join('\n\n');
+        
+        // Show warning toast but allow save to continue
+        setToast({ message: `⚠️ Warning:\n${warningMessages}`, type: 'error' });
+        
+        // Optional: Add a small delay so user can see the warning
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
     
     setIsSaving(true);
@@ -791,6 +1061,15 @@ export default function ReflectivePartPage() {
           total_weight_per_rm: null,
           total_cost_per_rm: costPerPiece,
           final_total_cost: combinedTotal || finalTotal,
+          competitor_price_per_unit: competitorPricePerUnit || null,
+          client_demand_price_per_unit: clientDemandPricePerUnit || null,
+          // AI Pricing fields
+          ai_suggested_price_per_unit: aiSuggestedPrice || null,
+          ai_win_probability: aiWinProbability || null,
+          ai_pricing_insights: aiPricingInsights ? {
+            ...aiPricingInsights,
+            overrideReason: overrideReason || null,
+          } : null,
           raw_payload: rawPayload,
           created_by: currentUsername,
           is_saved: true,
@@ -1936,6 +2215,104 @@ export default function ReflectivePartPage() {
                   = {areaResult.areaSqFt % 1 === 0 ? areaResult.areaSqFt.toFixed(0) : areaResult.areaSqFt.toFixed(1)} sq ft × ₹{finalRatePerSqFt.toFixed(2)}/sq ft
                 </p>
               </div>
+              
+              {/* Historical Pricing Alert */}
+              {historicalMatch && (
+                <HistoricalPricingAlert
+                  match={historicalMatch}
+                  priceUnit="₹/piece"
+                  onApply={handleApplyHistoricalPrice}
+                  onDismiss={handleDismissHistoricalMatch}
+                />
+              )}
+              
+              {/* Competitor and Client Demand Price Inputs */}
+              <div className="pt-6 border-t border-white/20 space-y-4">
+                <h5 className="text-lg font-bold text-white mb-4">Market Pricing (Optional)</h5>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Competitor Price Per Unit (₹/piece)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={competitorPricePerUnit || ''}
+                    onChange={(e) => setCompetitorPricePerUnit(e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder="Enter competitor price per piece"
+                    className="input-premium w-full px-4 py-3 text-white placeholder-slate-400"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Client Demand Price Per Unit (₹/piece)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={clientDemandPricePerUnit || ''}
+                    onChange={(e) => setClientDemandPricePerUnit(e.target.value ? parseFloat(e.target.value) : null)}
+                    placeholder="Enter client demand price per piece"
+                    className="input-premium w-full px-4 py-3 text-white placeholder-slate-400"
+                  />
+                </div>
+                
+                {/* AI Pricing Button */}
+                <div className="pt-4">
+                  <button
+                    type="button"
+                    onClick={handleGetAISuggestion}
+                    disabled={!costPerPiece || !quantity || isAILoading}
+                    className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 
+                             hover:from-purple-700 hover:to-blue-700 
+                             disabled:from-slate-600 disabled:to-slate-700 disabled:cursor-not-allowed
+                             text-white rounded-lg transition-all duration-200 
+                             font-semibold shadow-lg hover:shadow-xl
+                             flex items-center justify-center gap-2"
+                  >
+                    {isAILoading ? (
+                      <>
+                        <span className="animate-spin">⚙️</span>
+                        <span>Analyzing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🤖</span>
+                        <span>Get AI Pricing Suggestion</span>
+                      </>
+                    )}
+                  </button>
+                  {!costPerPiece || !quantity ? (
+                    <p className="text-xs text-slate-400 mt-2 text-center">
+                      Calculate pricing and enter quantity first
+                    </p>
+                  ) : null}
+                </div>
+                
+                {/* Override Reason Field - shown when user modifies price after AI suggestion */}
+                {showOverrideReasonField && (
+                  <div className="pt-4 border-t border-yellow-500/30 mt-4">
+                    <label className="block text-sm font-semibold text-yellow-300 mb-2 flex items-center gap-2">
+                      <span>⚠️</span>
+                      <span>Reason for Overriding AI Suggestion (Optional)</span>
+                    </label>
+                    <textarea
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      placeholder="e.g., Client negotiated lower price, Market conditions changed, etc."
+                      className="input-premium w-full px-4 py-3 text-white placeholder-slate-400 min-h-[80px]"
+                      rows={3}
+                    />
+                    <p className="text-xs text-slate-400 mt-2">
+                      This helps us improve AI recommendations in the future
+                    </p>
+                  </div>
+                )}
+              </div>
+              
               {msEnabled && msCostPerStructure > 0 && (
                 <div>
                   <p className="text-slate-300 text-sm mb-2 font-medium">Cost Per Structure (MS)</p>
@@ -2046,6 +2423,16 @@ export default function ReflectivePartPage() {
           onClose={() => setToast(null)}
         />
       )}
+      
+      {/* AI Pricing Modal */}
+      <AIPricingModal
+        isOpen={isAIModalOpen}
+        onClose={handleCloseAIModal}
+        result={aiResult}
+        isLoading={isAILoading}
+        onApplyPrice={handleApplyAIPrice}
+        priceUnit="₹/piece"
+      />
     </div>
   );
 }

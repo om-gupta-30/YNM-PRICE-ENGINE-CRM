@@ -10,6 +10,8 @@
  */
 
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
+import { interpretSemanticQuery } from './semanticQueryInterpreter';
+import { detectSilentAccounts, detectSilentAccountsFallback, detectSlippingEngagement } from './crmInsightEngine';
 
 // ============================================
 // Types
@@ -31,6 +33,7 @@ export interface QueryIntent {
   operation: 'count' | 'list' | 'get' | 'aggregate' | 'search';
   filters: {
     subaccountName?: string;
+    subAccountId?: number; // Resolved sub-account ID
     accountName?: string;
     employeeName?: string;
     contactName?: string;
@@ -206,12 +209,111 @@ const ENTITY_PATTERNS: Record<QueryEntityType, RegExp[]> = {
 };
 
 const OPERATION_PATTERNS = {
-  count: [/how many/i, /count/i, /number of/i, /total/i],
-  list: [/list/i, /show/i, /get/i, /find/i, /all/i, /which/i, /who/i],
-  aggregate: [/total/i, /average/i, /sum/i, /pipeline/i, /value/i],
-  search: [/search/i, /find/i, /look for/i],
+  count: [/how many/i, /count/i, /number of/i, /total\s+(number|count)?/i, /are there\s+\d+/i, /there are\s+\d+/i, /only\s+\d+/i],
+  list: [/list/i, /show/i, /get/i, /find/i, /which/i, /who are/i],
+  aggregate: [/average/i, /sum/i, /pipeline/i, /value/i],
+  search: [/search/i, /look for/i],
   get: [/what is/i, /what's/i, /tell me about/i, /details/i, /info/i],
 };
+
+// ============================================
+// Semantic Inference (Fallback)
+// ============================================
+
+/**
+ * Infer query intent using basic semantic heuristics
+ * Used as fallback when regex patterns don't match
+ */
+function inferQueryIntent(text: string): {
+  entityGuess: string | null;
+  operationGuess: 'count' | 'list' | 'top' | 'unknown';
+  filterGuess?: {
+    namePrefix?: string;
+    dateFilter?: { start?: string; end?: string };
+    employeeName?: string;
+  };
+} {
+  const normalized = text.toLowerCase().trim();
+  
+  // 1. Detect entity guesses
+  let entityGuess: string | null = null;
+  
+  const entityKeywords: Record<string, string> = {
+    'contact': 'contacts',
+    'contacts': 'contacts',
+    'account': 'accounts',
+    'accounts': 'accounts',
+    'subaccount': 'subaccounts',
+    'sub-account': 'subaccounts',
+    'subaccounts': 'subaccounts',
+    'sub-accounts': 'subaccounts',
+    'quotation': 'quotations',
+    'quotations': 'quotations',
+    'quote': 'quotations',
+    'quotes': 'quotations',
+    'activity': 'activities',
+    'activities': 'activities',
+    'employee': 'employees',
+    'employees': 'employees',
+    'lead': 'leads',
+    'leads': 'leads',
+  };
+  
+  // Check for entity keywords (whole word match)
+  for (const [keyword, entity] of Object.entries(entityKeywords)) {
+    const keywordRegex = new RegExp(`\\b${keyword}\\b`, 'i');
+    if (keywordRegex.test(text)) {
+      entityGuess = entity;
+      break;
+    }
+  }
+  
+  // 2. Detect operation guesses
+  let operationGuess: 'count' | 'list' | 'top' | 'unknown' = 'unknown';
+  
+  if (/how many|count|number of|total\s+(number|count)?|are there|there are|only\s+\d+/i.test(normalized)) {
+    operationGuess = 'count';
+  } else if (/list|show|give me|name all|display|what are|which are/i.test(normalized)) {
+    operationGuess = 'list';
+  } else if (/largest|highest|biggest|top\s+\d+|maximum|max/i.test(normalized)) {
+    operationGuess = 'top';
+  }
+  
+  // 3. Detect basic filter structure
+  const filterGuess: {
+    namePrefix?: string;
+    dateFilter?: { start?: string; end?: string };
+    employeeName?: string;
+  } = {};
+  
+  // "starting with X" or "that start with X"
+  const namePrefixMatch = normalized.match(/(?:starting with|that start with|begin with|beginning with)\s+["']?([a-z0-9]+)["']?/i);
+  if (namePrefixMatch && namePrefixMatch[1]) {
+    filterGuess.namePrefix = namePrefixMatch[1];
+  }
+  
+  // "in last X days" or "last X days"
+  const daysMatch = normalized.match(/(?:in\s+)?last\s+(\d+)\s+days?/i);
+  if (daysMatch && daysMatch[1]) {
+    const days = parseInt(daysMatch[1], 10);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+    filterGuess.dateFilter = { start: startDate.toISOString() };
+  }
+  
+  // "assigned to NAME" or "for employee NAME"
+  const employeeMatch = normalized.match(/(?:assigned to|for employee|employee)\s+["']?([A-Za-z][A-Za-z0-9\s\-_.]{2,40}?)["']?/i);
+  if (employeeMatch && employeeMatch[1]) {
+    filterGuess.employeeName = employeeMatch[1].trim();
+  }
+  
+  return {
+    entityGuess,
+    operationGuess,
+    filterGuess: Object.keys(filterGuess).length > 0 ? filterGuess : undefined,
+  };
+}
 
 // ============================================
 // Intent Parser
@@ -292,24 +394,44 @@ export function parseQueryIntent(text: string): QueryIntent {
 
   // Extract subaccount name (various patterns)
   // Pattern: "for Megha", "under Megha", "Megha has", "does Megha have"
-  const subaccountPatterns = [
-    /(?:for|under|of|in)\s+["']?([A-Za-z][A-Za-z0-9\s\-_.]+?)["']?(?:\s|$|\?|,)/i,
-    /does\s+["']?([A-Za-z][A-Za-z0-9\s\-_.]+?)["']?\s+have/i,
-    /["']?([A-Za-z][A-Za-z0-9\s\-_.]+?)["']?\s+(?:has|have)/i,
-    /(?:subaccount|sub-account|sub account)\s+["']?([A-Za-z][A-Za-z0-9\s\-_.]+?)["']?/i,
-  ];
+  // BUT: Skip if user says "not for", "no", "in general", "total", etc.
+  
+  // First check if user is explicitly asking for TOTAL/GENERAL (no filter)
+  const isGeneralQuery = /\b(total|all|in general|overall|every|entire|whole|not for a specific|not for any specific|no specific|without filter|everything)\b/i.test(normalizedText);
+  
+  if (!isGeneralQuery) {
+    const subaccountPatterns = [
+      // "contacts for Ram Kumar" - but NOT "not for X" 
+      /(?<!not\s)(?<!no\s)(?:for|under|of)\s+["']?([A-Z][A-Za-z0-9\s\-_.]{2,40}?)["']?(?:\s|$|\?|,)/i,
+      /does\s+["']?([A-Z][A-Za-z0-9\s\-_.]{2,40}?)["']?\s+have/i,
+      /["']?([A-Z][A-Za-z0-9\s\-_.]{2,40}?)["']?\s+(?:has|have)\s+(?:how many|contacts|sub)/i,
+      /(?:subaccount|sub-account|sub account)\s+["']?([A-Z][A-Za-z0-9\s\-_.]{2,40}?)["']?/i,
+    ];
 
-  for (const pattern of subaccountPatterns) {
-    const match = text.match(pattern);
-    if (match && match[1]) {
-      const name = match[1].trim();
-      // Filter out common words that aren't names
-      const excludeWords = ['the', 'this', 'that', 'my', 'your', 'our', 'all', 'any', 'some', 'today', 'week', 'month'];
-      if (!excludeWords.includes(name.toLowerCase()) && name.length > 1) {
-        filters.subaccountName = name;
-        break;
+    // Extended list of common words that aren't entity names
+    const excludeWords = [
+      'the', 'this', 'that', 'my', 'your', 'our', 'all', 'any', 'some', 
+      'today', 'week', 'month', 'year', 'specific', 'a specific', 'particular',
+      'general', 'in general', 'total', 'each', 'every', 'which', 'what',
+      'how', 'when', 'where', 'who', 'whom', 'whose', 'why', 'me', 'us',
+      'them', 'you', 'him', 'her', 'it', 'one', 'two', 'three', 'example',
+      'instance', 'type', 'types', 'kind', 'kinds', 'none', 'no one', 'nobody'
+    ];
+
+    for (const pattern of subaccountPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const name = match[1].trim();
+        // Filter out common words and short strings
+        if (!excludeWords.some(w => name.toLowerCase() === w || name.toLowerCase().startsWith(w + ' ')) && name.length > 2) {
+          filters.subaccountName = name;
+          console.log(`[QueryEngine] Extracted subaccount filter: "${name}"`);
+          break;
+        }
       }
     }
+  } else {
+    console.log(`[QueryEngine] General query detected - no subaccount filter applied`);
   }
 
   // Extract account name
@@ -388,11 +510,8 @@ export async function executeCRMQuery(
 ): Promise<CRMQueryResult> {
   console.log(`[QueryEngine] Processing query: "${textQuery}" for user: ${userId} (${userRole})`);
   
-  const intent = parseQueryIntent(textQuery);
-  console.log(`[QueryEngine] Parsed intent:`, JSON.stringify(intent, null, 2));
-
-  // Validate Supabase connection
-  let supabase;
+  // Validate Supabase connection first
+  let supabase: ReturnType<typeof createSupabaseServerClient>;
   try {
     supabase = createSupabaseServerClient();
     console.log(`[QueryEngine] Supabase client created successfully`);
@@ -400,12 +519,324 @@ export async function executeCRMQuery(
     console.error('[QueryEngine] Failed to create Supabase client:', error);
     return {
       success: false,
-      entity: intent.entity,
-      operation: intent.operation,
+      entity: 'unknown',
+      operation: 'list',
       raw: null,
       formatted: 'Database connection error. Please check your configuration.',
       message: error.message,
     };
+  }
+
+  // Try semantic query interpretation first (before regex logic)
+  console.log(`[AI] QueryEngine: Starting query execution for: "${textQuery.substring(0, 100)}"`);
+  const semanticIntent = interpretSemanticQuery(textQuery);
+  console.log(`[AI] QueryEngine: Semantic intent`, {
+    entity: semanticIntent.entity,
+    filterType: semanticIntent.filterType,
+    hasFilters: !!semanticIntent.filters && Object.keys(semanticIntent.filters).length > 0,
+  });
+  
+  // Handle multi-condition queries (minQuotes, silentDays, region filters)
+  if (semanticIntent.filters && (semanticIntent.filters.minQuotes || semanticIntent.filters.silentDays || semanticIntent.filters.region)) {
+    console.log('[Semantic Query] Complex multi-condition CRM query detected:', semanticIntent);
+    
+    try {
+      // Build base query for sub_accounts
+      let baseQuery = supabase
+        .from('sub_accounts')
+        .select(`
+          id,
+          sub_account_name,
+          assigned_employee,
+          engagement_score,
+          last_activity_at,
+          account_id,
+          accounts(
+            id,
+            account_name,
+            state,
+            city
+          )
+        `)
+        .eq('is_active', true);
+      
+      // Apply role-based filtering
+      if (userRole === 'employee') {
+        baseQuery = baseQuery.eq('assigned_employee', userId);
+      }
+      
+      // Apply region filter (check accounts.state or sub_accounts.state if exists)
+      if (semanticIntent.filters.region) {
+        // Try to filter by accounts.state first, fallback to sub_accounts if state field exists
+        baseQuery = baseQuery.ilike('accounts.state', `%${semanticIntent.filters.region}%`);
+      }
+      
+      // Apply silent days filter
+      if (semanticIntent.filters.silentDays) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - semanticIntent.filters.silentDays);
+        baseQuery = baseQuery.or(`last_activity_at.is.null,last_activity_at.lt.${cutoff.toISOString()}`);
+      }
+      
+      // Execute base query
+      const { data: subAccounts, error: baseError } = await baseQuery.limit(100);
+      
+      if (baseError) {
+        throw new Error(`Failed to fetch sub-accounts: ${baseError.message}`);
+      }
+      
+      // If minQuotes filter is present, we need to count quotations per sub_account
+      let filteredSubAccounts = subAccounts || [];
+      
+      if (semanticIntent.filters.minQuotes) {
+        // Count quotations for each sub_account
+        const quotationCounts: Record<number, number> = {};
+        
+        // Query all quotation tables
+        const tables = ['quotes_mbcb', 'quotes_signages', 'quotes_paint'];
+        for (const table of tables) {
+          const { data: quotes } = await supabase
+            .from(table)
+            .select('sub_account_id')
+            .not('sub_account_id', 'is', null);
+          
+          if (quotes) {
+            quotes.forEach((q: any) => {
+              if (q.sub_account_id) {
+                quotationCounts[q.sub_account_id] = (quotationCounts[q.sub_account_id] || 0) + 1;
+              }
+            });
+          }
+        }
+        
+        // Filter sub_accounts by minimum quotation count
+        filteredSubAccounts = (subAccounts || []).filter((sa: any) => {
+          const count = quotationCounts[sa.id] || 0;
+          return count >= semanticIntent.filters!.minQuotes!;
+        });
+      }
+      
+      const count = filteredSubAccounts.length;
+      console.log(`[Semantic Query] Multi-condition query returned ${count} sub-accounts`);
+      
+      // Format results
+      let formatted = '';
+      const conditions: string[] = [];
+      if (semanticIntent.filters.region) {
+        conditions.push(`in ${semanticIntent.filters.region}`);
+      }
+      if (semanticIntent.filters.minQuotes) {
+        conditions.push(`with ${semanticIntent.filters.minQuotes}+ quotations`);
+      }
+      if (semanticIntent.filters.silentDays) {
+        conditions.push(`silent for ${semanticIntent.filters.silentDays} days`);
+      }
+      
+      const conditionStr = conditions.length > 0 ? ` (${conditions.join(', ')})` : '';
+      
+      if (count === 0) {
+        formatted = `No sub-accounts found${conditionStr}.`;
+      } else {
+        formatted = `Found ${count} sub-account(s)${conditionStr}:`;
+      }
+      
+      return {
+        success: true,
+        entity: 'subaccounts',
+        operation: 'list',
+        raw: {
+          subAccountCount: count,
+          filters: semanticIntent.filters,
+          subAccounts: filteredSubAccounts.map((sa: any) => ({
+            id: sa.id,
+            name: sa.sub_account_name,
+            assignedEmployee: sa.assigned_employee,
+            engagementScore: sa.engagement_score,
+            lastActivityAt: sa.last_activity_at,
+            account: sa.accounts?.account_name,
+            state: sa.accounts?.state,
+            city: sa.accounts?.city,
+          })),
+        },
+        formatted,
+        count,
+      };
+    } catch (error: any) {
+      console.error('[Semantic Query] Error in multi-condition query:', error);
+      return {
+        success: false,
+        entity: 'subaccounts',
+        operation: 'list',
+        raw: null,
+        formatted: `Error executing multi-condition query: ${error.message}`,
+        message: error.message,
+      };
+    }
+  }
+  
+  if (semanticIntent.entity === 'contacts' && semanticIntent.filterType === 'startsWith') {
+    console.log('[Semantic Query] Contact name startsWith match detected');
+    if (semanticIntent.filterValue) {
+      return await runContactStartsWithQuery(supabase, semanticIntent.filterValue, userRole, userId);
+    }
+  }
+
+  if (semanticIntent.entity === 'accounts' && semanticIntent.filterType === 'silentAccounts') {
+    console.log('[Semantic Query] Detecting silent customers');
+    try {
+      const results = await detectSilentAccountsFallback(30);
+      
+      const count = results.length;
+      let formatted = '';
+      
+      if (count === 0) {
+        formatted = 'No silent accounts found. All accounts have recent activity.';
+      } else {
+        formatted = `Found ${count} silent account(s) (no activity in last 30 days):`;
+      }
+
+      return {
+        success: true,
+        entity: 'accounts',
+        operation: 'list',
+        raw: {
+          accountCount: count,
+          accounts: results.map((acc: any) => ({
+            id: acc.id,
+            name: acc.name,
+            engagementScore: acc.engagement_score,
+            lastActivityAt: acc.last_activity_at,
+            accountId: acc.account_id,
+          })),
+        },
+        formatted,
+        count,
+      };
+    } catch (error: any) {
+      console.error('[Semantic Query] Error detecting silent accounts:', error);
+      return {
+        success: false,
+        entity: 'accounts',
+        operation: 'list',
+        raw: null,
+        formatted: `Error detecting silent accounts: ${error.message}`,
+        message: error.message,
+      };
+    }
+  }
+
+  // Handle slipping engagement queries
+  if (semanticIntent.entity === 'accounts' && 
+      (textQuery.toLowerCase().includes('slipping') || 
+       textQuery.toLowerCase().includes('low engagement') ||
+       textQuery.toLowerCase().includes('declining'))) {
+    console.log('[Semantic Query] Detecting slipping engagement');
+    try {
+      const results = await detectSlippingEngagement(40);
+      
+      const count = results.length;
+      let formatted = '';
+      
+      if (count === 0) {
+        formatted = 'No accounts with slipping engagement found. All accounts have engagement scores above 40.';
+      } else {
+        formatted = `Found ${count} account(s) with slipping engagement (score < 40):`;
+      }
+
+      return {
+        success: true,
+        entity: 'accounts',
+        operation: 'list',
+        raw: {
+          accountCount: count,
+          accounts: results.map((acc: any) => ({
+            id: acc.id,
+            name: acc.name,
+            engagementScore: acc.engagement_score,
+          })),
+        },
+        formatted,
+        count,
+      };
+    } catch (error: any) {
+      console.error('[Semantic Query] Error detecting slipping engagement:', error);
+      return {
+        success: false,
+        entity: 'accounts',
+        operation: 'list',
+        raw: null,
+        formatted: `Error detecting slipping accounts: ${error.message}`,
+        message: error.message,
+      };
+    }
+  }
+
+  // Continue with existing regex-based parsing
+  const intent = parseQueryIntent(textQuery);
+  console.log(`[QueryEngine] Parsed intent:`, JSON.stringify(intent, null, 2));
+
+  // ============================================
+  // Follow-up Resolution Layer
+  // Resolves incomplete queries by finding missing IDs from names/keywords
+  // ============================================
+  
+  /**
+   * Search for sub-account by name (fuzzy match)
+   */
+  async function searchSubaccountByName(keyword: string): Promise<{ id: number; name: string } | null> {
+    try {
+      const supabaseClient = createSupabaseServerClient();
+      let query = supabaseClient
+        .from('sub_accounts')
+        .select('id, sub_account_name')
+        .eq('is_active', true)
+        .ilike('sub_account_name', `%${keyword}%`)
+        .limit(5);
+      
+      // Apply role-based filtering
+      if (userRole === 'employee') {
+        query = query.eq('assigned_employee', userId);
+      }
+      
+      const { data, error } = await query;
+      
+      if (error || !data || data.length === 0) {
+        return null;
+      }
+      
+      // Try exact match first
+      const exactMatch = data.find((sa: any) => 
+        sa.sub_account_name.toLowerCase() === keyword.toLowerCase()
+      );
+      
+      if (exactMatch) {
+        console.log(`[QueryEngine] Found exact sub-account match: "${exactMatch.sub_account_name}" (ID: ${exactMatch.id})`);
+        return { id: exactMatch.id, name: exactMatch.sub_account_name };
+      }
+      
+      // Return first fuzzy match
+      if (data.length > 0) {
+        console.log(`[QueryEngine] Found fuzzy sub-account match: "${data[0].sub_account_name}" (ID: ${data[0].id})`);
+        return { id: data[0].id, name: data[0].sub_account_name };
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error('[QueryEngine] Error searching sub-account:', error);
+      return null;
+    }
+  }
+  
+  // Resolve incomplete queries: if entity inferred but subAccountId missing, try to resolve from keyword
+  if (intent.operation === 'list' && intent.entity === 'quotations' && !intent.filters.subAccountId && intent.filters.subaccountName) {
+    console.log(`[QueryEngine] Resolving sub-account for quotations query: "${intent.filters.subaccountName}"`);
+    const match = await searchSubaccountByName(intent.filters.subaccountName);
+    if (match) {
+      intent.filters.subAccountId = match.id;
+      console.log(`[QueryEngine] Resolved sub-account "${intent.filters.subaccountName}" → ID: ${match.id}`);
+    } else {
+      console.log(`[QueryEngine] Could not resolve sub-account "${intent.filters.subaccountName}"`);
+    }
   }
 
   try {
@@ -437,13 +868,99 @@ export async function executeCRMQuery(
         result = await queryMetrics(supabase, intent, userRole, userId);
         break;
       default:
-        console.log(`[QueryEngine] Unknown entity type, providing helpful suggestions`);
+        // Fallback to semantic inference
+        console.log(`[QueryEngine] Unknown entity type, trying semantic inference`);
+        const inferred = inferQueryIntent(textQuery);
+        
+        if (inferred.entityGuess) {
+          console.log(`[QueryEngine] Inferred entity: "${inferred.entityGuess}", operation: "${inferred.operationGuess}"`);
+          
+          // Map inferred entity to QueryEntityType
+          const inferredEntity = inferred.entityGuess as QueryEntityType | 'employees';
+          
+          // Create a basic intent from inference
+          // Map 'top' operation to 'list' with smaller limit
+          const mappedOperation: QueryIntent['operation'] = 
+            inferred.operationGuess === 'unknown' ? 'list' :
+            inferred.operationGuess === 'top' ? 'list' :
+            inferred.operationGuess;
+          
+          const inferredIntent: QueryIntent = {
+            entity: inferredEntity === 'employees' ? 'unknown' : inferredEntity,
+            operation: mappedOperation,
+            filters: {
+              limit: inferred.operationGuess === 'top' ? 10 : 50,
+              ...(inferred.filterGuess?.namePrefix && { 
+                // Note: name prefix filtering would need to be implemented per entity
+              }),
+              ...(inferred.filterGuess?.dateFilter && { 
+                dateRange: inferred.filterGuess.dateFilter 
+              }),
+              ...(inferred.filterGuess?.employeeName && { 
+                employeeName: inferred.filterGuess.employeeName 
+              }),
+            },
+            rawQuery: textQuery,
+          };
+          
+          // Try to execute query with inferred intent
+          try {
+            let result: CRMQueryResult | undefined;
+            
+            switch (inferredEntity) {
+              case 'contacts':
+                result = await queryContacts(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'accounts':
+                result = await queryAccounts(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'subaccounts':
+                result = await querySubAccounts(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'activities':
+                result = await queryActivities(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'quotations':
+                result = await queryQuotations(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'leads':
+                result = await queryLeads(supabase, inferredIntent, userRole, userId);
+                break;
+              case 'employees':
+              default:
+                // Employees entity not directly queryable, provide helpful message
+                if (inferredEntity === 'employees') {
+                  result = {
+                    success: false,
+                    entity: 'unknown' as QueryEntityType,
+                    operation: inferred.operationGuess,
+                    raw: null,
+                    formatted: `I understood you're asking about employees, but employee queries aren't directly supported. Try asking about accounts or sub-accounts assigned to specific employees instead.`,
+                    message: 'Employees entity not directly queryable',
+                  };
+                }
+                // Fall through to helpful suggestions for other unknown entities
+                break;
+            }
+            
+            if (result) {
+              console.log(`[QueryEngine] Semantic inference succeeded`);
+              return result;
+            }
+          } catch (inferenceError: any) {
+            console.warn(`[QueryEngine] Semantic inference query failed:`, inferenceError.message);
+            // Fall through to helpful suggestions
+          }
+        }
+        
+        // If inference didn't work, provide helpful suggestions
+        console.log(`[QueryEngine] Semantic inference didn't help, providing suggestions`);
         return {
           success: false,
           entity: 'unknown',
           operation: intent.operation,
           raw: null,
-          formatted: `I couldn't understand what CRM data you're looking for. 
+          formatted: `I understood this as CRM intent but unclear entity — try specifying contacts/accounts/quotes/etc.
 
 Try asking about:
 • "Show my contacts" or "How many contacts do I have?"
@@ -479,6 +996,107 @@ Or ask for coaching advice like:
 }
 
 // ============================================
+// Semantic Query Helpers
+// ============================================
+
+/**
+ * Run a contact query filtered by name prefix (starts with)
+ */
+async function runContactStartsWithQuery(
+  supabase: ReturnType<typeof createSupabaseServerClient>,
+  prefix: string,
+  userRole: 'admin' | 'employee',
+  userId: string
+): Promise<CRMQueryResult> {
+  console.log(`[Semantic Query] Running contact startsWith query for prefix: "${prefix}"`);
+
+  try {
+    let query = supabase
+      .from('contacts')
+      .select(`
+        id,
+        name,
+        designation,
+        email,
+        phone,
+        call_status,
+        follow_up_date,
+        notes,
+        created_at,
+        sub_account_id,
+        sub_accounts!inner(
+          id,
+          sub_account_name,
+          assigned_employee,
+          account_id,
+          accounts(
+            id,
+            account_name
+          )
+        )
+      `)
+      .ilike('name', `${prefix}%`)
+      .order('name', { ascending: true })
+      .limit(50);
+
+    // Apply role-based filtering
+    if (userRole === 'employee') {
+      query = query.eq('sub_accounts.assigned_employee', userId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to fetch contacts: ${error.message}`);
+    }
+
+    const count = data?.length || 0;
+    console.log(`[Semantic Query] Found ${count} contacts starting with "${prefix}"`);
+
+    // Format results
+    let formatted = '';
+    if (count === 0) {
+      formatted = `No contacts found starting with "${prefix}".`;
+    } else {
+      formatted = `Found ${count} contact(s) starting with "${prefix}":`;
+    }
+
+    return {
+      success: true,
+      entity: 'contacts',
+      operation: 'list',
+      raw: {
+        prefix,
+        contactCount: count,
+        contacts: data?.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          designation: c.designation,
+          phone: c.phone,
+          email: c.email,
+          callStatus: c.call_status,
+          followUpDate: c.follow_up_date,
+          subAccount: c.sub_accounts?.sub_account_name,
+          account: c.sub_accounts?.accounts?.account_name,
+        })) || [],
+      },
+      formatted,
+      count,
+    };
+  } catch (error: any) {
+    console.error('[Semantic Query] Error in runContactStartsWithQuery:', error);
+    return {
+      success: false,
+      entity: 'contacts',
+      operation: 'list',
+      raw: null,
+      formatted: `Error fetching contacts starting with "${prefix}": ${error.message}`,
+      message: error.message,
+    };
+  }
+}
+
+// ============================================
 // Entity Query Functions
 // ============================================
 
@@ -490,7 +1108,70 @@ async function queryContacts(
 ): Promise<CRMQueryResult> {
   const { filters, operation } = intent;
 
-  // Build base query
+  // For count operations without specific filters, get exact total count
+  const isCountQuery = operation === 'count' || intent.rawQuery.match(/how many|total|are there|only \d+/i);
+  
+  if (!filters.subaccountName && isCountQuery) {
+    // Get total count with role-based filtering if needed
+    let countQuery = supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true });
+
+    // For employees, we need to count only their contacts via sub_accounts
+    if (userRole === 'employee') {
+      // First get their sub_account IDs
+      const { data: subAccounts } = await supabase
+        .from('sub_accounts')
+        .select('id')
+        .eq('assigned_employee', userId);
+      
+      const subAccountIds = (subAccounts || []).map(sa => sa.id);
+      
+      if (subAccountIds.length === 0) {
+        return {
+          success: true,
+          entity: 'contacts',
+          operation,
+          raw: { subaccount: null, contactCount: 0, contacts: [] },
+          formatted: 'You have no contacts because no sub-accounts are assigned to you.',
+          count: 0,
+        };
+      }
+      
+      countQuery = supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .in('sub_account_id', subAccountIds);
+    }
+
+    const { count: totalCount, error: countError } = await countQuery;
+
+    if (countError) {
+      throw new Error(`Failed to count contacts: ${countError.message}`);
+    }
+
+    console.log(`[QueryEngine] Total contacts count: ${totalCount}`);
+    
+    const roleContext = userRole === 'admin' ? 'in the entire database' : 'assigned to you';
+    
+    return {
+      success: true,
+      entity: 'contacts',
+      operation: 'count',
+      raw: {
+        subaccount: null,
+        contactCount: totalCount || 0,
+        contacts: [],
+      },
+      formatted: `There are ${totalCount || 0} contacts ${roleContext}.`,
+      count: totalCount || 0,
+    };
+  }
+
+  // Build base query with optional joins
+  // Use left join when we don't need to filter by subaccount
+  const needsSubaccountFilter = filters.subaccountName || userRole === 'employee';
+  
   let query = supabase
     .from('contacts')
     .select(`
@@ -504,12 +1185,12 @@ async function queryContacts(
       notes,
       created_at,
       sub_account_id,
-      sub_accounts!inner(
+      sub_accounts${needsSubaccountFilter ? '!inner' : ''}(
         id,
         sub_account_name,
         assigned_employee,
         account_id,
-        accounts!inner(
+        accounts(
           id,
           account_name
         )
@@ -1004,6 +1685,20 @@ async function queryQuotations(
   const tables = ['quotes_mbcb', 'quotes_signages', 'quotes_paint'];
   let allQuotations: any[] = [];
   let totalValue = 0;
+  let resolvedSubAccountName: string | null = null;
+
+  // If subAccountId was resolved, fetch the sub-account name for better error messages
+  if (filters.subAccountId) {
+    const { data: subAccount } = await supabase
+      .from('sub_accounts')
+      .select('sub_account_name')
+      .eq('id', filters.subAccountId)
+      .single();
+    
+    if (subAccount) {
+      resolvedSubAccountName = subAccount.sub_account_name;
+    }
+  }
 
   for (const table of tables) {
     let query = supabase
@@ -1024,6 +1719,11 @@ async function queryQuotations(
     // Role-based filtering
     if (userRole === 'employee') {
       query = query.eq('created_by', userId);
+    }
+
+    // Filter by resolved sub-account ID
+    if (filters.subAccountId) {
+      query = query.eq('sub_account_id', filters.subAccountId);
     }
 
     // Date filter
@@ -1065,13 +1765,19 @@ async function queryQuotations(
 
   let formatted = '';
   if (count === 0) {
-    if (userRole === 'employee') {
+    // Provide specific message if sub-account was resolved but no quotations found
+    if (resolvedSubAccountName) {
+      formatted = `${resolvedSubAccountName} exists but 0 quotations found.`;
+    } else if (filters.subaccountName) {
+      formatted = `No quotations found for "${filters.subaccountName}". The sub-account may not exist or has no quotations.`;
+    } else if (userRole === 'employee') {
       formatted = 'No quotations found in your account. Create quotations using the price engine to build your pipeline!';
     } else {
       formatted = 'No quotations found in the system.';
     }
   } else {
-    formatted = `Found ${count} quotation(s) with total pipeline value of ₹${totalValue.toLocaleString('en-IN')}.`;
+    const subAccountContext = resolvedSubAccountName ? ` for ${resolvedSubAccountName}` : '';
+    formatted = `Found ${count} quotation(s)${subAccountContext} with total pipeline value of ₹${totalValue.toLocaleString('en-IN')}.`;
   }
 
   return {

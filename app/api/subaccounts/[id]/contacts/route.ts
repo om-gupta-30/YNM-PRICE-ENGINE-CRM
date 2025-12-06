@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { syncContactNotification } from '@/lib/utils/notificationSync';
 import { formatDateIST, formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 // GET - Fetch contacts for a sub-account
 export async function GET(
@@ -191,6 +192,9 @@ export async function POST(
       }
     }
 
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'contact', entityId: contact.id });
+
     return NextResponse.json({ success: true, contact });
   } catch (error: any) {
     console.error('Create contact error:', error);
@@ -365,6 +369,9 @@ export async function PUT(
         console.error('Error syncing notification (non-critical):', notificationError);
       }
     }
+
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'contact', entityId: contact_id });
 
     return NextResponse.json({ success: true, contact: updatedContact });
   } catch (error: any) {

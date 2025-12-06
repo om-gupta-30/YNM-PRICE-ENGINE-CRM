@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { calculateSubaccountAIInsights, runGemini, runGeminiFast } from '@/utils/ai';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 export async function refreshAccountEngagementScore(accountId?: number | null) {
   // TODO: will implement new AI-based engagement refresh later (v2).
@@ -136,6 +137,9 @@ export async function runSubaccountAIScoring(subAccountId: number) {
     if (updateError) {
       console.error('Error updating sub-account with AI insights:', updateError.message);
       // Continue and return result even if DB update fails
+    } else {
+      // Trigger AI knowledge sync after engagement score update (fire-and-forget)
+      triggerKnowledgeSync({ type: 'engagement', entityId: subAccountId });
     }
 
     // E.2) Insert engagement score snapshot into history

@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { syncContactNotification } from '@/lib/utils/notificationSync';
 import { logEditActivity, logDeleteActivity } from '@/lib/utils/activityLogger';
+import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 
 // GET - Fetch single contact
 export async function GET(
@@ -173,6 +174,9 @@ export async function PUT(
         // Don't fail the request if notification sync fails
       }
     }
+
+    // Trigger AI knowledge sync (fire-and-forget)
+    triggerKnowledgeSync({ type: 'contact', entityId: id });
 
     return NextResponse.json({ data, success: true });
   } catch (error: any) {
