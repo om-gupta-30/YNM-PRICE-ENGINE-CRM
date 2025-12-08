@@ -87,7 +87,9 @@ export default function TasksPage() {
       const data = await response.json();
 
       if (data.success) {
-        setTasks(data.tasks || []);
+        const tasksList = data.tasks || [];
+        console.log(`[Tasks Page] Loaded ${tasksList.length} tasks`);
+        setTasks(tasksList);
       } else {
         throw new Error(data.error || 'Failed to load tasks');
       }
@@ -159,12 +161,13 @@ export default function TasksPage() {
       }
 
       const data = await response.json();
-      
+
       if (data.success) {
         setToast({ message: 'Task created successfully', type: 'success' });
         setShowCreateModal(false);
-        loadTasks();
-        if (isAdmin) loadAnalytics();
+        // Reload tasks immediately after creation
+        await loadTasks();
+        if (isAdmin) await loadAnalytics();
       } else {
         throw new Error(data.error || 'Failed to create task');
       }
@@ -503,9 +506,14 @@ export default function TasksPage() {
                 </svg>
               </div>
               <p className="text-xl font-medium text-slate-300 mb-2">No tasks found</p>
-              <p className="text-sm text-slate-500 mb-6">
+              <p className="text-sm text-slate-500 mb-2">
                 {statusFilter !== 'All' ? `No ${statusFilter.toLowerCase()} tasks` : 'Create a new task to get started'}
               </p>
+              {tasks.length > 0 && (
+                <p className="text-xs text-amber-400 mb-4">
+                  Showing {tasks.length} total task(s), but none match the current filter
+                </p>
+              )}
               <button
                 onClick={() => setShowCreateModal(true)}
                 className="px-6 py-2.5 rounded-xl bg-premium-gold/20 hover:bg-premium-gold/30 text-white font-medium border border-premium-gold/30 transition-all inline-flex items-center gap-2"

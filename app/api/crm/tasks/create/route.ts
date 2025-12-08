@@ -69,7 +69,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createSupabaseServerClient();
+    let supabase;
+    try {
+      supabase = createSupabaseServerClient();
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Database connection error. Please check environment variables.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
+    
     const numericAccountId = account_id ? Number(account_id) : null;
 
     // Initialize status history with initial status
@@ -121,18 +135,22 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (retryError) {
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Error creating task (retry without status_history):', retryError);
-        }
-        return NextResponse.json({ error: retryError.message }, { status: 500 });
+        console.error('Error creating task (retry without status_history):', retryError);
+        return NextResponse.json({ 
+          success: false,
+          error: retryError.message || 'Failed to create task',
+          details: process.env.NODE_ENV === 'development' ? JSON.stringify(retryError) : undefined
+        }, { status: 500 });
       }
       task = retryTask;
       taskError = null;
     } else if (taskError) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Error creating task:', taskError);
-      }
-      return NextResponse.json({ error: taskError.message }, { status: 500 });
+      console.error('Error creating task:', taskError);
+      return NextResponse.json({ 
+        success: false,
+        error: taskError.message || 'Failed to create task',
+        details: process.env.NODE_ENV === 'development' ? JSON.stringify(taskError) : undefined
+      }, { status: 500 });
     }
 
     // Log activity for task creation
@@ -201,11 +219,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, task });
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Create task API error:', error);
-    }
+    console.error('Create task API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
     // Apply filters
     if (assignedTo) {
       // Check both assigned_employee and assigned_to columns
+      // Use proper Supabase OR syntax
       query = query.or(`assigned_employee.eq.${assignedTo},assigned_to.eq.${assignedTo}`);
     }
 
@@ -68,11 +69,17 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching tasks:', error);
       console.error('Query details:', { assignedTo, status, accountId, dueDateFrom, dueDateTo });
       return NextResponse.json({ 
-        error: error.message,
+        success: false,
+        error: error.message || 'Failed to fetch tasks',
         details: error.details || null,
         hint: error.hint || null,
         code: error.code || null
       }, { status: 500 });
+    }
+
+    // Log for debugging (only in development or when there's an issue)
+    if (process.env.NODE_ENV === 'development' || (tasks && tasks.length === 0 && count && count > 0)) {
+      console.log(`[Tasks List] Fetched ${tasks?.length || 0} tasks (total: ${count || 0}), filter: assignedTo=${assignedTo || 'none'}`);
     }
 
     // Log for debugging (only in development)
@@ -158,28 +165,38 @@ export async function GET(request: NextRequest) {
 
     // Normalize tasks - ensure assigned_to is set from assigned_employee and format timestamps
     // Also ensure account_id and sub_account_id are preserved, and add account/sub-account names
-    const normalizedTasks = (tasks || []).map((task: any) => ({
-      ...task,
-      assigned_to: task.assigned_employee || task.assigned_to || 'Unassigned',
-      account_id: task.account_id || null, // Explicitly preserve account_id
-      sub_account_id: task.sub_account_id || null, // Explicitly preserve sub_account_id
-      account_name: task.account_id ? accountMap[task.account_id] || null : null,
-      sub_account_name: task.sub_account_id ? subAccountMap[task.sub_account_id] || null : null,
-      latest_note: latestNotesMap[task.id] || null,
-      created_at: formatTimestampIST(task.created_at),
-      updated_at: formatTimestampIST(task.updated_at),
-      completed_at: task.completed_at ? formatTimestampIST(task.completed_at) : null,
-      // Format status_history timestamps (only if column exists)
-      status_history: task.status_history && Array.isArray(task.status_history)
-        ? task.status_history.map((entry: any) => {
-            const { changed_at, ...rest } = entry;
-            return {
-              ...rest,
-              changed_at: changed_at ? formatTimestampIST(changed_at) : null,
-            };
-          })
-        : [],
-    }));
+    const normalizedTasks = (tasks || []).map((task: any) => {
+      // Ensure we have all required fields
+      const normalized = {
+        id: task.id,
+        title: task.title || '',
+        description: task.description || null,
+        task_type: task.task_type || 'Follow-up',
+        due_date: task.due_date,
+        assigned_to: task.assigned_employee || task.assigned_to || 'Unassigned',
+        account_id: task.account_id || null,
+        sub_account_id: task.sub_account_id || null,
+        status: task.status || 'Pending',
+        created_by: task.created_by || 'System',
+        account_name: task.account_id ? accountMap[task.account_id] || null : null,
+        sub_account_name: task.sub_account_id ? subAccountMap[task.sub_account_id] || null : null,
+        latest_note: latestNotesMap[task.id] || null,
+        created_at: formatTimestampIST(task.created_at),
+        updated_at: formatTimestampIST(task.updated_at),
+        completed_at: task.completed_at ? formatTimestampIST(task.completed_at) : null,
+        // Format status_history timestamps (only if column exists)
+        status_history: task.status_history && Array.isArray(task.status_history)
+          ? task.status_history.map((entry: any) => {
+              const { changed_at, ...rest } = entry;
+              return {
+                ...rest,
+                changed_at: changed_at ? formatTimestampIST(changed_at) : null,
+              };
+            })
+          : [],
+      };
+      return normalized;
+    });
 
     const response = NextResponse.json({
       success: true,
