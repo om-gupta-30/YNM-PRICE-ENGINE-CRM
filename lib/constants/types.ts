@@ -127,7 +127,9 @@ export interface Task {
   customer_id?: number | null;
   customer_name?: string | null;
   account_id?: number | null;
+  account_name?: string | null; // Account name (joined from accounts table)
   sub_account_id?: number | null;
+  sub_account_name?: string | null; // Sub-account name (joined from sub_accounts table)
   contact_id?: number | null;
   task_type: 'Follow-up' | 'Meeting' | 'Call';
   due_date: string;
@@ -140,6 +142,7 @@ export interface Task {
   updated_at?: string | null;
   completed_at?: string | null;
   status_history?: TaskStatusHistory[] | null;
+  latest_note?: string | null; // Latest note from activities
 }
 
 export type CompanyStage = 
