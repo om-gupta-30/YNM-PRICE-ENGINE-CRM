@@ -66,60 +66,68 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Format contacts with additional information
-    const formattedContacts = await Promise.all(
-      (contacts || []).map(async (contact: any) => {
-        let stateName = null;
-        let cityName = null;
+    // OPTIMIZED: Batch fetch states and cities to avoid N+1 queries
+    const stateIds = new Set<number>();
+    const cityIds = new Set<number>();
+    
+    (contacts || []).forEach((contact: any) => {
+      if (contact.sub_accounts?.state_id) {
+        stateIds.add(contact.sub_accounts.state_id);
+      }
+      if (contact.sub_accounts?.city_id) {
+        cityIds.add(contact.sub_accounts.city_id);
+      }
+    });
 
-        if (contact.sub_accounts?.state_id) {
-          try {
-            const { data: stateData } = await supabase
-              .from('states')
-              .select('state_name')
-              .eq('id', contact.sub_accounts.state_id)
-              .single();
-            stateName = stateData?.state_name || null;
-          } catch (err) {
-            console.error(`Error fetching state for contact ${contact.id}:`, err);
-          }
-        }
+    // Batch fetch all states and cities in parallel
+    const [statesResult, citiesResult] = await Promise.all([
+      stateIds.size > 0
+        ? supabase
+            .from('states')
+            .select('id, state_name')
+            .in('id', Array.from(stateIds))
+        : Promise.resolve({ data: [], error: null }),
+      cityIds.size > 0
+        ? supabase
+            .from('cities')
+            .select('id, city_name')
+            .in('id', Array.from(cityIds))
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
-        if (contact.sub_accounts?.city_id) {
-          try {
-            const { data: cityData } = await supabase
-              .from('cities')
-              .select('city_name')
-              .eq('id', contact.sub_accounts.city_id)
-              .single();
-            cityName = cityData?.city_name || null;
-          } catch (err) {
-            console.error(`Error fetching city for contact ${contact.id}:`, err);
-          }
-        }
-
-        return {
-          id: contact.id,
-          accountId: contact.account_id,
-          accountName: contact.accounts?.account_name || null,
-          assignedEmployee: contact.accounts?.assigned_employee || null,
-          subAccountId: contact.sub_account_id || null,
-          subAccountName: contact.sub_accounts?.sub_account_name || null,
-          stateName,
-          cityName,
-          name: contact.name,
-          designation: contact.designation || null,
-          email: contact.email || null,
-          phone: contact.phone || null,
-          callStatus: contact.call_status || null,
-          notes: contact.notes || null,
-          followUpDate: contact.follow_up_date ? formatTimestampIST(contact.follow_up_date) : null,
-          createdBy: contact.created_by,
-          createdAt: formatTimestampIST(contact.created_at),
-          updatedAt: formatTimestampIST(contact.updated_at),
-        };
-      })
+    // Create lookup maps for O(1) access
+    const statesMap = new Map(
+      (statesResult.data || []).map((state: any) => [state.id, state.state_name])
     );
+    const citiesMap = new Map(
+      (citiesResult.data || []).map((city: any) => [city.id, city.city_name])
+    );
+
+    // Format contacts using lookup maps (no additional queries)
+    const formattedContacts = (contacts || []).map((contact: any) => ({
+      id: contact.id,
+      accountId: contact.account_id,
+      accountName: contact.accounts?.account_name || null,
+      assignedEmployee: contact.accounts?.assigned_employee || null,
+      subAccountId: contact.sub_account_id || null,
+      subAccountName: contact.sub_accounts?.sub_account_name || null,
+      stateName: contact.sub_accounts?.state_id 
+        ? (statesMap.get(contact.sub_accounts.state_id) || null)
+        : null,
+      cityName: contact.sub_accounts?.city_id
+        ? (citiesMap.get(contact.sub_accounts.city_id) || null)
+        : null,
+      name: contact.name,
+      designation: contact.designation || null,
+      email: contact.email || null,
+      phone: contact.phone || null,
+      callStatus: contact.call_status || null,
+      notes: contact.notes || null,
+      followUpDate: contact.follow_up_date ? formatTimestampIST(contact.follow_up_date) : null,
+      createdBy: contact.created_by,
+      createdAt: formatTimestampIST(contact.created_at),
+      updatedAt: formatTimestampIST(contact.updated_at),
+    }));
 
     return NextResponse.json({ success: true, contacts: formattedContacts });
   } catch (error: any) {

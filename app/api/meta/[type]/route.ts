@@ -26,7 +26,7 @@ export async function GET(
         .from('states')
         .select('state_name')
         .order('state_name', { ascending: true })
-        .limit(10000);
+        .limit(100);
 
       if (error) {
         console.error('Error fetching places:', error);
@@ -54,7 +54,7 @@ export async function GET(
 
       const { data, error } = await query
         .order('created_at', { ascending: false })
-        .limit(10000);
+        .limit(500);
 
       if (error) {
         console.error('Error fetching accounts as customers:', error);

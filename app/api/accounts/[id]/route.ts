@@ -128,8 +128,8 @@ export async function PUT(
     }
     if (body.is_active !== undefined) updateData.is_active = body.is_active;
 
-    // Get old account data for activity logging
-    const { data: oldAccount } = await supabase
+    // Fetch old account data BEFORE update (parallel execution possible)
+    const fetchOldAccountPromise = supabase
       .from('accounts')
       .select('account_name, company_stage, company_tag, assigned_employee, notes, industries, industry_projects, is_active')
       .eq('id', id)
@@ -147,9 +147,20 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity for account update with change detection
+    // Get old account data (non-blocking)
+    let oldAccount: any = null;
+    try {
+      const { data: oldAccountData } = await fetchOldAccountPromise;
+      oldAccount = oldAccountData;
+    } catch {
+      // Ignore errors - activity logging is non-critical
+    }
+
+    // Log activity for account update with change detection (non-blocking - fire and forget)
     const updatedBy = body.updatedBy || 'System';
-    await logEditActivity({
+    Promise.resolve().then(async () => {
+      try {
+        await logEditActivity({
       account_id: id,
       employee_id: updatedBy,
       entityName: data.account_name,
@@ -175,6 +186,12 @@ export async function PUT(
         industry_projects: 'Industry Projects',
         is_active: 'Status',
       },
+      });
+      } catch (activityError) {
+        console.warn('Failed to log account update activity:', activityError);
+      }
+    }).catch(() => {
+      // Silent fail for background activity logging
     });
 
     // Format timestamps in IST

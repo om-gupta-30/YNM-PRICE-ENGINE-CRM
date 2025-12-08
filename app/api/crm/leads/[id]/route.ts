@@ -79,8 +79,8 @@ export async function PUT(
       );
     }
 
-    // Get old lead data for comparison before updating
-    const { data: oldLead } = await supabase
+    // Fetch old lead data BEFORE update (for activity logging)
+    const fetchOldLeadPromise = supabase
       .from('leads')
       .select('*')
       .eq('id', id)
@@ -116,34 +116,47 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity for lead update
-    if (data && oldLead) {
-      try {
-        const changes: string[] = [];
-        Object.keys(updateData).forEach(key => {
-          if (key !== 'updated_at' && oldLead[key] !== data[key]) {
-            changes.push(`${key}: "${oldLead[key] || 'None'}" → "${data[key] || 'None'}"`);
-          }
-        });
+    // Get old lead data (non-blocking)
+    let oldLead: any = null;
+    try {
+      const { data: oldLeadData } = await fetchOldLeadPromise;
+      oldLead = oldLeadData;
+    } catch {
+      // Ignore errors - activity logging is non-critical
+    }
 
-        if (changes.length > 0) {
-          await logActivity({
-            account_id: data.account_id,
-            employee_id: body.updated_by || oldLead.created_by || 'System',
-            activity_type: 'edit',
-            description: `Lead "${data.lead_name}" updated: ${changes.join(', ')}`,
-            metadata: {
-              entity_type: 'lead',
-              lead_id: data.id,
-              changes,
-              old_data: oldLead,
-              new_data: data,
-            },
+    // Log activity for lead update (non-blocking - fire and forget)
+    if (data && oldLead) {
+      Promise.resolve().then(async () => {
+        try {
+          const changes: string[] = [];
+          Object.keys(updateData).forEach(key => {
+            if (key !== 'updated_at' && oldLead[key] !== data[key]) {
+              changes.push(`${key}: "${oldLead[key] || 'None'}" → "${data[key] || 'None'}"`);
+            }
           });
+
+          if (changes.length > 0) {
+            await logActivity({
+              account_id: data.account_id,
+              employee_id: body.updated_by || oldLead.created_by || 'System',
+              activity_type: 'edit',
+              description: `Lead "${data.lead_name}" updated: ${changes.join(', ')}`,
+              metadata: {
+                entity_type: 'lead',
+                lead_id: data.id,
+                changes,
+                old_data: oldLead,
+                new_data: data,
+              },
+            });
+          }
+        } catch (activityError) {
+          console.warn('Failed to log lead update activity:', activityError);
         }
-      } catch (activityError) {
-        console.warn('Failed to log lead update activity:', activityError);
-      }
+      }).catch(() => {
+        // Silent fail for background activity logging
+      });
     }
 
     return NextResponse.json({ data, success: true });

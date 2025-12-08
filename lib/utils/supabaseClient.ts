@@ -7,6 +7,7 @@ export const supabaseBrowser = createClient(
 );
 
 // Server-side Supabase client (uses service role key)
+// Optimized for free tier with connection pooling and reduced overhead
 export function createSupabaseServerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -20,6 +21,11 @@ export function createSupabaseServerClient() {
       autoRefreshToken: false,
       persistSession: false,
     },
+    db: {
+      schema: 'public',
+    },
+    // Note: Free tier optimizations are handled at the API route level
+    // Connection pooling and timeout are managed by Vercel/Supabase infrastructure
   });
 }
 

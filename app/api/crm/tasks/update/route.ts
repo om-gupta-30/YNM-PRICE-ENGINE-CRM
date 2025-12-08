@@ -101,6 +101,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch old task data BEFORE update for activity logging (only if needed)
+    // We'll do this asynchronously in parallel or skip for faster response
+    const fetchOldTaskPromise = supabase
+      .from('tasks')
+      .select('title, description, task_type, due_date, assigned_employee, account_id, sub_account_id, status, reminder_enabled, reminder_value, reminder_unit')
+      .eq('id', id)
+      .single();
+
     // Update task
     const { data: task, error: updateError } = await supabase
       .from('tasks')
@@ -114,67 +122,76 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
     }
 
-    // Update notification if reminder is enabled
-    if (reminder_enabled && reminder_value && reminder_unit && task) {
-      try {
-        const dueDate = new Date(task.due_date);
-        let reminderDate = new Date(dueDate);
-
-        switch (reminder_unit) {
-          case 'minutes':
-            reminderDate.setMinutes(reminderDate.getMinutes() - parseInt(reminder_value));
-            break;
-          case 'hours':
-            reminderDate.setHours(reminderDate.getHours() - parseInt(reminder_value));
-            break;
-          case 'days':
-            reminderDate.setDate(reminderDate.getDate() - parseInt(reminder_value));
-            break;
-        }
-
-        // Update or create notification
-        const { data: existingNotification } = await supabase
-          .from('notifications')
-          .select('id')
-          .eq('related_id', task.id)
-          .eq('related_type', 'task')
-          .eq('notification_type', 'task_reminder')
-          .single();
-
-        if (existingNotification) {
-          await supabase
-            .from('notifications')
-            .update({
-              snooze_until: reminderDate.toISOString(),
-              updated_at: getCurrentISTTime(),
-            })
-            .eq('id', existingNotification.id);
-        } else {
-          await supabase.from('notifications').insert({
-            user_id: task.assigned_employee,
-            title: `Task Reminder: ${task.title}`,
-            message: `Task "${task.title}" is due on ${new Date(task.due_date).toLocaleDateString()}`,
-            notification_type: 'task_reminder',
-            related_id: task.id,
-            related_type: 'task',
-            snooze_until: reminderDate.toISOString(),
-            is_completed: false,
-            created_at: getCurrentISTTime(),
-          });
-        }
-      } catch (notificationError) {
-        console.error('Error updating notification (non-critical):', notificationError);
-      }
+    // Get old task data (non-blocking - resolve promise if already started)
+    let oldTask: any = null;
+    try {
+      const { data: oldTaskData } = await fetchOldTaskPromise;
+      oldTask = oldTaskData;
+    } catch {
+      // Ignore errors fetching old data - activity logging is non-critical
     }
 
-    // Get old task data for comparison
-    const { data: oldTask } = await supabase
-      .from('tasks')
-      .select('title, description, task_type, due_date, assigned_employee, account_id, sub_account_id, status, reminder_enabled, reminder_value, reminder_unit')
-      .eq('id', id)
-      .single();
+    // Update notification if reminder is enabled (non-blocking)
+    if (reminder_enabled && reminder_value && reminder_unit && task) {
+      // Fire and forget - don't await for faster response
+      Promise.resolve().then(async () => {
+        try {
+          const dueDate = new Date(task.due_date);
+          let reminderDate = new Date(dueDate);
 
-    // Log activity for task update
+          switch (reminder_unit) {
+            case 'minutes':
+              reminderDate.setMinutes(reminderDate.getMinutes() - parseInt(reminder_value));
+              break;
+            case 'hours':
+              reminderDate.setHours(reminderDate.getHours() - parseInt(reminder_value));
+              break;
+            case 'days':
+              reminderDate.setDate(reminderDate.getDate() - parseInt(reminder_value));
+              break;
+          }
+
+          // Update or create notification
+          const { data: existingNotification } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('related_id', task.id)
+            .eq('related_type', 'task')
+            .eq('notification_type', 'task_reminder')
+            .single();
+
+          if (existingNotification) {
+            await supabase
+              .from('notifications')
+              .update({
+                snooze_until: reminderDate.toISOString(),
+                updated_at: getCurrentISTTime(),
+              })
+              .eq('id', existingNotification.id);
+          } else {
+            await supabase.from('notifications').insert({
+              user_id: task.assigned_employee,
+              title: `Task Reminder: ${task.title}`,
+              message: `Task "${task.title}" is due on ${new Date(task.due_date).toLocaleDateString()}`,
+              notification_type: 'task_reminder',
+              related_id: task.id,
+              related_type: 'task',
+              snooze_until: reminderDate.toISOString(),
+              is_completed: false,
+              created_at: getCurrentISTTime(),
+            });
+          }
+        } catch (notificationError) {
+          console.error('Error updating notification (non-critical):', notificationError);
+        }
+      }).catch(() => {
+        // Silent fail for background operations
+      });
+    }
+
+    // Log activity for task update (non-blocking - fire and forget)
+    Promise.resolve().then(async () => {
+      try {
     try {
       const changes: string[] = [];
       if (title !== undefined && title.trim() !== oldTask?.title) {
@@ -222,9 +239,12 @@ export async function POST(request: NextRequest) {
           },
         });
       }
-    } catch (activityError) {
-      console.warn('Failed to log task update activity:', activityError);
-    }
+      } catch (activityError) {
+        console.warn('Failed to log task update activity:', activityError);
+      }
+    }).catch(() => {
+      // Silent fail for background activity logging
+    });
 
     return NextResponse.json({ success: true, task });
   } catch (error: any) {

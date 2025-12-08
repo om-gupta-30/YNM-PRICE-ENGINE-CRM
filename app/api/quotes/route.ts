@@ -170,93 +170,97 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity and update related products
-    try {
-      const { data: subAccountData } = await supabase
-        .from('sub_accounts')
-        .select('sub_account_name, accounts:account_id(account_name)')
-        .eq('id', finalSubAccountId)
-        .single();
+    // Log activity and update related products (non-blocking - fire and forget)
+    Promise.resolve().then(async () => {
+      try {
+        const { data: subAccountData } = await supabase
+          .from('sub_accounts')
+          .select('sub_account_name, accounts:account_id(account_name)')
+          .eq('id', finalSubAccountId)
+          .single();
 
-      const accountsArray = subAccountData?.accounts as any;
-      const accountName = (Array.isArray(accountsArray) ? accountsArray[0]?.account_name : accountsArray?.account_name) || 'Unknown Account';
-      const subAccountName = subAccountData?.sub_account_name || 'Unknown Sub-Account';
+        const accountsArray = subAccountData?.accounts as any;
+        const accountName = (Array.isArray(accountsArray) ? accountsArray[0]?.account_name : accountsArray?.account_name) || 'Unknown Account';
+        const subAccountName = subAccountData?.sub_account_name || 'Unknown Sub-Account';
 
-      // Determine product name from section
-      const getProductName = (sectionName: string): string => {
-        const sectionLower = sectionName.toLowerCase();
-        if (sectionLower.includes('w-beam') || sectionLower.includes('thrie') || sectionLower.includes('double')) {
-          return 'MBCB';
-        } else if (sectionLower.includes('signages') || sectionLower.includes('reflective')) {
-          return 'Signages';
-        } else if (sectionLower.includes('paint')) {
-          return 'Paint';
-        }
-        // Return a normalized version of the section name
-        return sectionName.split(' ')[0] || sectionName;
-      };
+        // Determine product name from section
+        const getProductName = (sectionName: string): string => {
+          const sectionLower = sectionName.toLowerCase();
+          if (sectionLower.includes('w-beam') || sectionLower.includes('thrie') || sectionLower.includes('double')) {
+            return 'MBCB';
+          } else if (sectionLower.includes('signages') || sectionLower.includes('reflective')) {
+            return 'Signages';
+          } else if (sectionLower.includes('paint')) {
+            return 'Paint';
+          }
+          // Return a normalized version of the section name
+          return sectionName.split(' ')[0] || sectionName;
+        };
 
-      const productName = getProductName(section);
+        const productName = getProductName(section);
 
-      // Update account's related_products if account_id exists
-      if (finalAccountId) {
-        try {
-          // Get current related_products
-          const { data: accountData } = await supabase
-            .from('accounts')
-            .select('related_products')
-            .eq('id', finalAccountId)
-            .single();
+        // Update account's related_products if account_id exists
+        if (finalAccountId) {
+          try {
+            // Get current related_products
+            const { data: accountData } = await supabase
+              .from('accounts')
+              .select('related_products')
+              .eq('id', finalAccountId)
+              .single();
 
-          if (accountData) {
-            // Get current products array (handle both TEXT[] and JSONB)
-            let currentProducts: string[] = [];
-            if (Array.isArray(accountData.related_products)) {
-              currentProducts = accountData.related_products;
-            } else if (accountData.related_products && typeof accountData.related_products === 'string') {
-              // Handle if it's stored as a string
-              try {
-                currentProducts = JSON.parse(accountData.related_products);
-              } catch {
-                currentProducts = [accountData.related_products];
+            if (accountData) {
+              // Get current products array (handle both TEXT[] and JSONB)
+              let currentProducts: string[] = [];
+              if (Array.isArray(accountData.related_products)) {
+                currentProducts = accountData.related_products;
+              } else if (accountData.related_products && typeof accountData.related_products === 'string') {
+                // Handle if it's stored as a string
+                try {
+                  currentProducts = JSON.parse(accountData.related_products);
+                } catch {
+                  currentProducts = [accountData.related_products];
+                }
+              }
+
+              // Add product if not already in the array
+              if (!currentProducts.includes(productName)) {
+                const updatedProducts = [...currentProducts, productName];
+
+                // Update account with new related_products
+                await supabase
+                  .from('accounts')
+                  .update({ 
+                    related_products: updatedProducts,
+                    updated_at: getCurrentISTTime(),
+                  })
+                  .eq('id', finalAccountId);
               }
             }
-
-            // Add product if not already in the array
-            if (!currentProducts.includes(productName)) {
-              const updatedProducts = [...currentProducts, productName];
-
-              // Update account with new related_products
-              await supabase
-                .from('accounts')
-                .update({ 
-                  related_products: updatedProducts,
-                  updated_at: getCurrentISTTime(),
-                })
-                .eq('id', finalAccountId);
-            }
+          } catch (productUpdateError) {
+            console.warn('Failed to update related_products:', productUpdateError);
+            // Don't fail the quotation creation if product update fails
           }
-        } catch (productUpdateError) {
-          console.warn('Failed to update related_products:', productUpdateError);
-          // Don't fail the quotation creation if product update fails
         }
-      }
 
-      // Log quotation save activity
-      await logQuotationSaveActivity({
-        employee_id: created_by || 'System',
-        quotationId: data.id,
-        section,
-        accountName,
-        subAccountName,
-        metadata: {
-          final_total_cost,
-          product_added: productName,
-        },
-      });
-    } catch (activityError) {
-      console.warn('Failed to log quotation activity:', activityError);
-    }
+        // Log quotation save activity
+        await logQuotationSaveActivity({
+          employee_id: created_by || 'System',
+          quotationId: data.id,
+          section,
+          accountName,
+          subAccountName,
+          metadata: {
+            final_total_cost,
+            product_added: productName,
+          },
+        });
+      } catch (activityError) {
+        console.warn('Failed to log quotation activity:', activityError);
+      }
+    }).catch(() => {
+      // Silent fail for background operations
+    });
 
     // Trigger AI knowledge sync (fire-and-forget)
     triggerKnowledgeSync({ type: 'quotation', entityId: data.id });
@@ -274,7 +278,8 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50', 10);
+    // Reduce default limit for free tier performance (50 is reasonable)
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200); // Max 200 for free tier
     const productType = searchParams.get('product_type') || searchParams.get('section'); // 'mbcb', 'signages', 'paint', or null for all
     const createdBy = searchParams.get('created_by');
 
