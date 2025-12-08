@@ -204,13 +204,20 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const handleInputChange = (field: keyof LeadFormData, value: string | number | null) => {
     setFormData(prev => {
-      const updated = { ...prev };
+      let updated: LeadFormData;
       
       // Handle priority field with proper type casting
       if (field === 'priority') {
-        updated.priority = value as 'High Priority' | 'Medium Priority' | 'Low Priority' | null;
+        updated = { 
+          ...prev, 
+          priority: value as 'High Priority' | 'Medium Priority' | 'Low Priority' | null 
+        };
       } else {
-        updated[field] = value as any;
+        // Handle other fields - use type assertion for the entire object
+        updated = { 
+          ...prev, 
+          [field]: value 
+        } as LeadFormData;
       }
       
       // When account changes, reload sub-accounts and clear sub_account/contact selection
