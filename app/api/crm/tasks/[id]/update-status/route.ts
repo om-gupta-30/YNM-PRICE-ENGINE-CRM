@@ -77,19 +77,27 @@ export async function POST(
     }
 
     // Permission check: Only allow employees to update their own tasks
-    // Admin cannot update status (they can only view and assign)
+    // Admin cannot update status (they can only view, assign, and delete)
     const assignedEmployee = currentTask.assigned_employee || currentTask.assigned_to;
-    if (updated_by && updated_by.toLowerCase() !== 'admin' && updated_by !== assignedEmployee) {
+    
+    // Block admin from updating status
+    if (updated_by && updated_by.toLowerCase() === 'admin') {
       return NextResponse.json(
-        { error: 'You can only update tasks assigned to you' },
+        { 
+          success: false,
+          error: 'Admin cannot update task status. Only assigned employees can update status.' 
+        },
         { status: 403 }
       );
     }
 
-    // Block admin from updating status
-    if (updated_by && updated_by.toLowerCase() === 'admin') {
+    // Only allow employees to update their own tasks
+    if (updated_by && updated_by !== assignedEmployee) {
       return NextResponse.json(
-        { error: 'Admin cannot update task status. Only assigned employees can update status.' },
+        { 
+          success: false,
+          error: 'You can only update tasks assigned to you' 
+        },
         { status: 403 }
       );
     }
@@ -101,6 +109,17 @@ export async function POST(
         message: 'Status unchanged',
         task: currentTask,
       });
+    }
+
+    // Validate that the user updating is the assigned employee
+    if (!updated_by || updated_by !== assignedEmployee) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'You can only update tasks assigned to you' 
+        },
+        { status: 403 }
+      );
     }
 
     // Build status history entry (only if column exists)

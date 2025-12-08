@@ -12,6 +12,7 @@ export interface LeadFormData {
   requirements: string;
   lead_source: string;
   status: string;
+  priority: 'High Priority' | 'Medium Priority' | 'Low Priority' | null;
   assigned_employee: string;
   accounts: number | null;
   sub_accounts: number | null;
@@ -28,6 +29,7 @@ interface LeadFormProps {
 
 const LEAD_SOURCES = ['Website', 'Referral', 'Inbound Call', 'Existing Customer', 'Marketing', 'Other'];
 const LEAD_STATUSES = ['New', 'In Progress', 'Quotation Sent', 'Follow-up', 'Closed', 'Lost'];
+const LEAD_PRIORITIES = ['High Priority', 'Medium Priority', 'Low Priority'];
 
 export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode = 'create' }: LeadFormProps) {
   const [mounted, setMounted] = useState(false);
@@ -53,6 +55,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     requirements: '',
     lead_source: '',
     status: 'New',
+    priority: null,
     assigned_employee: '',
     accounts: null,
     sub_accounts: null,
@@ -96,6 +99,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
           requirements: '',
           lead_source: '',
           status: 'New',
+          priority: null,
           assigned_employee: '',
           accounts: null,
           sub_accounts: null,
@@ -200,7 +204,14 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const handleInputChange = (field: keyof LeadFormData, value: string | number | null) => {
     setFormData(prev => {
-      const updated = { ...prev, [field]: value };
+      const updated = { ...prev };
+      
+      // Handle priority field with proper type casting
+      if (field === 'priority') {
+        updated.priority = value as 'High Priority' | 'Medium Priority' | 'Low Priority' | null;
+      } else {
+        updated[field] = value as any;
+      }
       
       // When account changes, reload sub-accounts and clear sub_account/contact selection
       if (field === 'accounts') {
@@ -503,6 +514,23 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               >
                 {LEAD_STATUSES.map(status => (
                   <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
+                Priority
+              </label>
+              <select
+                value={formData.priority || ''}
+                onChange={(e) => handleInputChange('priority', e.target.value || null)}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+              >
+                <option value="">Select Priority (Optional)</option>
+                {LEAD_PRIORITIES.map(priority => (
+                  <option key={priority} value={priority}>{priority}</option>
                 ))}
               </select>
             </div>

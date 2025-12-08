@@ -246,36 +246,49 @@ export default function TasksPage() {
   };
 
   const handleDeleteTask = async (task: Task) => {
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      setToast({ message: 'Only admins can delete tasks', type: 'error' });
+      return;
+    }
     
     setTaskToDelete(task);
     setShowDeleteModal(true);
   };
 
   const confirmDeleteTask = async () => {
-    if (!taskToDelete || !isAdmin) return;
+    if (!taskToDelete || !isAdmin) {
+      setToast({ message: 'Only admins can delete tasks', type: 'error' });
+      return;
+    }
 
     try {
       setDeleting(true);
       
       // Optimistic update - remove task from UI immediately
+      const taskToRestore = taskToDelete;
       setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
       setShowDeleteModal(false);
       setToast({ message: 'Deleting task...', type: 'success' });
 
       const response = await fetch(`/api/crm/tasks/${taskToDelete.id}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
       if (!response.ok) {
         // Restore task on error
-        setTasks(prev => [...prev, taskToDelete].sort((a, b) => {
-          const dateA = new Date(a.due_date).getTime();
-          const dateB = new Date(b.due_date).getTime();
-          return dateA - dateB;
-        }));
+        setTasks(prev => {
+          const restored = [...prev, taskToRestore];
+          return restored.sort((a, b) => {
+            const dateA = new Date(a.due_date).getTime();
+            const dateB = new Date(b.due_date).getTime();
+            return dateA - dateB;
+          });
+        });
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        throw new Error(errorData.error || `Failed to delete task. Status: ${response.status}`);
       }
 
       const data = await response.json();
@@ -283,21 +296,24 @@ export default function TasksPage() {
       if (data.success) {
         setToast({ message: 'Task deleted successfully', type: 'success' });
         // Refresh tasks in background
-        loadTasks(false).catch(err => console.error('Error refreshing tasks:', err));
+        loadTasks(false).catch(() => {});
         if (isAdmin) {
-          loadAnalytics().catch(err => console.error('Error refreshing analytics:', err));
+          loadAnalytics().catch(() => {});
         }
       } else {
         // Restore task on error
-        setTasks(prev => [...prev, taskToDelete].sort((a, b) => {
-          const dateA = new Date(a.due_date).getTime();
-          const dateB = new Date(b.due_date).getTime();
-          return dateA - dateB;
-        }));
+        setTasks(prev => {
+          const restored = [...prev, taskToRestore];
+          return restored.sort((a, b) => {
+            const dateA = new Date(a.due_date).getTime();
+            const dateB = new Date(b.due_date).getTime();
+            return dateA - dateB;
+          });
+        });
         throw new Error(data.error || 'Failed to delete task');
       }
     } catch (err: any) {
-      setToast({ message: err.message, type: 'error' });
+      setToast({ message: err.message || 'Failed to delete task. Please try again.', type: 'error' });
     } finally {
       setDeleting(false);
       setTaskToDelete(null);
@@ -670,7 +686,12 @@ export default function TasksPage() {
                     className={`group relative rounded-xl border-l-4 ${config.border} ${config.bg} bg-slate-900/40 border border-slate-700/50 hover:border-slate-600/50 transition-all duration-200 hover:shadow-lg hover:shadow-black/20 overflow-hidden ${
                       !isAdmin && task.assigned_to === username ? 'cursor-pointer' : ''
                     }`}
-                    onClick={() => {
+                    onClick={(e) => {
+                      // Don't trigger if clicking on buttons or interactive elements
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button') || target.closest('a') || target.closest('select') || target.closest('input')) {
+                        return;
+                      }
                       // Only open status modal for employees on their own tasks
                       if (!isAdmin && task.assigned_to === username) {
                         setSelectedTask(task);
@@ -789,24 +810,31 @@ export default function TasksPage() {
                       
                       {/* Actions */}
                       <div className="flex gap-2 mt-4 pt-4 border-t border-slate-700/50" onClick={(e) => e.stopPropagation()}>
-                        {/* Only show Update button for employees (not admin) and only for their own tasks */}
+                        {/* Update Status button - Only for employees on their own tasks */}
                         {!isAdmin && task.assigned_to === username && (
                           <button
-                            onClick={() => {
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               setSelectedTask(task);
                               setShowStatusModal(true);
                             }}
-                            className="flex-1 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                            className="flex-1 px-3 py-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 text-xs font-medium transition-colors flex items-center justify-center gap-1.5 border border-blue-500/30"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                            Update
+                            Update Status
                           </button>
                         )}
-                        {/* History button - visible to both admin and employees */}
+                        
+                        {/* History button - visible to everyone (admin sees all, employees see their own) */}
                         <button
-                          onClick={async () => {
+                          type="button"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setSelectedTask(task);
                             setShowHistoryModal(true);
                             await loadTaskHistory(task.id);
@@ -818,14 +846,18 @@ export default function TasksPage() {
                           </svg>
                           History
                         </button>
-                        {/* Delete button - only for admin */}
+                        
+                        {/* Delete button - ONLY for admin */}
                         {isAdmin && (
                           <button
+                            type="button"
                             onClick={(e) => {
+                              e.preventDefault();
                               e.stopPropagation();
                               handleDeleteTask(task);
                             }}
                             className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-medium transition-colors flex items-center gap-1.5 border border-red-500/30 hover:border-red-500/50"
+                            title="Delete task (Admin only)"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

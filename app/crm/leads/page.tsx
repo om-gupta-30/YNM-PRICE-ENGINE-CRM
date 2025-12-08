@@ -504,6 +504,7 @@ export default function LeadsPage() {
       requirements: lead.requirements || '',
       lead_source: lead.lead_source || '',
       status: lead.status || 'New',
+      priority: lead.priority || null,
       assigned_employee: lead.assigned_employee || '',
       accounts: lead.accounts,
       sub_accounts: lead.sub_accounts,

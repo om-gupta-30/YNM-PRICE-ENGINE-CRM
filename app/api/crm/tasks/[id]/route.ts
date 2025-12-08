@@ -42,24 +42,27 @@ export async function DELETE(
 
     if (fetchError || !task) {
       return NextResponse.json(
-        { success: false, error: 'Task not found' },
+        { 
+          success: false, 
+          error: fetchError?.message || 'Task not found'
+        },
         { status: 404 }
       );
     }
 
     // Delete the task
-    const { error: deleteError } = await supabase
+    const { error: deleteError, data: deleteData } = await supabase
       .from('tasks')
       .delete()
-      .eq('id', taskId);
+      .eq('id', taskId)
+      .select();
 
     if (deleteError) {
       console.error('Error deleting task:', deleteError);
       return NextResponse.json(
         { 
           success: false,
-          error: deleteError.message || 'Failed to delete task',
-          details: process.env.NODE_ENV === 'development' ? JSON.stringify(deleteError) : undefined
+          error: deleteError.message || 'Failed to delete task'
         },
         { status: 500 }
       );
