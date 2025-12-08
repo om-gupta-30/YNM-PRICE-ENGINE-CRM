@@ -2,53 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { logActivity } from '@/lib/utils/activityLogger';
 
-// GET - Fetch a single task by ID
-export async function GET(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  try {
-    const params = await context.params;
-    const taskId = parseInt(params.id);
-
-    if (isNaN(taskId)) {
-      return NextResponse.json(
-        { error: 'Invalid task ID' },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createSupabaseServerClient();
-
-    const { data: task, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('id', taskId)
-      .single();
-
-    if (error) {
-      console.error('Error fetching task:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    if (!task) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({ success: true, task });
-  } catch (error: any) {
-    console.error('Get task API error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE - Delete a task
+// DELETE - Delete a task (admin only)
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -59,54 +13,91 @@ export async function DELETE(
 
     if (isNaN(taskId)) {
       return NextResponse.json(
-        { error: 'Invalid task ID' },
+        { success: false, error: 'Invalid task ID' },
         { status: 400 }
       );
     }
 
-    const supabase = createSupabaseServerClient();
+    let supabase;
+    try {
+      supabase = createSupabaseServerClient();
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Database connection error. Please check environment variables.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
 
-    // Get task data before deletion for activity logging
-    const { data: taskData } = await supabase
+    // Get task details before deletion (for activity logging)
+    const { data: task, error: fetchError } = await supabase
       .from('tasks')
-      .select('account_id, title, created_by')
+      .select('id, title, account_id, sub_account_id, assigned_employee, created_by')
       .eq('id', taskId)
       .single();
 
-    const { error } = await supabase
+    if (fetchError || !task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found' },
+        { status: 404 }
+      );
+    }
+
+    // Delete the task
+    const { error: deleteError } = await supabase
       .from('tasks')
       .delete()
       .eq('id', taskId);
 
-    if (error) {
-      console.error('Error deleting task:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (deleteError) {
+      console.error('Error deleting task:', deleteError);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: deleteError.message || 'Failed to delete task',
+          details: process.env.NODE_ENV === 'development' ? JSON.stringify(deleteError) : undefined
+        },
+        { status: 500 }
+      );
     }
 
-    // Log activity for task deletion
-    if (taskData) {
-      try {
-        await logActivity({
-          account_id: taskData.account_id,
-          employee_id: taskData.created_by || 'System',
-          activity_type: 'delete',
-          description: `Task deleted: ${taskData.title}`,
-          metadata: {
-            entity_type: 'task',
-            task_id: taskId,
-            deleted_data: taskData,
-          },
-        });
-      } catch (activityError) {
-        console.warn('Failed to log task deletion activity:', activityError);
-      }
+    // Log activity asynchronously (don't block response)
+    if (task.created_by) {
+      logActivity({
+        account_id: task.account_id || null,
+        sub_account_id: task.sub_account_id || null,
+        employee_id: task.created_by,
+        activity_type: 'delete',
+        description: `Task deleted: ${task.title}`,
+        metadata: {
+          entity_type: 'task',
+          task_id: taskId,
+          task_title: task.title,
+        },
+      }).catch((activityError) => {
+        // Silently fail - activity logging is non-critical
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error logging task deletion activity (non-critical):', activityError);
+        }
+      });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ 
+      success: true,
+      message: 'Task deleted successfully'
+    });
   } catch (error: any) {
     console.error('Delete task API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

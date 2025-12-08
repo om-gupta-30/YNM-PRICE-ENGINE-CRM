@@ -76,8 +76,10 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Log for debugging
-    console.log(`[Tasks List] Fetched ${tasks?.length || 0} tasks (total: ${count || 0}), filter: assignedTo=${assignedTo || 'none'}`);
+    // Log for debugging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Tasks List] Fetched ${tasks?.length || 0} tasks (total: ${count || 0}), filter: assignedTo=${assignedTo || 'none'}`);
+    }
 
     // Fetch account and sub-account names for tasks that have them
     const accountIds = [...new Set((tasks || []).filter(t => t.account_id).map(t => t.account_id))];

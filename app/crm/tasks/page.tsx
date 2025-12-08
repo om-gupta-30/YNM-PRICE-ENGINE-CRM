@@ -30,6 +30,9 @@ export default function TasksPage() {
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [taskHistory, setTaskHistory] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState(false);
   
   // Analytics
   const [analytics, setAnalytics] = useState<any>(null);
@@ -65,9 +68,11 @@ export default function TasksPage() {
     }
   };
 
-  const loadTasks = useCallback(async () => {
+  const loadTasks = useCallback(async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       setError(null);
       
       const params = new URLSearchParams();
@@ -88,16 +93,20 @@ export default function TasksPage() {
 
       if (data.success) {
         const tasksList = data.tasks || [];
-        console.log(`[Tasks Page] Loaded ${tasksList.length} tasks`);
         setTasks(tasksList);
       } else {
         throw new Error(data.error || 'Failed to load tasks');
       }
     } catch (err: any) {
       setError(err.message);
-      setToast({ message: err.message, type: 'error' });
+      // Only show toast on initial load, not on background refresh
+      if (showLoading) {
+        setToast({ message: err.message, type: 'error' });
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   }, [isAdmin, username, employeeFilter]);
 
@@ -144,6 +153,32 @@ export default function TasksPage() {
   };
 
   const handleCreateTask = async (taskData: any) => {
+    // Optimistic update - add task to UI immediately
+    const optimisticTask: Task = {
+      id: Date.now(), // Temporary ID
+      title: taskData.title,
+      description: taskData.description || null,
+      task_type: taskData.task_type || 'Follow-up',
+      due_date: taskData.due_date,
+      assigned_to: isAdmin ? taskData.assigned_to : username,
+      account_id: taskData.account_id ? parseInt(taskData.account_id) : null,
+      sub_account_id: taskData.sub_account_id ? parseInt(taskData.sub_account_id) : null,
+      status: 'Pending',
+      created_by: username,
+      account_name: null,
+      sub_account_name: null,
+      latest_note: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      completed_at: null,
+      status_history: [],
+    };
+
+    // Add optimistic task to UI immediately
+    setTasks(prev => [optimisticTask, ...prev]);
+    setShowCreateModal(false);
+    setToast({ message: 'Creating task...', type: 'success' });
+
     try {
       const response = await fetch('/api/crm/tasks/create', {
         method: 'POST',
@@ -156,6 +191,8 @@ export default function TasksPage() {
       });
 
       if (!response.ok) {
+        // Remove optimistic task on error
+        setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
@@ -164,14 +201,19 @@ export default function TasksPage() {
 
       if (data.success) {
         setToast({ message: 'Task created successfully', type: 'success' });
-        setShowCreateModal(false);
-        // Reload tasks immediately after creation
-        await loadTasks();
-        if (isAdmin) await loadAnalytics();
+        // Refresh tasks in background (non-blocking)
+        loadTasks().catch(err => console.error('Error refreshing tasks:', err));
+        if (isAdmin) {
+          loadAnalytics().catch(err => console.error('Error refreshing analytics:', err));
+        }
       } else {
+        // Remove optimistic task on error
+        setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
         throw new Error(data.error || 'Failed to create task');
       }
     } catch (err: any) {
+      // Remove optimistic task on error
+      setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
       setToast({ message: err.message, type: 'error' });
     }
   };
@@ -200,6 +242,65 @@ export default function TasksPage() {
       setTaskHistory([]);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!isAdmin) return;
+    
+    setTaskToDelete(task);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete || !isAdmin) return;
+
+    try {
+      setDeleting(true);
+      
+      // Optimistic update - remove task from UI immediately
+      setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
+      setShowDeleteModal(false);
+      setToast({ message: 'Deleting task...', type: 'success' });
+
+      const response = await fetch(`/api/crm/tasks/${taskToDelete.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        // Restore task on error
+        setTasks(prev => [...prev, taskToDelete].sort((a, b) => {
+          const dateA = new Date(a.due_date).getTime();
+          const dateB = new Date(b.due_date).getTime();
+          return dateA - dateB;
+        }));
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast({ message: 'Task deleted successfully', type: 'success' });
+        // Refresh tasks in background
+        loadTasks(false).catch(err => console.error('Error refreshing tasks:', err));
+        if (isAdmin) {
+          loadAnalytics().catch(err => console.error('Error refreshing analytics:', err));
+        }
+      } else {
+        // Restore task on error
+        setTasks(prev => [...prev, taskToDelete].sort((a, b) => {
+          const dateA = new Date(a.due_date).getTime();
+          const dateB = new Date(b.due_date).getTime();
+          return dateA - dateB;
+        }));
+        throw new Error(data.error || 'Failed to delete task');
+      }
+    } catch (err: any) {
+      setToast({ message: err.message, type: 'error' });
+    } finally {
+      setDeleting(false);
+      setTaskToDelete(null);
     }
   };
 
@@ -710,13 +811,28 @@ export default function TasksPage() {
                             setShowHistoryModal(true);
                             await loadTaskHistory(task.id);
                           }}
-                          className={`px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 ${!isAdmin && task.assigned_to === username ? '' : 'flex-1'}`}
+                          className={`px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors flex items-center gap-1.5 ${!isAdmin && task.assigned_to === username ? '' : isAdmin ? '' : 'flex-1'}`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
                           History
                         </button>
+                        {/* Delete button - only for admin */}
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTask(task);
+                            }}
+                            className="px-3 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-medium transition-colors flex items-center gap-1.5 border border-red-500/30 hover:border-red-500/50"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -764,6 +880,20 @@ export default function TasksPage() {
           task={selectedTask}
           history={taskHistory}
           loading={loadingHistory}
+        />
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && taskToDelete && (
+        <DeleteTaskModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setTaskToDelete(null);
+          }}
+          onConfirm={confirmDeleteTask}
+          task={taskToDelete}
+          deleting={deleting}
         />
       )}
 
@@ -1188,6 +1318,92 @@ function UpdateStatusModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// Delete Task Confirmation Modal Component
+function DeleteTaskModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  task,
+  deleting,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  task: Task;
+  deleting: boolean;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl border border-red-500/30 p-6 w-full max-w-md shadow-md" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white">Delete Task</h3>
+          </div>
+          <button 
+            onClick={onClose} 
+            disabled={deleting}
+            className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Task Info */}
+        <div className="bg-slate-800/50 rounded-xl p-4 mb-5 border border-slate-700/50">
+          <p className="text-sm text-slate-400 mb-1">Task</p>
+          <p className="text-white font-medium">{task.title}</p>
+          {task.description && (
+            <p className="text-sm text-slate-400 mt-2 line-clamp-2">{task.description}</p>
+          )}
+        </div>
+
+        <div className="bg-red-500/10 rounded-xl p-4 mb-5 border border-red-500/20">
+          <p className="text-sm text-red-300">
+            ⚠️ Are you sure you want to delete this task? This action cannot be undone.
+          </p>
+        </div>
+        
+        <div className="flex gap-3 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="flex-1 px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-600 text-white font-semibold transition-all shadow-lg shadow-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {deleting ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Deleting...
+              </>
+            ) : (
+              'Delete Task'
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
