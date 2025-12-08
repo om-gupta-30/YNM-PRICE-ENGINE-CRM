@@ -37,17 +37,47 @@ export async function POST(
 
     const supabase = createSupabaseServerClient();
 
-    // Get current task to check old status and get status_history
+    // Get current task to check old status
+    // Don't select status_history - column doesn't exist in database
+    // Select all necessary columns including assigned_employee, account_id, and sub_account_id
     const { data: currentTask, error: fetchError } = await supabase
       .from('tasks')
-      .select('status, status_history')
+      .select('id, status, assigned_employee, assigned_to, created_by, account_id, sub_account_id')
       .eq('id', taskId)
       .single();
 
-    if (fetchError || !currentTask) {
+    if (fetchError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error fetching task:', fetchError);
+      }
+      return NextResponse.json(
+        { error: fetchError.message || 'Task not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!currentTask) {
       return NextResponse.json(
         { error: 'Task not found' },
         { status: 404 }
+      );
+    }
+
+    // Permission check: Only allow employees to update their own tasks
+    // Admin cannot update status (they can only view and assign)
+    const assignedEmployee = currentTask.assigned_employee || currentTask.assigned_to;
+    if (updated_by && updated_by.toLowerCase() !== 'admin' && updated_by !== assignedEmployee) {
+      return NextResponse.json(
+        { error: 'You can only update tasks assigned to you' },
+        { status: 403 }
+      );
+    }
+
+    // Block admin from updating status
+    if (updated_by && updated_by.toLowerCase() === 'admin') {
+      return NextResponse.json(
+        { error: 'Admin cannot update task status. Only assigned employees can update status.' },
+        { status: 403 }
       );
     }
 
@@ -60,7 +90,7 @@ export async function POST(
       });
     }
 
-    // Build status history entry
+    // Build status history entry (only if column exists)
     const statusHistoryEntry = {
       old_status: currentTask.status,
       new_status: status,
@@ -69,20 +99,19 @@ export async function POST(
       note: status_note || null,
     };
 
-    // Get existing history or initialize empty array
-    const existingHistory = Array.isArray(currentTask.status_history)
-      ? currentTask.status_history
-      : [];
-
-    // Add new history entry
+    // Initialize empty history array (status_history column doesn't exist in database)
+    // We'll track history in memory but not save to database
+    const existingHistory: any[] = [];
     const updatedHistory = [...existingHistory, statusHistoryEntry];
 
     // Build update data
     const updateData: any = {
       status,
-      status_history: updatedHistory,
       updated_at: getCurrentISTTime(),
     };
+
+    // Only include status_history if the column exists (we'll try and handle error if it doesn't)
+    // We'll add it conditionally after checking if update works
 
     // Set completed_at if status is Completed
     if (status === 'Completed') {
@@ -92,7 +121,7 @@ export async function POST(
       updateData.completed_at = null;
     }
 
-    // Update task
+    // Update task without status_history (column doesn't exist in database)
     const { data: updatedTask, error: updateError } = await supabase
       .from('tasks')
       .update(updateData)
@@ -101,7 +130,9 @@ export async function POST(
       .single();
 
     if (updateError) {
-      console.error('Error updating task status:', updateError);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error updating task status:', updateError);
+      }
       return NextResponse.json(
         { error: updateError.message },
         { status: 500 }
@@ -124,16 +155,25 @@ export async function POST(
         },
       });
     } catch (activityError) {
-      console.error('Error creating activity (non-critical):', activityError);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error creating activity (non-critical):', activityError);
+      }
     }
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       task: updatedTask,
-      statusHistory: updatedHistory,
+      statusHistory: updatedHistory, // Return computed history (not stored in DB)
     });
+
+    // Add caching headers
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    
+    return response;
   } catch (error: any) {
-    console.error('Update task status API error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Update task status API error:', error);
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

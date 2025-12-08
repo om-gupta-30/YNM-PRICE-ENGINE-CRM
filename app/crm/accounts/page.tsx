@@ -95,6 +95,14 @@ export default function AccountsPage() {
   const [sortField, setSortField] = useState<SortField>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
+  // Bulk assign states
+  const [isBulkAssignMode, setIsBulkAssignMode] = useState(false);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<Set<number>>(new Set());
+  const [employees, setEmployees] = useState<string[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState<string>('');
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+
   // ========== FUNCTIONS AFTER STATE ==========
   // Fetch accounts from API
   const fetchAccounts = async () => {
@@ -344,6 +352,127 @@ export default function AccountsPage() {
     }
   };
 
+  // Fetch employees for bulk assign
+  const fetchEmployees = async () => {
+    try {
+      setLoadingEmployees(true);
+      const response = await fetch('/api/employees?type=sales');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.employees) {
+          setEmployees(data.employees);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading employees:', error);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  // Toggle bulk assign mode
+  const toggleBulkAssignMode = () => {
+    try {
+      const newMode = !isBulkAssignMode;
+      console.log('Toggling bulk assign mode:', { current: isBulkAssignMode, new: newMode });
+      
+      if (newMode) {
+        // Entering bulk assign mode - fetch employees
+        fetchEmployees();
+      } else {
+        // Exiting bulk assign mode - clear selections
+        setSelectedAccountIds(new Set());
+        setSelectedEmployee('');
+      }
+      setIsBulkAssignMode(newMode);
+    } catch (error) {
+      console.error('Error toggling bulk assign mode:', error);
+      setToast({ message: 'Failed to toggle bulk assign mode', type: 'error' });
+    }
+  };
+
+  // Toggle account selection
+  const toggleAccountSelection = (accountId: number) => {
+    setSelectedAccountIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(accountId)) {
+        newSet.delete(accountId);
+      } else {
+        newSet.add(accountId);
+      }
+      return newSet;
+    });
+  };
+
+  // Select all visible accounts
+  const selectAllVisible = () => {
+    const visibleIds = new Set(paginatedAccounts.map(acc => acc.id));
+    setSelectedAccountIds(visibleIds);
+  };
+
+  // Deselect all
+  const deselectAll = () => {
+    setSelectedAccountIds(new Set());
+  };
+
+  // Handle bulk assign
+  const handleBulkAssign = async () => {
+    if (selectedAccountIds.size === 0) {
+      setToast({ message: 'Please select at least one account', type: 'error' });
+      return;
+    }
+
+    // selectedEmployee can be empty string (for unassigning) or a valid employee name
+    // No need to validate it further - empty string means unassign
+
+    const confirmMessage = selectedEmployee
+      ? `Are you sure you want to assign ${selectedAccountIds.size} account(s) to ${selectedEmployee}?`
+      : `Are you sure you want to unassign ${selectedAccountIds.size} account(s)?`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setBulkAssigning(true);
+      const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+      
+      const response = await fetch('/api/admin/accounts/bulk-assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountIds: Array.from(selectedAccountIds),
+          assignedEmployee: selectedEmployee || null,
+          updatedBy: currentUsername || 'System',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to assign accounts');
+      }
+
+      setToast({ 
+        message: data.message || `Successfully assigned ${data.updatedCount} account(s)`, 
+        type: 'success' 
+      });
+      
+      // Reset bulk assign mode
+      setIsBulkAssignMode(false);
+      setSelectedAccountIds(new Set());
+      setSelectedEmployee('');
+      
+      // Refresh accounts list
+      await fetchAccounts();
+    } catch (error: any) {
+      console.error('Error bulk assigning accounts:', error);
+      setToast({ message: error.message || 'Failed to assign accounts', type: 'error' });
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
   // ========== COMPUTED VALUES ==========
   // Filtered and sorted accounts
   const filteredAndSortedAccounts = useMemo(() => {
@@ -483,7 +612,7 @@ export default function AccountsPage() {
             >
               Accounts
             </h1>
-            <div className="absolute right-0 flex items-center gap-2 sm:gap-3">
+            <div className="absolute right-0 flex flex-col items-end gap-2 sm:gap-3">
               <button 
                 onClick={handleOpenModal}
                 disabled={submitting}
@@ -494,6 +623,26 @@ export default function AccountsPage() {
                 <span className="hidden sm:inline">Create New Account</span>
                 <span className="sm:hidden">New</span>
               </button>
+              {isAdmin && !isDataAnalyst && (
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleBulkAssignMode();
+                  }}
+                  type="button"
+                  className={`px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold rounded-lg sm:rounded-xl transition-all duration-200 flex items-center gap-1 sm:gap-2 touch-manipulation min-h-[44px] ${
+                    isBulkAssignMode
+                      ? 'text-white bg-blue-600 hover:bg-blue-700'
+                      : 'text-white bg-blue-500/80 hover:bg-blue-600'
+                  }`}
+                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                >
+                  <span>{isBulkAssignMode ? '✓' : '📋'}</span>
+                  <span className="hidden sm:inline">{isBulkAssignMode ? 'Exit Bulk Assign' : 'Bulk Assign'}</span>
+                  <span className="sm:hidden">{isBulkAssignMode ? 'Exit' : 'Bulk'}</span>
+                </button>
+              )}
             </div>
           </div>
         <div className="gold-divider w-full"></div>
@@ -615,6 +764,53 @@ export default function AccountsPage() {
           </div>
         </div>
 
+        {/* Bulk Assign Toolbar */}
+        {isBulkAssignMode && isAdmin && !isDataAnalyst && (
+          <div className="mb-6 bg-blue-600/20 border border-blue-500/50 rounded-xl p-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-white mb-2">Bulk Assign Accounts</h3>
+                <p className="text-sm text-slate-300">
+                  {selectedAccountIds.size > 0 
+                    ? `${selectedAccountIds.size} account(s) selected`
+                    : 'Select accounts using the checkboxes below'}
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                <div className="flex-1 sm:flex-initial">
+                  <select
+                    value={selectedEmployee}
+                    onChange={(e) => setSelectedEmployee(e.target.value)}
+                    disabled={loadingEmployees || bulkAssigning}
+                    className="input-premium w-full sm:w-64 px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Select Employee (or Unassigned)</option>
+                    <option value="">Unassigned</option>
+                    {employees.map((emp) => (
+                      <option key={emp} value={emp}>
+                        {emp}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={handleBulkAssign}
+                  disabled={selectedAccountIds.size === 0 || bulkAssigning || loadingEmployees}
+                  className="px-6 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {bulkAssigning ? 'Assigning...' : 'Confirm Assign'}
+                </button>
+                <button
+                  onClick={selectedAccountIds.size > 0 ? deselectAll : selectAllVisible}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-slate-600 hover:bg-slate-700 rounded-lg transition-all duration-200"
+                >
+                  {selectedAccountIds.size > 0 ? 'Deselect All' : 'Select All Visible'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Accounts Table */}
         <div className="rounded-xl sm:rounded-2xl md:rounded-3xl bg-black/20 border border-premium-gold/20 shadow-md overflow-x-auto w-full -mx-2 sm:mx-0" style={{ WebkitOverflowScrolling: 'touch' }}>
           {/* Sorting Instructions */}
@@ -662,6 +858,7 @@ export default function AccountsPage() {
                 }}
               >
                 <colgroup>
+                  <col style={{ width: isBulkAssignMode ? '50px' : '0px' }} />
                   <col style={{ width: '80px' }} />
                   <col style={{ width: '280px' }} />
                   <col style={{ width: '140px' }} />
@@ -671,6 +868,22 @@ export default function AccountsPage() {
                 </colgroup>
                 <thead>
                   <tr className="crm-thead-row">
+                    {isBulkAssignMode && (
+                      <th className="crm-th" style={{ width: '50px' }}>
+                        <input
+                          type="checkbox"
+                          checked={paginatedAccounts.length > 0 && paginatedAccounts.every(acc => selectedAccountIds.has(acc.id))}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              selectAllVisible();
+                            } else {
+                              deselectAll();
+                            }
+                          }}
+                          className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                      </th>
+                    )}
                     <th className="crm-th sr-col">SR No</th>
                     <th className="crm-th acc-col">
                       <button onClick={() => handleSort('accountName')} className="hover:text-premium-gold transition-colors">
@@ -697,6 +910,16 @@ export default function AccountsPage() {
                     const hasProjectsBreakdown = account.industries && account.industries.length > 0 && totalProjects > 0;
                     return (
                     <tr key={account.id} className="crm-tr">
+                      {isBulkAssignMode && (
+                        <td className="crm-td" style={{ width: '50px' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedAccountIds.has(account.id)}
+                            onChange={() => toggleAccountSelection(account.id)}
+                            className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                        </td>
+                      )}
                       <td className="crm-td sr-col">{globalIndex + 1}</td>
                       <td className="crm-td acc-col" title={account.accountName}>{account.accountName}</td>
                       <td className="crm-td">

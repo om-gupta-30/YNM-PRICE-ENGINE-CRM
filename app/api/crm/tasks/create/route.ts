@@ -81,27 +81,57 @@ export async function POST(request: NextRequest) {
       note: 'Task created',
     }];
 
-    // Create task
-    // The relationship to accounts is maintained through account_id and sub_account_id
-    const { data: task, error: taskError } = await supabase
+    // Build insert data - check if status_history column exists
+    const insertData: any = {
+      title: title.trim(),
+      description: description?.trim() || null,
+      task_type: task_type || 'Follow-up',
+      due_date: due_date,
+      assigned_employee: assigned_to.trim(),
+      assigned_to: assigned_to.trim(), // Also set assigned_to for compatibility
+      account_id: numericAccountId,
+      sub_account_id: sub_account_id || null,
+      status: status,
+      created_by: created_by.trim(),
+    };
+
+    // Try to include status_history, but handle gracefully if column doesn't exist
+    // First, try with status_history
+    let taskData = { ...insertData, status_history: initialStatusHistory };
+    let { data: task, error: taskError } = await supabase
       .from('tasks')
-      .insert({
-        title: title.trim(),
-        description: description?.trim() || null,
-        task_type: task_type || 'Follow-up',
-        due_date: due_date,
-        assigned_employee: assigned_to.trim(),
-        account_id: numericAccountId,
-        sub_account_id: sub_account_id || null,
-        status: status,
-        created_by: created_by.trim(),
-        status_history: initialStatusHistory,
-      })
+      .insert(taskData)
       .select()
       .single();
 
-    if (taskError) {
-      console.error('Error creating task:', taskError);
+    // If error is about missing status_history column, retry without it
+    if (taskError && (
+      taskError.code === 'PGRST204' || 
+      taskError.message?.includes('status_history') ||
+      taskError.message?.includes('Could not find')
+    )) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('status_history column not found, creating task without it:', taskError.message);
+      }
+      // Retry without status_history
+      const { data: retryTask, error: retryError } = await supabase
+        .from('tasks')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (retryError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error creating task (retry without status_history):', retryError);
+        }
+        return NextResponse.json({ error: retryError.message }, { status: 500 });
+      }
+      task = retryTask;
+      taskError = null;
+    } else if (taskError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error creating task:', taskError);
+      }
       return NextResponse.json({ error: taskError.message }, { status: 500 });
     }
 
@@ -122,7 +152,9 @@ export async function POST(request: NextRequest) {
           },
         });
       } catch (activityError) {
-        console.error('Error logging task activity (non-critical):', activityError);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error logging task activity (non-critical):', activityError);
+        }
       }
     }
 
@@ -160,14 +192,18 @@ export async function POST(request: NextRequest) {
           created_at: getCurrentISTTime(),
         });
       } catch (notificationError) {
-        console.error('Error creating notification (non-critical):', notificationError);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Error creating notification (non-critical):', notificationError);
+        }
         // Don't fail the request if notification creation fails
       }
     }
 
     return NextResponse.json({ success: true, task });
   } catch (error: any) {
-    console.error('Create task API error:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Create task API error:', error);
+    }
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

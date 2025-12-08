@@ -1,5 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Performance optimizations for free tier
+  compress: true, // Enable gzip compression
+  poweredByHeader: false, // Remove X-Powered-By header
+  reactStrictMode: true, // Enable React strict mode for better performance
+  
+  // Optimize production builds
+  swcMinify: true, // Use SWC minifier (faster than Terser)
+  
+  // Reduce bundle size
+  experimental: {
+    optimizePackageImports: ['@supabase/supabase-js', 'framer-motion'],
+  },
+  
   // instrumentationHook is no longer needed in Next.js 16 - instrumentation.ts is available by default
   images: {
     remotePatterns: [
