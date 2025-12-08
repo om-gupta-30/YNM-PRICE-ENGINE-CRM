@@ -192,53 +192,52 @@ export async function POST(request: NextRequest) {
     // Log activity for task update (non-blocking - fire and forget)
     Promise.resolve().then(async () => {
       try {
-    try {
-      const changes: string[] = [];
-      if (title !== undefined && title.trim() !== oldTask?.title) {
-        changes.push(`Title: "${oldTask?.title}" → "${title.trim()}"`);
-      }
-      if (description !== undefined && description?.trim() !== oldTask?.description?.trim()) {
-        changes.push('Description updated');
-      }
-      if (task_type !== undefined && task_type !== oldTask?.task_type) {
-        changes.push(`Type: "${oldTask?.task_type}" → "${task_type}"`);
-      }
-      if (status !== undefined && status !== oldTask?.status) {
-        changes.push(`Status: "${oldTask?.status}" → "${status}"`);
-      }
-      if (assigned_to !== undefined && assigned_to.trim() !== oldTask?.assigned_employee) {
-        changes.push(`Assigned: "${oldTask?.assigned_employee || 'Unassigned'}" → "${assigned_to.trim()}"`);
-      }
-      if (due_date !== undefined && due_date !== oldTask?.due_date) {
-        changes.push(`Due date: ${oldTask?.due_date || 'None'} → ${due_date || 'None'}`);
-      }
-      if (account_id !== undefined && account_id !== oldTask?.account_id) {
-        changes.push(`Account: ${oldTask?.account_id || 'None'} → ${account_id || 'None'}`);
-      }
-      if (sub_account_id !== undefined && sub_account_id !== oldTask?.sub_account_id) {
-        changes.push(`Sub-Account: ${oldTask?.sub_account_id || 'None'} → ${sub_account_id || 'None'}`);
-      }
-      if (reminder_enabled !== undefined && reminder_enabled !== oldTask?.reminder_enabled) {
-        changes.push(`Reminder: ${oldTask?.reminder_enabled ? 'Enabled' : 'Disabled'} → ${reminder_enabled ? 'Enabled' : 'Disabled'}`);
-      }
+        const changes: string[] = [];
+        if (title !== undefined && title.trim() !== oldTask?.title) {
+          changes.push(`Title: "${oldTask?.title}" → "${title.trim()}"`);
+        }
+        if (description !== undefined && description?.trim() !== oldTask?.description?.trim()) {
+          changes.push('Description updated');
+        }
+        if (task_type !== undefined && task_type !== oldTask?.task_type) {
+          changes.push(`Type: "${oldTask?.task_type}" → "${task_type}"`);
+        }
+        if (status !== undefined && status !== oldTask?.status) {
+          changes.push(`Status: "${oldTask?.status}" → "${status}"`);
+        }
+        if (assigned_to !== undefined && assigned_to.trim() !== oldTask?.assigned_employee) {
+          changes.push(`Assigned: "${oldTask?.assigned_employee || 'Unassigned'}" → "${assigned_to.trim()}"`);
+        }
+        if (due_date !== undefined && due_date !== oldTask?.due_date) {
+          changes.push(`Due date: ${oldTask?.due_date || 'None'} → ${due_date || 'None'}`);
+        }
+        if (account_id !== undefined && account_id !== oldTask?.account_id) {
+          changes.push(`Account: ${oldTask?.account_id || 'None'} → ${account_id || 'None'}`);
+        }
+        if (sub_account_id !== undefined && sub_account_id !== oldTask?.sub_account_id) {
+          changes.push(`Sub-Account: ${oldTask?.sub_account_id || 'None'} → ${sub_account_id || 'None'}`);
+        }
+        if (reminder_enabled !== undefined && reminder_enabled !== oldTask?.reminder_enabled) {
+          changes.push(`Reminder: ${oldTask?.reminder_enabled ? 'Enabled' : 'Disabled'} → ${reminder_enabled ? 'Enabled' : 'Disabled'}`);
+        }
 
-      if (changes.length > 0 && (task.account_id || oldTask?.account_id)) {
-        await logActivity({
-          account_id: task.account_id || oldTask?.account_id,
-          employee_id: task.assigned_employee || task.created_by || 'System',
-          activity_type: 'edit',
-          description: `Task "${task.title}" edited - ${changes.join(', ')}`,
-          metadata: {
-            entity_type: 'task',
-            task_id: task.id,
-            changes,
-            status: task.status,
-            task_type: task.task_type,
-            old_data: oldTask,
-            new_data: task,
-          },
-        });
-      }
+        if (changes.length > 0 && (task.account_id || oldTask?.account_id)) {
+          await logActivity({
+            account_id: task.account_id || oldTask?.account_id,
+            employee_id: task.assigned_employee || task.created_by || 'System',
+            activity_type: 'edit',
+            description: `Task "${task.title}" edited - ${changes.join(', ')}`,
+            metadata: {
+              entity_type: 'task',
+              task_id: task.id,
+              changes,
+              status: task.status,
+              task_type: task.task_type,
+              old_data: oldTask,
+              new_data: task,
+            },
+          });
+        }
       } catch (activityError) {
         console.warn('Failed to log task update activity:', activityError);
       }
