@@ -33,31 +33,32 @@ export async function DELETE(
       );
     }
 
-    // Get task details before deletion (for activity logging)
-    const { data: task, error: fetchError } = await supabase
-      .from('tasks')
-      .select('id, title, account_id, sub_account_id, assigned_employee, created_by')
-      .eq('id', taskId)
-      .single();
-
-    if (fetchError || !task) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: fetchError?.message || 'Task not found'
-        },
-        { status: 404 }
-      );
-    }
-
-    // Delete the task
-    const { error: deleteError, data: deleteData } = await supabase
+    // Delete the task first (fast path)
+    const { data: deletedTask, error: deleteError } = await supabase
       .from('tasks')
       .delete()
       .eq('id', taskId)
-      .select();
+      .select('id, title, account_id, sub_account_id, assigned_employee, created_by')
+      .single();
 
     if (deleteError) {
+      // Check if task exists before reporting error
+      const { data: checkTask } = await supabase
+        .from('tasks')
+        .select('id')
+        .eq('id', taskId)
+        .single();
+      
+      if (!checkTask) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: 'Task not found'
+          },
+          { status: 404 }
+        );
+      }
+      
       console.error('Error deleting task:', deleteError);
       return NextResponse.json(
         { 
@@ -68,18 +69,18 @@ export async function DELETE(
       );
     }
 
-    // Log activity asynchronously (don't block response)
-    if (task.created_by) {
+    // Log activity asynchronously (don't block response) - use deleted task data
+    if (deletedTask?.created_by) {
       logActivity({
-        account_id: task.account_id || null,
-        sub_account_id: task.sub_account_id || null,
-        employee_id: task.created_by,
+        account_id: deletedTask.account_id || null,
+        sub_account_id: deletedTask.sub_account_id || null,
+        employee_id: deletedTask.created_by,
         activity_type: 'delete',
-        description: `Task deleted: ${task.title}`,
+        description: `Task deleted: ${deletedTask.title}`,
         metadata: {
           entity_type: 'task',
           task_id: taskId,
-          task_title: task.title,
+          task_title: deletedTask.title,
         },
       }).catch((activityError) => {
         // Silently fail - activity logging is non-critical

@@ -261,46 +261,90 @@ export default function TasksPage() {
       return;
     }
 
-    try {
-      setDeleting(true);
-      
-      // Optimistic update - remove task from UI immediately
-      const taskToRestore = taskToDelete;
-      setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
-      setShowDeleteModal(false);
-      setToast({ message: 'Deleting task...', type: 'success' });
-
-      const response = await fetch(`/api/crm/tasks/${taskToDelete.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+    // Optimistic updates - instant UI update
+    const taskToRestore = taskToDelete;
+    setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
+    
+    // Optimistically update analytics immediately
+    if (analytics) {
+      setAnalytics(prev => {
+        if (!prev) return prev;
+        const newTotal = Math.max(0, (prev.total || 0) - 1);
+        const currentStatus = taskToDelete.status || 'Pending';
+        const assignedEmployee = taskToDelete.assigned_to || 'Unassigned';
+        
+        // Calculate new status counts
+        const newPending = currentStatus === 'Pending' ? Math.max(0, (prev.pending || 0) - 1) : (prev.pending || 0);
+        const newInProgress = currentStatus === 'In Progress' ? Math.max(0, (prev.inProgress || 0) - 1) : (prev.inProgress || 0);
+        const newCompleted = currentStatus === 'Completed' ? Math.max(0, (prev.completed || 0) - 1) : (prev.completed || 0);
+        const newCancelled = currentStatus === 'Cancelled' ? Math.max(0, (prev.cancelled || 0) - 1) : (prev.cancelled || 0);
+        
+        // Calculate new completion rate
+        const newCompletionRate = newTotal > 0 
+          ? ((newCompleted / newTotal) * 100).toFixed(1)
+          : '0.0';
+        
+        // Update employee stats
+        const newEmployeeStats = { ...prev.employeeStats };
+        if (newEmployeeStats[assignedEmployee]) {
+          const empStats = { ...newEmployeeStats[assignedEmployee] };
+          empStats.total = Math.max(0, (empStats.total || 0) - 1);
+          if (currentStatus === 'Pending') empStats.pending = Math.max(0, (empStats.pending || 0) - 1);
+          if (currentStatus === 'In Progress') empStats.inProgress = Math.max(0, (empStats.inProgress || 0) - 1);
+          if (currentStatus === 'Completed') empStats.completed = Math.max(0, (empStats.completed || 0) - 1);
+          if (currentStatus === 'Cancelled') empStats.cancelled = Math.max(0, (empStats.cancelled || 0) - 1);
+          
+          // Recalculate employee completion rate
+          empStats.completionRate = empStats.total > 0
+            ? ((empStats.completed / empStats.total) * 100).toFixed(1)
+            : '0.0';
+          
+          newEmployeeStats[assignedEmployee] = empStats;
+        }
+        
+        return {
+          ...prev,
+          total: newTotal,
+          pending: newPending,
+          inProgress: newInProgress,
+          completed: newCompleted,
+          cancelled: newCancelled,
+          completionRate: newCompletionRate,
+          employeeStats: newEmployeeStats,
+        };
       });
+    }
+    
+    setShowDeleteModal(false);
+    setDeleting(false);
+    setTaskToDelete(null);
+    setToast({ message: 'Task deleted successfully', type: 'success' });
 
-      if (!response.ok) {
-        // Restore task on error
-        setTasks(prev => {
-          const restored = [...prev, taskToRestore];
-          return restored.sort((a, b) => {
-            const dateA = new Date(a.due_date).getTime();
-            const dateB = new Date(b.due_date).getTime();
-            return dateA - dateB;
-          });
-        });
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to delete task. Status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        setToast({ message: 'Task deleted successfully', type: 'success' });
-        // Refresh tasks in background
+    // Delete in background - don't wait for it
+    fetch(`/api/crm/tasks/${taskToDelete.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || `Failed to delete task. Status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (!data.success) {
+          throw new Error(data.error || 'Failed to delete task');
+        }
+        // Silently refresh in background to ensure sync
         loadTasks(false).catch(() => {});
         if (isAdmin) {
           loadAnalytics().catch(() => {});
         }
-      } else {
+      })
+      .catch((err: any) => {
         // Restore task on error
         setTasks(prev => {
           const restored = [...prev, taskToRestore];
@@ -310,14 +354,12 @@ export default function TasksPage() {
             return dateA - dateB;
           });
         });
-        throw new Error(data.error || 'Failed to delete task');
-      }
-    } catch (err: any) {
-      setToast({ message: err.message || 'Failed to delete task. Please try again.', type: 'error' });
-    } finally {
-      setDeleting(false);
-      setTaskToDelete(null);
-    }
+        // Restore analytics
+        if (analytics) {
+          loadAnalytics().catch(() => {});
+        }
+        setToast({ message: err.message || 'Failed to delete task. Restored.', type: 'error' });
+      });
   };
 
   const handleUpdateStatus = async (taskId: number, newStatus: TaskStatus, statusNote?: string) => {
