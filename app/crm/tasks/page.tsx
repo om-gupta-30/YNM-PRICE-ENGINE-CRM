@@ -267,7 +267,7 @@ export default function TasksPage() {
     
     // Optimistically update analytics immediately
     if (analytics) {
-      setAnalytics(prev => {
+      setAnalytics((prev: any) => {
         if (!prev) return prev;
         const newTotal = Math.max(0, (prev.total || 0) - 1);
         const currentStatus = taskToDelete.status || 'Pending';
