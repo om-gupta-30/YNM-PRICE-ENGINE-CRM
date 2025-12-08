@@ -5,9 +5,6 @@ const nextConfig = {
   poweredByHeader: false, // Remove X-Powered-By header
   reactStrictMode: true, // Enable React strict mode for better performance
   
-  // Optimize production builds
-  swcMinify: true, // Use SWC minifier (faster than Terser)
-  
   // Reduce bundle size
   experimental: {
     optimizePackageImports: ['@supabase/supabase-js', 'framer-motion'],

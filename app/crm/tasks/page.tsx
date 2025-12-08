@@ -51,23 +51,6 @@ export default function TasksPage() {
     }
   }, [router]);
 
-  // Load employees list (for admin)
-  useEffect(() => {
-    if (isAdmin) {
-      fetchEmployees();
-    }
-  }, [isAdmin]);
-
-  // Load tasks
-  useEffect(() => {
-    if (username) {
-      loadTasks();
-      if (isAdmin) {
-        loadAnalytics();
-      }
-    }
-  }, [username, isAdmin, employeeFilter, loadTasks]);
-
   const fetchEmployees = async () => {
     try {
       const response = await fetch('/api/crm/employees');
@@ -76,7 +59,9 @@ export default function TasksPage() {
         setEmployees(data.employees || []);
       }
     } catch (err) {
-      console.error('Error fetching employees:', err);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error fetching employees:', err);
+      }
     }
   };
 
@@ -107,6 +92,23 @@ export default function TasksPage() {
       setLoading(false);
     }
   }, [isAdmin, username, employeeFilter]);
+
+  // Load employees list (for admin)
+  useEffect(() => {
+    if (isAdmin) {
+      fetchEmployees();
+    }
+  }, [isAdmin]);
+
+  // Load tasks
+  useEffect(() => {
+    if (username) {
+      loadTasks();
+      if (isAdmin) {
+        loadAnalytics();
+      }
+    }
+  }, [username, isAdmin, employeeFilter, loadTasks]);
 
   const loadAnalytics = async () => {
     try {
