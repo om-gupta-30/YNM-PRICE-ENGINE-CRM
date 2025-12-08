@@ -80,15 +80,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       
       if (initialData) {
         setFormData(initialData);
-        // Load sub-accounts for the selected account
+        // Load sub-accounts for the selected account immediately (preserve selection)
         if (initialData.accounts) {
-          loadSubAccounts(initialData.accounts);
-          // Load contacts if subaccount is selected (will happen after subaccounts load)
-          if (initialData.sub_accounts) {
-            setTimeout(() => {
-              loadContacts(initialData.sub_accounts!);
-            }, 500); // Small delay to ensure subaccounts are loaded first
-          }
+          loadSubAccounts(initialData.accounts, true).then(() => {
+            // After sub-accounts load, load contacts if subaccount is selected
+            if (initialData.sub_accounts) {
+              // Use a longer delay to ensure subaccounts are fully loaded
+              setTimeout(() => {
+                loadContacts(initialData.sub_accounts!);
+              }, 1000);
+            }
+          });
         }
       } else {
         setFormData({
@@ -135,21 +137,26 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     }
   };
 
-  const loadSubAccounts = async (accountId: number) => {
+  const loadSubAccounts = async (accountId: number, preserveSelection: boolean = false) => {
     try {
       const response = await fetch(`/api/subaccounts?account_id=${accountId}`);
       const data = await response.json();
       if (data.success && data.subAccounts) {
-        setSubAccounts(data.subAccounts.map((sa: any) => ({
+        const subAccountsList = data.subAccounts.map((sa: any) => ({
           id: sa.id,
           sub_account_name: sa.subAccountName || sa.sub_account_name,
-        })));
+        }));
+        setSubAccounts(subAccountsList);
+        
+        // If preserving selection (during edit mode initialization), don't clear
+        if (!preserveSelection) {
+          // Clear contacts when subaccount changes
+          setContacts([]);
+          setFormData(prev => ({ ...prev, sub_accounts: null, contact_id: null }));
+        }
       } else {
         setSubAccounts([]);
       }
-      // Clear contacts when subaccount changes
-      setContacts([]);
-      setFormData(prev => ({ ...prev, sub_accounts: null, contact_id: null }));
     } catch (error) {
       console.error('Error loading sub-accounts:', error);
       setSubAccounts([]);
@@ -274,6 +281,9 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     }
     if (!formData.sub_accounts) {
       return 'Sub-Account is required';
+    }
+    if (!formData.priority) {
+      return 'Priority is required';
     }
     if (!formData.contact_id) {
       return 'Contact is required. Please create a contact in the sub-account first.';
@@ -525,21 +535,25 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               </select>
             </div>
 
-            {/* Priority */}
+            {/* Priority - Required */}
             <div>
               <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Priority
+                Priority * <span className="text-xs text-slate-400">(Required)</span>
               </label>
               <select
                 value={formData.priority || ''}
                 onChange={(e) => handleInputChange('priority', e.target.value || null)}
+                required
                 className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
               >
-                <option value="">Select Priority (Optional)</option>
+                <option value="">Select Priority *</option>
                 {LEAD_PRIORITIES.map(priority => (
                   <option key={priority} value={priority}>{priority}</option>
                 ))}
               </select>
+              {!formData.priority && (
+                <p className="text-xs text-slate-400 mt-1">Please select a priority</p>
+              )}
             </div>
 
             {/* Assigned Employee */}

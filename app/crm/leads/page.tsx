@@ -818,20 +818,15 @@ export default function LeadsPage() {
                               </div>
                             </td>
                             <td className="py-4 px-2 md:px-4">
-                              <select
-                                value={priority || ''}
-                                onChange={(e) => {
-                                  e.stopPropagation();
-                                  handlePriorityChange(lead.id, e.target.value as Priority || null);
-                                }}
-                                onClick={(e) => e.stopPropagation()}
-                                className={`px-2 py-1 rounded text-xs font-semibold border-2 bg-transparent ${getPriorityColor(priority)} focus:outline-none focus:ring-2 focus:ring-premium-gold`}
-                              >
-                                <option value="">Manual Priority</option>
-                                <option value="High Priority">High Priority</option>
-                                <option value="Medium Priority">Medium Priority</option>
-                                <option value="Low Priority">Low Priority</option>
-                              </select>
+                              {priority ? (
+                                <span className={`px-2 py-1 rounded text-xs font-semibold border ${getPriorityColor(priority)}`}>
+                                  {priority}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 rounded text-xs font-semibold border bg-slate-500/20 text-slate-400 border-slate-500/30">
+                                  No Priority
+                                </span>
+                              )}
                             </td>
                             <td className="py-4 px-2 md:px-4 text-slate-200 text-xs md:text-sm hidden lg:table-cell">{lead.assigned_employee || '-'}</td>
                             <td className="py-4 px-2 md:px-4">

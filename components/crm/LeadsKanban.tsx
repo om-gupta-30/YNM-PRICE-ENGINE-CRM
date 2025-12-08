@@ -175,21 +175,14 @@ export default function LeadsKanban({ leads, onStatusChange, onLeadClick, onPrio
                           {score}
                         </span>
                         </div>
-                        {onPriorityChange && (
-                          <select
-                            value={priority || ''}
-                            onChange={async (e) => {
-                              e.stopPropagation();
-                              await onPriorityChange(lead.id, e.target.value as 'High Priority' | 'Medium Priority' | 'Low Priority' || null);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className={`px-1.5 py-0.5 rounded text-xs font-semibold border bg-transparent ${getPriorityColor(priority)} focus:outline-none focus:ring-1 focus:ring-premium-gold`}
-                          >
-                            <option value="">Priority</option>
-                            <option value="High Priority">High</option>
-                            <option value="Medium Priority">Med</option>
-                            <option value="Low Priority">Low</option>
-                          </select>
+                        {priority ? (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-semibold border ${getPriorityColor(priority)}`}>
+                            {priority === 'High Priority' ? 'High' : priority === 'Medium Priority' ? 'Med' : 'Low'}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-xs font-semibold border bg-slate-500/20 text-slate-400 border-slate-500/30">
+                            No Priority
+                          </span>
                         )}
                       </div>
 
