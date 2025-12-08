@@ -35,7 +35,20 @@ export async function POST(
       );
     }
 
-    const supabase = createSupabaseServerClient();
+    let supabase;
+    try {
+      supabase = createSupabaseServerClient();
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Database connection error. Please check environment variables.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
 
     // Get current task to check old status
     // Don't select status_history - column doesn't exist in database
@@ -171,11 +184,13 @@ export async function POST(
     
     return response;
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Update task status API error:', error);
-    }
+    console.error('Update task status API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

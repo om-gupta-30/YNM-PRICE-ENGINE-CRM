@@ -18,7 +18,20 @@ export async function GET(
       );
     }
 
-    const supabase = createSupabaseServerClient();
+    let supabase;
+    try {
+      supabase = createSupabaseServerClient();
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Database connection error. Please check environment variables.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
 
     // Fetch task details
     const { data: task, error: taskError } = await supabase
@@ -124,11 +137,13 @@ export async function GET(
     
     return response;
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Task history API error:', error);
-    }
+    console.error('Task history API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }

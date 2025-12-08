@@ -78,6 +78,12 @@ export default function TasksPage() {
       }
 
       const response = await fetch(`/api/crm/tasks/list?${params}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
 
       if (data.success) {
@@ -118,13 +124,20 @@ export default function TasksPage() {
       }
       
       const response = await fetch(`/api/crm/tasks/analytics?${params}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error loading analytics:', errorData.error || `HTTP error! status: ${response.status}`);
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.success) {
         setAnalytics(data.analytics);
       }
-    } catch (err) {
-      console.error('Error loading analytics:', err);
+    } catch (err: any) {
+      console.error('Error loading analytics:', err.message || err);
     }
   };
 
@@ -139,6 +152,11 @@ export default function TasksPage() {
           assigned_to: isAdmin ? taskData.assigned_to : username,
         }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
       
@@ -159,6 +177,14 @@ export default function TasksPage() {
     try {
       setLoadingHistory(true);
       const response = await fetch(`/api/crm/tasks/${taskId}/history`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error loading task history:', errorData.error || `HTTP error! status: ${response.status}`);
+        setTaskHistory([]);
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.success) {
@@ -167,7 +193,7 @@ export default function TasksPage() {
         setTaskHistory([]);
       }
     } catch (err: any) {
-      console.error('Error loading task history:', err);
+      console.error('Error loading task history:', err.message || err);
       setTaskHistory([]);
     } finally {
       setLoadingHistory(false);
@@ -193,9 +219,14 @@ export default function TasksPage() {
         }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
       
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Failed to update status');
       }
 
@@ -771,13 +802,25 @@ function CreateTaskModal({
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadingSubAccounts, setLoadingSubAccounts] = useState(false);
 
-  // Fetch accounts when modal opens
+  // Fetch accounts when modal opens or when assigned employee changes (for admin)
   useEffect(() => {
     if (isOpen) {
       fetchAccounts();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
+
+  // Refetch accounts when assigned employee changes (for admin filtering)
+  useEffect(() => {
+    if (isOpen && isAdmin && formData.assigned_to) {
+      // When admin selects an employee, refetch accounts for that employee
+      fetchAccounts();
+      // Also clear account and sub-account selections when employee changes
+      setFormData(prev => ({ ...prev, account_id: '', sub_account_id: '' }));
+      setSubAccounts([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.assigned_to, isOpen, isAdmin]);
 
   // Fetch sub-accounts when account is selected
   useEffect(() => {
@@ -794,13 +837,28 @@ function CreateTaskModal({
     try {
       setLoadingAccounts(true);
       const params = new URLSearchParams();
-      if (!isAdmin && currentUser) {
+      
+      // If admin has selected an employee, filter by that employee
+      // Otherwise, if not admin, filter by current user
+      // If admin but no employee selected, show all accounts
+      if (isAdmin && formData.assigned_to) {
+        params.append('employee', formData.assigned_to);
+        // Don't pass isAdmin=true when filtering by employee
+      } else if (!isAdmin && currentUser) {
         params.append('employee', currentUser);
-      } else if (isAdmin) {
+      } else if (isAdmin && !formData.assigned_to) {
         params.append('isAdmin', 'true');
       }
       
       const response = await fetch(`/api/accounts?${params}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error fetching accounts:', errorData.error || `HTTP error! status: ${response.status}`);
+        setAccounts([]);
+        return;
+      }
+      
       const data = await response.json();
       
       if (data.success) {
@@ -808,9 +866,12 @@ function CreateTaskModal({
           id: acc.id,
           accountName: acc.accountName,
         })));
+      } else {
+        setAccounts([]);
       }
     } catch (error) {
       console.error('Error fetching accounts:', error);
+      setAccounts([]);
     } finally {
       setLoadingAccounts(false);
     }
@@ -929,7 +990,9 @@ function CreateTaskModal({
               <label className="text-sm font-medium text-slate-300 mb-2 block">Assign To *</label>
               <select
                 value={formData.assigned_to || ''}
-                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, assigned_to: e.target.value, account_id: '', sub_account_id: '' });
+                }}
                 className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-white focus:border-premium-gold/50 focus:ring-1 focus:ring-premium-gold/30 transition-all cursor-pointer"
                 required
               >
@@ -943,18 +1006,30 @@ function CreateTaskModal({
           
           {/* Account Selection */}
           <div>
-            <label className="text-sm font-medium text-slate-300 mb-2 block">Account (Optional)</label>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Account (Optional)
+              {isAdmin && formData.assigned_to && (
+                <span className="text-xs text-slate-500 ml-2">(Filtered by selected employee)</span>
+              )}
+            </label>
             <select
               value={formData.account_id || ''}
               onChange={(e) => setFormData({ ...formData, account_id: e.target.value, sub_account_id: '' })}
-              disabled={loadingAccounts}
+              disabled={loadingAccounts || (isAdmin && !formData.assigned_to)}
               className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-600 text-white focus:border-premium-gold/50 focus:ring-1 focus:ring-premium-gold/30 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value="">No Account</option>
+              <option value="">
+                {isAdmin && !formData.assigned_to 
+                  ? 'Select an employee first' 
+                  : 'No Account'}
+              </option>
               {accounts.map(acc => (
                 <option key={acc.id} value={acc.id.toString()}>{acc.accountName}</option>
               ))}
             </select>
+            {isAdmin && !formData.assigned_to && (
+              <p className="text-xs text-slate-500 mt-1">Please select an employee to see their accounts</p>
+            )}
           </div>
 
           {/* Sub-Account Selection (only if account is selected) */}

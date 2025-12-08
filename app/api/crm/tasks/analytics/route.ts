@@ -7,7 +7,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeFilter = searchParams.get('employee');
 
-    const supabase = createSupabaseServerClient();
+    let supabase;
+    try {
+      supabase = createSupabaseServerClient();
+    } catch (error: any) {
+      console.error('Error creating Supabase client:', error);
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Database connection error. Please check environment variables.',
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        },
+        { status: 500 }
+      );
+    }
 
     // Build base query
     let query = supabase.from('tasks').select('*');
@@ -58,7 +71,11 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Tasks analytics API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        success: false,
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
       { status: 500 }
     );
   }
