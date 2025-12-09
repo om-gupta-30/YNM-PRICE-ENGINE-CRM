@@ -105,8 +105,21 @@ export default function LeadsPage() {
       if (isAdmin) {
         params.append('isAdmin', 'true');
       }
+      // Add cache busting timestamp
+      params.append('_t', Date.now().toString());
       
-      const response = await fetch(`/api/crm/leads/list?${params}`);
+      const response = await fetch(`/api/crm/leads/list?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to fetch leads' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       
       if (data.success && data.leads) {
@@ -274,46 +287,82 @@ export default function LeadsPage() {
       const username = typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin';
       
       if (editingLead) {
-        // Update lead
+        // Update lead - only send fields that are actually being updated
+        const updatePayload: any = {
+          id: editingLead.id,
+        };
+        
+        // Only include fields that have changed or are being set
+        if (formData.lead_name !== undefined) updatePayload.lead_name = formData.lead_name;
+        if (formData.contact_person !== undefined) updatePayload.contact_person = formData.contact_person;
+        if (formData.phone !== undefined) updatePayload.phone = formData.phone;
+        if (formData.email !== undefined) updatePayload.email = formData.email;
+        if (formData.requirements !== undefined) updatePayload.requirements = formData.requirements;
+        if (formData.lead_source !== undefined) updatePayload.lead_source = formData.lead_source;
+        if (formData.status !== undefined) updatePayload.status = formData.status;
+        if (formData.priority !== undefined) updatePayload.priority = formData.priority;
+        if (formData.assigned_employee !== undefined) updatePayload.assigned_employee = formData.assigned_employee;
+        if (formData.accounts !== undefined) updatePayload.accounts = formData.accounts;
+        if (formData.sub_accounts !== undefined) updatePayload.sub_accounts = formData.sub_accounts;
+        if (formData.contact_id !== undefined) updatePayload.contact_id = formData.contact_id;
+        
         const response = await fetch('/api/crm/leads/update', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: editingLead.id,
-            ...formData,
-            created_by: editingLead.created_by || username,
-          }),
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
+          body: JSON.stringify(updatePayload),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Failed to update lead' }));
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
 
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
+        if (!data.success) {
           throw new Error(data.error || 'Failed to update lead');
         }
 
-        setToast({ message: 'Lead updated successfully', type: 'success' });
+        setToast({ message: 'Lead updated successfully! Refreshing...', type: 'success' });
       } else {
         // Create new lead
         const response = await fetch('/api/crm/leads/create', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
           body: JSON.stringify({
             ...formData,
             created_by: username,
           }),
         });
 
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Failed to create lead' }));
+          throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
 
-        if (!response.ok || !data.success) {
+        if (!data.success) {
           throw new Error(data.error || 'Failed to create lead');
         }
 
-        setToast({ message: 'Lead Created Successfully', type: 'success' });
+        setToast({ message: 'Lead Created Successfully! Refreshing...', type: 'success' });
       }
 
       handleCloseModal();
-      await fetchLeads(); // Refresh list
+      
+      // Force immediate refresh with cache busting
+      await fetchLeads();
+      
+      setToast({ message: editingLead ? 'Lead updated successfully' : 'Lead Created Successfully', type: 'success' });
     } catch (error: any) {
       console.error('Error saving lead:', error);
       setToast({ message: error.message || 'Failed to save lead', type: 'error' });

@@ -296,24 +296,38 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
   };
 
   const validateForm = (): string | null => {
-    if (!formData.accounts) {
-      return 'Account is required';
+    // For edit mode, only validate fields that are being changed
+    // For create mode, validate all required fields
+    if (mode === 'create') {
+      if (!formData.accounts) {
+        return 'Account is required';
+      }
+      if (!formData.sub_accounts) {
+        return 'Sub-Account is required';
+      }
+      if (!formData.priority) {
+        return 'Priority is required';
+      }
+      if (!formData.contact_id) {
+        return 'Contact is required. Please create a contact in the sub-account first.';
+      }
+      if (!formData.lead_name.trim()) {
+        return 'Lead name is required';
+      }
+      if (!formData.phone.trim()) {
+        return 'Phone is required';
+      }
+    } else {
+      // Edit mode - only validate fields that have values or are required
+      if (formData.lead_name !== undefined && !formData.lead_name.trim()) {
+        return 'Lead name cannot be empty';
+      }
+      if (formData.phone !== undefined && !formData.phone.trim()) {
+        return 'Phone cannot be empty';
+      }
     }
-    if (!formData.sub_accounts) {
-      return 'Sub-Account is required';
-    }
-    if (!formData.priority) {
-      return 'Priority is required';
-    }
-    if (!formData.contact_id) {
-      return 'Contact is required. Please create a contact in the sub-account first.';
-    }
-    if (!formData.lead_name.trim()) {
-      return 'Lead name is required';
-    }
-    if (!formData.phone.trim()) {
-      return 'Phone is required';
-    }
+    
+    // Email validation applies to both modes
     if (formData.email && formData.email.trim()) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {

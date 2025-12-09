@@ -81,8 +81,15 @@ export default function TasksPage() {
       } else if (employeeFilter !== 'All') {
         params.append('assigned_to', employeeFilter);
       }
+      // Add cache busting timestamp to ensure fresh data
+      params.append('_t', Date.now().toString());
 
-      const response = await fetch(`/api/crm/tasks/list?${params}`);
+      const response = await fetch(`/api/crm/tasks/list?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -159,7 +166,11 @@ export default function TasksPage() {
     try {
       const response = await fetch('/api/crm/tasks/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
         body: JSON.stringify({
           ...taskData,
           created_by: username,
@@ -178,11 +189,14 @@ export default function TasksPage() {
         throw new Error(data.error || 'Failed to create task');
       }
 
-      // Refresh tasks to get the new task with all data (account names, etc.)
-      await loadTasks(false);
-      if (isAdmin) {
-        await loadAnalytics();
-      }
+      // Force immediate refresh with cache busting
+      setToast({ message: 'Task created successfully! Refreshing...', type: 'success' });
+      
+      // Refresh immediately - don't wait, but ensure it happens
+      const refreshPromise = loadTasks(false);
+      const analyticsPromise = isAdmin ? loadAnalytics() : Promise.resolve();
+      
+      await Promise.all([refreshPromise, analyticsPromise]);
       
       setToast({ message: 'Task created successfully', type: 'success' });
     } catch (err: any) {
@@ -292,6 +306,7 @@ export default function TasksPage() {
     
     setShowDeleteModal(false);
     setTaskToDelete(null);
+    setToast({ message: 'Deleting task...', type: 'success' });
 
     try {
       // Delete task
@@ -299,7 +314,9 @@ export default function TasksPage() {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
       });
 
       if (!response.ok) {
@@ -313,11 +330,14 @@ export default function TasksPage() {
         throw new Error(data.error || 'Failed to delete task');
       }
 
-      // Force refresh to ensure sync - wait for it to complete
-      await loadTasks(false);
-      if (isAdmin) {
-        await loadAnalytics();
-      }
+      // Force immediate refresh with cache busting
+      setToast({ message: 'Task deleted! Refreshing...', type: 'success' });
+      
+      // Refresh immediately - ensure it happens
+      const refreshPromise = loadTasks(false);
+      const analyticsPromise = isAdmin ? loadAnalytics() : Promise.resolve();
+      
+      await Promise.all([refreshPromise, analyticsPromise]);
       
       setToast({ message: 'Task deleted successfully', type: 'success' });
     } catch (err: any) {
