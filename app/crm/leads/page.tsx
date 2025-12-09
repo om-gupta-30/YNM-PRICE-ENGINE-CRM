@@ -307,7 +307,11 @@ export default function LeadsPage() {
         if (formData.requirements !== undefined) updatePayload.requirements = formData.requirements;
         if (formData.lead_source !== undefined) updatePayload.lead_source = formData.lead_source;
         if (formData.status !== undefined) updatePayload.status = formData.status;
-        if (formData.priority !== undefined) updatePayload.priority = formData.priority;
+        // Always include priority if it's in formData (even if null) - API will normalize it
+        if (formData.priority !== undefined) {
+          // Ensure we send the exact value or null, not empty string
+          updatePayload.priority = formData.priority || null;
+        }
         if (formData.assigned_employee !== undefined) updatePayload.assigned_employee = formData.assigned_employee;
         if (formData.accounts !== undefined) updatePayload.accounts = formData.accounts;
         if (formData.sub_accounts !== undefined) updatePayload.sub_accounts = formData.sub_accounts;

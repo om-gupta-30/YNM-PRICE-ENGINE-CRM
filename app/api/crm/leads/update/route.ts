@@ -67,28 +67,42 @@ export async function POST(request: NextRequest) {
     };
 
     // Normalize priority value to match database constraint
-    // Database likely expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
-    let normalizedPriority = null;
+    // Database expects EXACTLY: 'High Priority', 'Medium Priority', 'Low Priority', or NULL
+    let normalizedPriority: string | null = null;
     if (priority !== undefined) {
-      if (priority === null || priority === '' || priority === 'null' || priority === 'None') {
+      // Handle null, empty string, or falsy values
+      if (!priority || priority === null || priority === '' || priority === 'null' || priority === 'None' || String(priority).trim() === '') {
         normalizedPriority = null;
       } else {
-        // Ensure priority matches expected format
+        // Ensure priority matches expected format exactly
         const priorityStr = String(priority).trim();
-        if (priorityStr === 'High Priority' || priorityStr === 'Medium Priority' || priorityStr === 'Low Priority') {
-          normalizedPriority = priorityStr;
-        } else if (priorityStr === 'High') {
+        
+        // Exact matches first
+        if (priorityStr === 'High Priority') {
           normalizedPriority = 'High Priority';
-        } else if (priorityStr === 'Medium') {
+        } else if (priorityStr === 'Medium Priority') {
           normalizedPriority = 'Medium Priority';
-        } else if (priorityStr === 'Low') {
+        } else if (priorityStr === 'Low Priority') {
+          normalizedPriority = 'Low Priority';
+        } 
+        // Handle variations
+        else if (priorityStr === 'High' || priorityStr.toLowerCase() === 'high priority') {
+          normalizedPriority = 'High Priority';
+        } else if (priorityStr === 'Medium' || priorityStr.toLowerCase() === 'medium priority') {
+          normalizedPriority = 'Medium Priority';
+        } else if (priorityStr === 'Low' || priorityStr.toLowerCase() === 'low priority') {
           normalizedPriority = 'Low Priority';
         } else {
-          // Invalid priority value - set to null instead of failing
-          console.warn(`Invalid priority value: ${priority}, setting to null`);
+          // Invalid priority value - log and set to null
+          console.error(`Invalid priority value received: "${priority}" (type: ${typeof priority}), setting to null`);
           normalizedPriority = null;
         }
       }
+    }
+    
+    // Log for debugging (only in development)
+    if (process.env.NODE_ENV === 'development' && priority !== undefined) {
+      console.log(`Priority normalization: "${priority}" -> "${normalizedPriority}"`);
     }
 
     // Update only provided fields
@@ -99,12 +113,35 @@ export async function POST(request: NextRequest) {
     if (requirements !== undefined) updateData.requirements = requirements?.trim() || null;
     if (lead_source !== undefined) updateData.lead_source = lead_source || null;
     if (status !== undefined) updateData.status = status;
-    if (priority !== undefined) updateData.priority = normalizedPriority;
+    // Always set priority if it was provided (even if null) - this ensures we can clear priority
+    if (priority !== undefined) {
+      updateData.priority = normalizedPriority; // This will be null or one of the valid values
+    }
     if (assigned_employee !== undefined) updateData.assigned_employee = assigned_employee || null;
     if (account_id !== undefined) updateData.account_id = account_id;
     if (sub_account_id !== undefined) updateData.sub_account_id = sub_account_id;
     if (contact_id !== undefined) updateData.contact_id = contact_id || null;
     if (follow_up_date !== undefined) updateData.follow_up_date = follow_up_date || null;
+    
+    // Log update data for debugging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Update data being sent:', JSON.stringify(updateData, null, 2));
+    }
+
+    // Final validation before update - ensure priority is valid
+    if (updateData.priority !== undefined && updateData.priority !== null) {
+      const validPriorities = ['High Priority', 'Medium Priority', 'Low Priority'];
+      if (!validPriorities.includes(updateData.priority)) {
+        console.error(`Invalid priority value before update: "${updateData.priority}"`);
+        return NextResponse.json(
+          { 
+            error: `Invalid priority value. Must be one of: ${validPriorities.join(', ')} or null`,
+            received: updateData.priority
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     const { data, error } = await supabase
       .from('leads')
@@ -115,6 +152,20 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error updating lead:', error);
+      console.error('Update data that caused error:', JSON.stringify(updateData, null, 2));
+      
+      // Provide more helpful error message for constraint violations
+      if (error.message && error.message.includes('leads_priority_check')) {
+        return NextResponse.json(
+          { 
+            error: 'Invalid priority value. Priority must be "High Priority", "Medium Priority", "Low Priority", or empty.',
+            details: `Received: "${updateData.priority}"`,
+            validValues: ['High Priority', 'Medium Priority', 'Low Priority', null]
+          },
+          { status: 400 }
+        );
+      }
+      
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
