@@ -153,29 +153,6 @@ export default function TasksPage() {
   };
 
   const handleCreateTask = async (taskData: any) => {
-    // Optimistic update - add task to UI immediately
-    const optimisticTask: Task = {
-      id: Date.now(), // Temporary ID
-      title: taskData.title,
-      description: taskData.description || null,
-      task_type: taskData.task_type || 'Follow-up',
-      due_date: taskData.due_date,
-      assigned_to: isAdmin ? taskData.assigned_to : username,
-      account_id: taskData.account_id ? parseInt(taskData.account_id) : null,
-      sub_account_id: taskData.sub_account_id ? parseInt(taskData.sub_account_id) : null,
-      status: 'Pending',
-      created_by: username,
-      account_name: null,
-      sub_account_name: null,
-      latest_note: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      completed_at: null,
-      status_history: [],
-    };
-
-    // Add optimistic task to UI immediately
-    setTasks(prev => [optimisticTask, ...prev]);
     setShowCreateModal(false);
     setToast({ message: 'Creating task...', type: 'success' });
 
@@ -191,30 +168,26 @@ export default function TasksPage() {
       });
 
       if (!response.ok) {
-        // Remove optimistic task on error
-        setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
 
-      if (data.success) {
-        setToast({ message: 'Task created successfully', type: 'success' });
-        // Refresh tasks in background (non-blocking)
-        loadTasks().catch(err => console.error('Error refreshing tasks:', err));
-        if (isAdmin) {
-          loadAnalytics().catch(err => console.error('Error refreshing analytics:', err));
-        }
-      } else {
-        // Remove optimistic task on error
-        setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
+      if (!data.success) {
         throw new Error(data.error || 'Failed to create task');
       }
+
+      // Refresh tasks to get the new task with all data (account names, etc.)
+      await loadTasks(false);
+      if (isAdmin) {
+        await loadAnalytics();
+      }
+      
+      setToast({ message: 'Task created successfully', type: 'success' });
     } catch (err: any) {
-      // Remove optimistic task on error
-      setTasks(prev => prev.filter(t => t.id !== optimisticTask.id));
-      setToast({ message: err.message, type: 'error' });
+      console.error('Error creating task:', err);
+      setToast({ message: err.message || 'Failed to create task', type: 'error' });
     }
   };
 
@@ -261,8 +234,10 @@ export default function TasksPage() {
       return;
     }
 
-    // Optimistic updates - instant UI update
+    setDeleting(true);
     const taskToRestore = taskToDelete;
+    
+    // Optimistic updates - instant UI update
     setTasks(prev => prev.filter(t => t.id !== taskToDelete.id));
     
     // Optimistically update analytics immediately
@@ -316,50 +291,53 @@ export default function TasksPage() {
     }
     
     setShowDeleteModal(false);
-    setDeleting(false);
     setTaskToDelete(null);
-    setToast({ message: 'Task deleted successfully', type: 'success' });
 
-    // Delete in background - don't wait for it
-    fetch(`/api/crm/tasks/${taskToDelete.id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Failed to delete task. Status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to delete task');
-        }
-        // Silently refresh in background to ensure sync
-        loadTasks(false).catch(() => {});
-        if (isAdmin) {
-          loadAnalytics().catch(() => {});
-        }
-      })
-      .catch((err: any) => {
-        // Restore task on error
-        setTasks(prev => {
-          const restored = [...prev, taskToRestore];
-          return restored.sort((a, b) => {
-            const dateA = new Date(a.due_date).getTime();
-            const dateB = new Date(b.due_date).getTime();
-            return dateA - dateB;
-          });
-        });
-        // Restore analytics
-        if (analytics) {
-          loadAnalytics().catch(() => {});
-        }
-        setToast({ message: err.message || 'Failed to delete task. Restored.', type: 'error' });
+    try {
+      // Delete task
+      const response = await fetch(`/api/crm/tasks/${taskToRestore.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to delete task. Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to delete task');
+      }
+
+      // Force refresh to ensure sync - wait for it to complete
+      await loadTasks(false);
+      if (isAdmin) {
+        await loadAnalytics();
+      }
+      
+      setToast({ message: 'Task deleted successfully', type: 'success' });
+    } catch (err: any) {
+      // Restore task on error
+      setTasks(prev => {
+        const restored = [...prev, taskToRestore];
+        return restored.sort((a, b) => {
+          const dateA = new Date(a.due_date).getTime();
+          const dateB = new Date(b.due_date).getTime();
+          return dateA - dateB;
+        });
+      });
+      // Restore analytics
+      if (analytics) {
+        await loadAnalytics();
+      }
+      setToast({ message: err.message || 'Failed to delete task. Restored.', type: 'error' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleUpdateStatus = async (taskId: number, newStatus: TaskStatus, statusNote?: string) => {
@@ -370,6 +348,15 @@ export default function TasksPage() {
         setToast({ message: 'User not authenticated', type: 'error' });
         return;
       }
+
+      // Optimistic update
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, status: newStatus } : t
+      ));
+
+      setShowStatusModal(false);
+      setSelectedTask(null);
+      setToast({ message: 'Updating status...', type: 'success' });
 
       const response = await fetch(`/api/crm/tasks/${taskId}/update-status`, {
         method: 'POST',
@@ -392,12 +379,16 @@ export default function TasksPage() {
         throw new Error(data.error || 'Failed to update status');
       }
 
+      // Refresh to ensure sync (non-blocking)
+      loadTasks(false).catch(err => console.error('Error refreshing tasks:', err));
+      if (isAdmin) {
+        loadAnalytics().catch(err => console.error('Error refreshing analytics:', err));
+      }
+      
       setToast({ message: 'Status updated successfully', type: 'success' });
-      setShowStatusModal(false);
-      setSelectedTask(null);
-      await loadTasks();
-      if (isAdmin) loadAnalytics();
     } catch (err: any) {
+      // Revert optimistic update on error
+      await loadTasks(false);
       if (process.env.NODE_ENV === 'development') {
         console.error('Error updating task status:', err);
       }

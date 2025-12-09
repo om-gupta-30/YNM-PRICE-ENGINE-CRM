@@ -420,6 +420,13 @@ export default function LeadsPage() {
   // Handle priority change (save to database)
   const handlePriorityChange = async (leadId: number, priority: Priority) => {
     try {
+      // Optimistic update - update UI immediately
+      setLeads(prevLeads => 
+        prevLeads.map(lead => 
+          lead.id === leadId ? { ...lead, priority: priority } : lead
+        )
+      );
+
       const response = await fetch('/api/crm/leads/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -429,22 +436,27 @@ export default function LeadsPage() {
         }),
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to update priority' }));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json();
 
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.error || 'Failed to update lead priority');
       }
 
-      // Update local state
-      setLeads(prevLeads => 
-        prevLeads.map(lead => 
-          lead.id === leadId ? { ...lead, priority: priority } : lead
-        )
-      );
+      // Refresh leads to ensure sync (non-blocking)
+      fetchLeads().catch(err => {
+        console.error('Error refreshing leads after priority update:', err);
+      });
 
       setToast({ message: 'Priority updated successfully', type: 'success' });
     } catch (error: any) {
       console.error('Error updating lead priority:', error);
+      // Revert optimistic update on error
+      await fetchLeads();
       setToast({ message: error.message || 'Failed to update priority', type: 'error' });
     }
   };

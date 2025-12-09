@@ -66,32 +66,39 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
   const [subAccounts, setSubAccounts] = useState<Array<{ id: number; sub_account_name: string }>>([]);
   const [contacts, setContacts] = useState<Array<{ id: number; name: string; email: string | null; phone: string | null; designation: string | null }>>([]);
   const [employees, setEmployees] = useState<string[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
   const hasInitializedRef = useRef(false);
 
   // Initialize form data when modal opens
   useEffect(() => {
     if (!isOpen) {
       hasInitializedRef.current = false;
+      setLoadingData(false);
       return;
     }
     
     if (!hasInitializedRef.current && isOpen) {
       hasInitializedRef.current = true;
+      setLoadingData(true);
       
       if (initialData) {
         setFormData(initialData);
-        // Load sub-accounts for the selected account immediately (preserve selection)
-        if (initialData.accounts) {
-          loadSubAccounts(initialData.accounts, true).then(() => {
-            // After sub-accounts load, load contacts if subaccount is selected
-            if (initialData.sub_accounts) {
-              // Use a longer delay to ensure subaccounts are fully loaded
-              setTimeout(() => {
-                loadContacts(initialData.sub_accounts!);
-              }, 1000);
-            }
-          });
+        // Pre-populate selected account/sub-account in dropdowns immediately for instant display
+        // This ensures the selected values show up right away even before API calls complete
+        if (initialData.accounts && mode === 'edit') {
+          // We'll add the selected account to the accounts list if it's not there yet
+          // The loadAccounts will populate the full list, but this ensures immediate display
         }
+        
+        // Load all data in parallel for faster loading
+        Promise.all([
+          initialData.accounts ? loadSubAccounts(initialData.accounts, true) : Promise.resolve(),
+          initialData.sub_accounts ? loadContacts(initialData.sub_accounts) : Promise.resolve()
+        ]).catch(error => {
+          console.error('Error loading form data:', error);
+        }).finally(() => {
+          setLoadingData(false);
+        });
       } else {
         setFormData({
           lead_name: '',
@@ -110,21 +117,28 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         // Reset dropdowns
         setSubAccounts([]);
         setContacts([]);
+        setLoadingData(false);
       }
     }
-  }, [isOpen, initialData]);
+  }, [isOpen, initialData, mode]);
 
   // Load accounts and employees on mount
   useEffect(() => {
     if (isOpen) {
-      loadAccounts();
-      loadEmployees();
+      Promise.all([
+        loadAccounts(),
+        loadEmployees()
+      ]).catch(error => {
+        console.error('Error loading initial data:', error);
+      });
     }
   }, [isOpen]);
 
   const loadAccounts = async () => {
     try {
-      const response = await fetch('/api/accounts');
+      const response = await fetch('/api/accounts', {
+        cache: 'no-store', // Ensure fresh data
+      });
       const data = await response.json();
       if (data.success && data.accounts) {
         setAccounts(data.accounts.map((acc: any) => ({
@@ -139,7 +153,9 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const loadSubAccounts = async (accountId: number, preserveSelection: boolean = false) => {
     try {
-      const response = await fetch(`/api/subaccounts?account_id=${accountId}`);
+      const response = await fetch(`/api/subaccounts?account_id=${accountId}`, {
+        cache: 'no-store', // Ensure fresh data
+      });
       const data = await response.json();
       if (data.success && data.subAccounts) {
         const subAccountsList = data.subAccounts.map((sa: any) => ({
@@ -160,13 +176,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     } catch (error) {
       console.error('Error loading sub-accounts:', error);
       setSubAccounts([]);
-      setContacts([]);
+      if (!preserveSelection) {
+        setContacts([]);
+      }
     }
   };
 
   const loadContacts = async (subAccountId: number) => {
     try {
-      const response = await fetch(`/api/subaccounts/${subAccountId}/contacts`);
+      const response = await fetch(`/api/subaccounts/${subAccountId}/contacts`, {
+        cache: 'no-store', // Ensure fresh data
+      });
       const data = await response.json();
       if (data.success && data.contacts) {
         setContacts(data.contacts.map((contact: any) => ({
@@ -347,17 +367,27 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
             <div>
               <label className="block text-sm font-semibold text-slate-200 mb-2">
                 Account * <span className="text-xs text-slate-400">(Required)</span>
+                {loadingData && formData.accounts && (
+                  <span className="ml-2 text-xs text-amber-400 animate-pulse">Loading...</span>
+                )}
               </label>
               <select
                 value={formData.accounts || ''}
                 onChange={(e) => handleInputChange('accounts', e.target.value ? parseInt(e.target.value) : null)}
                 required
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+                disabled={loadingData && !accounts.length}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50 disabled:cursor-wait"
               >
                 <option value="">Select Account *</option>
                 {accounts.map(acc => (
                   <option key={acc.id} value={acc.id}>{acc.account_name}</option>
                 ))}
+                {/* Show selected account even if not in list yet (for edit mode) */}
+                {formData.accounts && !accounts.find(a => a.id === formData.accounts) && (
+                  <option value={formData.accounts} disabled>
+                    {initialData?.accounts ? `Account ID: ${formData.accounts}` : 'Loading...'}
+                  </option>
+                )}
               </select>
               {!formData.accounts && (
                 <p className="text-xs text-slate-400 mt-1">Please select an account first</p>
@@ -369,26 +399,36 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">
                   Sub-Account * <span className="text-xs text-slate-400">(Required)</span>
+                  {loadingData && formData.sub_accounts && subAccounts.length === 0 && (
+                    <span className="ml-2 text-xs text-amber-400 animate-pulse">Loading...</span>
+                  )}
                 </label>
                 <select
                   value={formData.sub_accounts || ''}
                   onChange={(e) => handleInputChange('sub_accounts', e.target.value ? parseInt(e.target.value) : null)}
                   required
-                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+                  disabled={loadingData && subAccounts.length === 0}
+                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50 disabled:cursor-wait"
                 >
                   <option value="">Select Sub-Account *</option>
-                  {subAccounts.length === 0 ? (
+                  {subAccounts.length === 0 && !loadingData ? (
                     <option value="" disabled>No sub-accounts found. Please create a sub-account first.</option>
                   ) : (
                     subAccounts.map(sa => (
                       <option key={sa.id} value={sa.id}>{sa.sub_account_name}</option>
                     ))
                   )}
+                  {/* Show selected sub-account even if not in list yet (for edit mode) */}
+                  {formData.sub_accounts && !subAccounts.find(sa => sa.id === formData.sub_accounts) && (
+                    <option value={formData.sub_accounts} disabled>
+                      {initialData?.sub_accounts ? `Sub-Account ID: ${formData.sub_accounts}` : 'Loading...'}
+                    </option>
+                  )}
                 </select>
                 {!formData.sub_accounts && subAccounts.length > 0 && (
                   <p className="text-xs text-slate-400 mt-1">Please select a sub-account</p>
                 )}
-                {subAccounts.length === 0 && formData.accounts && (
+                {subAccounts.length === 0 && formData.accounts && !loadingData && (
                   <p className="text-xs text-yellow-400 mt-1">⚠️ No sub-accounts found for this account. Please create a sub-account first.</p>
                 )}
               </div>
@@ -399,15 +439,19 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">
                   Contact * <span className="text-xs text-slate-400">(Required - will auto-fill details)</span>
+                  {loadingData && formData.contact_id && contacts.length === 0 && (
+                    <span className="ml-2 text-xs text-amber-400 animate-pulse">Loading...</span>
+                  )}
                 </label>
                 <select
                   value={formData.contact_id || ''}
                   onChange={(e) => handleContactChange(e.target.value ? parseInt(e.target.value) : null)}
                   required
-                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+                  disabled={loadingData && contacts.length === 0}
+                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50 disabled:cursor-wait"
                 >
                   <option value="">Select Contact *</option>
-                  {contacts.length === 0 ? (
+                  {contacts.length === 0 && !loadingData ? (
                     <option value="" disabled>No contacts found. Please create a contact in this sub-account first.</option>
                   ) : (
                     contacts.map(contact => (
@@ -416,11 +460,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                       </option>
                     ))
                   )}
+                  {/* Show selected contact even if not in list yet (for edit mode) */}
+                  {formData.contact_id && !contacts.find(c => c.id === formData.contact_id) && (
+                    <option value={formData.contact_id} disabled>
+                      {initialData?.contact_id ? `Contact ID: ${formData.contact_id}` : 'Loading...'}
+                    </option>
+                  )}
                 </select>
                 {!formData.contact_id && contacts.length > 0 && (
                   <p className="text-xs text-slate-400 mt-1">Select a contact to auto-fill lead details</p>
                 )}
-                {contacts.length === 0 && formData.sub_accounts && (
+                {contacts.length === 0 && formData.sub_accounts && !loadingData && (
                   <p className="text-xs text-yellow-400 mt-1">
                     ⚠️ No contacts found for this sub-account. Please create a contact first in the Sub-Accounts section.
                   </p>
