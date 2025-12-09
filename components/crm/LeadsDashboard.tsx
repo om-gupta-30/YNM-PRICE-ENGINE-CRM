@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { Lead } from '@/app/crm/leads/page';
 
 interface LeadsDashboardProps {
@@ -16,18 +16,20 @@ interface Analytics {
   followUpsDueToday: number;
 }
 
-export default function LeadsDashboard({ leads, loading }: LeadsDashboardProps) {
+function LeadsDashboard({ leads, loading }: LeadsDashboardProps) {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   useEffect(() => {
     fetchAnalytics();
-  }, [leads]);
+  }, [leads.length]); // Only re-fetch if leads count changes
 
   const fetchAnalytics = async () => {
     try {
       setAnalyticsLoading(true);
-      const response = await fetch('/api/crm/leads/analytics');
+      const response = await fetch('/api/crm/leads/analytics', {
+        cache: 'no-store',
+      });
       const data = await response.json();
       
       if (data.success && data.analytics) {
@@ -40,16 +42,19 @@ export default function LeadsDashboard({ leads, loading }: LeadsDashboardProps) 
     }
   };
 
-  // Calculate statistics from leads (fallback)
-  const totalLeads = leads.length;
-  const statusCounts = {
-    'New': leads.filter(l => l.status === 'New').length,
-    'In Progress': leads.filter(l => l.status === 'In Progress').length,
-    'Quotation Sent': leads.filter(l => l.status === 'Quotation Sent').length,
-    'Follow-Up': leads.filter(l => l.status === 'Follow-up' || l.status === 'Follow-Up').length,
-    'Closed Won': leads.filter(l => l.status === 'Closed Won' || l.status === 'Closed').length,
-    'Closed Lost': leads.filter(l => l.status === 'Closed Lost' || l.status === 'Lost').length,
-  };
+  // Calculate statistics from leads (fallback) - memoized
+  const { totalLeads, statusCounts } = useMemo(() => {
+    const total = leads.length;
+    const counts = {
+      'New': leads.filter(l => l.status === 'New').length,
+      'In Progress': leads.filter(l => l.status === 'In Progress').length,
+      'Quotation Sent': leads.filter(l => l.status === 'Quotation Sent').length,
+      'Follow-Up': leads.filter(l => l.status === 'Follow-up' || l.status === 'Follow-Up').length,
+      'Closed Won': leads.filter(l => l.status === 'Closed Won' || l.status === 'Closed').length,
+      'Closed Lost': leads.filter(l => l.status === 'Closed Lost' || l.status === 'Lost').length,
+    };
+    return { totalLeads: total, statusCounts: counts };
+  }, [leads]);
 
   const defaultAnalytics: Analytics = {
     totalLeads,
@@ -61,28 +66,31 @@ export default function LeadsDashboard({ leads, loading }: LeadsDashboardProps) 
 
   const displayAnalytics = analytics || defaultAnalytics;
 
-  // Get unique lead sources with counts (use analytics if available, otherwise calculate)
-  const leadSourceCounts = Object.keys(displayAnalytics.leadsBySource || {}).length
-    ? displayAnalytics.leadsBySource
-    : (() => {
-        const counts: Record<string, number> = {};
-  leads.forEach(lead => {
-    if (lead.lead_source) {
-            counts[lead.lead_source] = (counts[lead.lead_source] || 0) + 1;
+  // Get unique lead sources with counts (use analytics if available, otherwise calculate) - memoized
+  const leadSourceCounts = useMemo(() => {
+    if (Object.keys(displayAnalytics.leadsBySource || {}).length) {
+      return displayAnalytics.leadsBySource;
     }
-  });
-        return counts;
-      })();
+    const counts: Record<string, number> = {};
+    leads.forEach(lead => {
+      if (lead.lead_source) {
+        counts[lead.lead_source] = (counts[lead.lead_source] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [displayAnalytics.leadsBySource, leads]);
 
-  // Get recent leads (last 5)
-  const recentLeads = [...leads]
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
+  // Get recent leads (last 5) - memoized
+  const recentLeads = useMemo(() => {
+    return [...leads]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
+  }, [leads]);
 
-  const formatDate = (dateString: string) => {
+  const formatDate = useMemo(() => (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  };
+  }, []);
 
   if (loading) {
     return (
@@ -227,4 +235,6 @@ export default function LeadsDashboard({ leads, loading }: LeadsDashboardProps) 
     </div>
   );
 }
+
+export default memo(LeadsDashboard);
 

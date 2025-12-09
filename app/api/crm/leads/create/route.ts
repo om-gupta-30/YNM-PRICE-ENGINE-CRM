@@ -75,6 +75,26 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseServerClient();
 
+    // Normalize priority value to match database constraint
+    // Database expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
+    let normalizedPriority = null;
+    if (priority) {
+      const priorityStr = String(priority).trim();
+      if (priorityStr === 'High Priority' || priorityStr === 'Medium Priority' || priorityStr === 'Low Priority') {
+        normalizedPriority = priorityStr;
+      } else if (priorityStr === 'High') {
+        normalizedPriority = 'High Priority';
+      } else if (priorityStr === 'Medium') {
+        normalizedPriority = 'Medium Priority';
+      } else if (priorityStr === 'Low') {
+        normalizedPriority = 'Low Priority';
+      } else {
+        // Invalid priority value - set to null
+        console.warn(`Invalid priority value: ${priority}, setting to null`);
+        normalizedPriority = null;
+      }
+    }
+
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase
       .from('leads')
@@ -86,7 +106,7 @@ export async function POST(request: NextRequest) {
         requirements: requirements?.trim() || null,
         lead_source: lead_source || null,
         status: status || 'New',
-        priority: priority || null,
+        priority: normalizedPriority,
         assigned_employee: assigned_employee || null,
         account_id: account_id,
         sub_account_id: sub_account_id,

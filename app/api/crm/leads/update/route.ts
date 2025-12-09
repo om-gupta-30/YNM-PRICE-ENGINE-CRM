@@ -66,6 +66,31 @@ export async function POST(request: NextRequest) {
       updated_at: getCurrentISTTime(),
     };
 
+    // Normalize priority value to match database constraint
+    // Database likely expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
+    let normalizedPriority = null;
+    if (priority !== undefined) {
+      if (priority === null || priority === '' || priority === 'null' || priority === 'None') {
+        normalizedPriority = null;
+      } else {
+        // Ensure priority matches expected format
+        const priorityStr = String(priority).trim();
+        if (priorityStr === 'High Priority' || priorityStr === 'Medium Priority' || priorityStr === 'Low Priority') {
+          normalizedPriority = priorityStr;
+        } else if (priorityStr === 'High') {
+          normalizedPriority = 'High Priority';
+        } else if (priorityStr === 'Medium') {
+          normalizedPriority = 'Medium Priority';
+        } else if (priorityStr === 'Low') {
+          normalizedPriority = 'Low Priority';
+        } else {
+          // Invalid priority value - set to null instead of failing
+          console.warn(`Invalid priority value: ${priority}, setting to null`);
+          normalizedPriority = null;
+        }
+      }
+    }
+
     // Update only provided fields
     if (lead_name !== undefined) updateData.lead_name = lead_name.trim();
     if (contact_person !== undefined) updateData.contact_person = contact_person?.trim() || null;
@@ -74,7 +99,7 @@ export async function POST(request: NextRequest) {
     if (requirements !== undefined) updateData.requirements = requirements?.trim() || null;
     if (lead_source !== undefined) updateData.lead_source = lead_source || null;
     if (status !== undefined) updateData.status = status;
-    if (priority !== undefined) updateData.priority = priority || null;
+    if (priority !== undefined) updateData.priority = normalizedPriority;
     if (assigned_employee !== undefined) updateData.assigned_employee = assigned_employee || null;
     if (account_id !== undefined) updateData.account_id = account_id;
     if (sub_account_id !== undefined) updateData.sub_account_id = sub_account_id;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { Lead } from '@/app/crm/leads/page';
 import { calculateLeadScore, getLeadScoreColor } from '@/lib/utils/leadScore';
 
@@ -20,46 +20,48 @@ const STATUS_COLUMNS = [
   { id: 'Closed Lost', label: 'Closed Lost', color: 'bg-red-500/20 border-red-500/30' },
 ];
 
-export default function LeadsKanban({ leads, onStatusChange, onLeadClick, onPriorityChange }: LeadsKanbanProps) {
+function LeadsKanban({ leads, onStatusChange, onLeadClick, onPriorityChange }: LeadsKanbanProps) {
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
-  // Map statuses to columns (handle variations)
-  const getStatusColumn = (status: string | null): string => {
+  // Map statuses to columns (handle variations) - memoized
+  const getStatusColumn = useCallback((status: string | null): string => {
     if (!status) return 'New';
     if (status === 'Closed' || status === 'Closed Won') return 'Closed Won';
     if (status === 'Lost' || status === 'Closed Lost') return 'Closed Lost';
     if (status === 'Follow-up' || status === 'Follow-Up') return 'Follow-up';
     return status;
-  };
+  }, []);
 
-  // Group leads by status
-  const leadsByStatus = leads.reduce((acc, lead) => {
-    const columnStatus = getStatusColumn(lead.status);
-    if (!acc[columnStatus]) {
-      acc[columnStatus] = [];
-    }
-    acc[columnStatus].push(lead);
-    return acc;
-  }, {} as Record<string, Lead[]>);
+  // Group leads by status - memoized
+  const leadsByStatus = useMemo(() => {
+    return leads.reduce((acc, lead) => {
+      const columnStatus = getStatusColumn(lead.status);
+      if (!acc[columnStatus]) {
+        acc[columnStatus] = [];
+      }
+      acc[columnStatus].push(lead);
+      return acc;
+    }, {} as Record<string, Lead[]>);
+  }, [leads, getStatusColumn]);
 
-  const handleDragStart = (e: React.DragEvent, lead: Lead) => {
+  const handleDragStart = useCallback((e: React.DragEvent, lead: Lead) => {
     setDraggedLead(lead);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', lead.id.toString());
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent, columnId: string) => {
+  const handleDragOver = useCallback((e: React.DragEvent, columnId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverColumn(columnId);
-  };
+  }, []);
 
-  const handleDragLeave = () => {
+  const handleDragLeave = useCallback(() => {
     setDragOverColumn(null);
-  };
+  }, []);
 
-  const handleDrop = async (e: React.DragEvent, targetColumnId: string) => {
+  const handleDrop = useCallback(async (e: React.DragEvent, targetColumnId: string) => {
     e.preventDefault();
     setDragOverColumn(null);
 
@@ -68,14 +70,14 @@ export default function LeadsKanban({ leads, onStatusChange, onLeadClick, onPrio
     }
 
     setDraggedLead(null);
-  };
+  }, [draggedLead, onStatusChange]);
 
-  const formatDate = (dateString: string) => {
+  const formatDate = useCallback((dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
-  };
+  }, []);
 
-  const getPriorityColor = (priority: 'High Priority' | 'Medium Priority' | 'Low Priority' | null | undefined) => {
+  const getPriorityColor = useCallback((priority: 'High Priority' | 'Medium Priority' | 'Low Priority' | null | undefined) => {
     switch (priority) {
       case 'High Priority':
         return 'bg-red-500/20 text-red-300 border-red-500/30';
@@ -86,7 +88,7 @@ export default function LeadsKanban({ leads, onStatusChange, onLeadClick, onPrio
       default:
         return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
     }
-  };
+  }, []);
 
   return (
     <div className="overflow-x-auto pb-4 -mx-4 px-4">
@@ -208,4 +210,6 @@ export default function LeadsKanban({ leads, onStatusChange, onLeadClick, onPrio
     </div>
   );
 }
+
+export default memo(LeadsKanban);
 

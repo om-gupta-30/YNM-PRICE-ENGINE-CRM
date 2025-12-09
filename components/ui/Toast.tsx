@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 
 interface ToastProps {
   message: string;
@@ -9,7 +9,7 @@ interface ToastProps {
   duration?: number;
 }
 
-export default function Toast({ message, type = 'success', onClose, duration = 3000 }: ToastProps) {
+function Toast({ message, type = 'success', onClose, duration = 3000 }: ToastProps) {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -41,4 +41,6 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
     </div>
   );
 }
+
+export default memo(Toast);
 

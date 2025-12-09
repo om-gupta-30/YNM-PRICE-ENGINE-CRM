@@ -54,9 +54,11 @@ export default function TasksPage() {
     }
   }, [router]);
 
-  const fetchEmployees = async () => {
+  const fetchEmployees = useCallback(async () => {
     try {
-      const response = await fetch('/api/crm/employees');
+      const response = await fetch('/api/crm/employees', {
+        cache: 'no-store',
+      });
       const data = await response.json();
       if (data.success) {
         setEmployees(data.employees || []);
@@ -66,7 +68,7 @@ export default function TasksPage() {
         console.error('Error fetching employees:', err);
       }
     }
-  };
+  }, []);
 
   const loadTasks = useCallback(async (showLoading = true) => {
     try {
@@ -122,7 +124,7 @@ export default function TasksPage() {
     if (isAdmin) {
       fetchEmployees();
     }
-  }, [isAdmin]);
+  }, [isAdmin, fetchEmployees]);
 
   // Load tasks
   useEffect(() => {
@@ -134,14 +136,16 @@ export default function TasksPage() {
     }
   }, [username, isAdmin, employeeFilter, loadTasks]);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (employeeFilter !== 'All') {
         params.append('employee', employeeFilter);
       }
       
-      const response = await fetch(`/api/crm/tasks/analytics?${params}`);
+      const response = await fetch(`/api/crm/tasks/analytics?${params}`, {
+        cache: 'no-store',
+      });
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -157,9 +161,9 @@ export default function TasksPage() {
     } catch (err: any) {
       console.error('Error loading analytics:', err.message || err);
     }
-  };
+  }, [employeeFilter]);
 
-  const handleCreateTask = async (taskData: any) => {
+  const handleCreateTask = useCallback(async (taskData: any) => {
     setShowCreateModal(false);
     setToast({ message: 'Creating task...', type: 'success' });
 
@@ -203,9 +207,9 @@ export default function TasksPage() {
       console.error('Error creating task:', err);
       setToast({ message: err.message || 'Failed to create task', type: 'error' });
     }
-  };
+  }, [isAdmin, username, loadTasks, loadAnalytics]);
 
-  const loadTaskHistory = async (taskId: number) => {
+  const loadTaskHistory = useCallback(async (taskId: number) => {
     try {
       setLoadingHistory(true);
       const response = await fetch(`/api/crm/tasks/${taskId}/history`);
@@ -230,9 +234,9 @@ export default function TasksPage() {
     } finally {
       setLoadingHistory(false);
     }
-  };
+  }, []);
 
-  const handleDeleteTask = async (task: Task) => {
+  const handleDeleteTask = useCallback((task: Task) => {
     if (!isAdmin) {
       setToast({ message: 'Only admins can delete tasks', type: 'error' });
       return;
@@ -240,9 +244,9 @@ export default function TasksPage() {
     
     setTaskToDelete(task);
     setShowDeleteModal(true);
-  };
+  }, [isAdmin]);
 
-  const confirmDeleteTask = async () => {
+  const confirmDeleteTask = useCallback(async () => {
     if (!taskToDelete || !isAdmin) {
       setToast({ message: 'Only admins can delete tasks', type: 'error' });
       return;
@@ -358,9 +362,9 @@ export default function TasksPage() {
     } finally {
       setDeleting(false);
     }
-  };
+  }, [isAdmin, taskToDelete, analytics, loadTasks, loadAnalytics]);
 
-  const handleUpdateStatus = async (taskId: number, newStatus: TaskStatus, statusNote?: string) => {
+  const handleUpdateStatus = useCallback(async (taskId: number, newStatus: TaskStatus, statusNote?: string) => {
     try {
       const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
       
@@ -414,7 +418,7 @@ export default function TasksPage() {
       }
       setToast({ message: err.message || 'Failed to update status. Please try again.', type: 'error' });
     }
-  };
+  }, [username, loadTasks, loadAnalytics, isAdmin]);
 
   // Filtered tasks
   const filteredTasks = useMemo(() => {

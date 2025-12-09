@@ -1,14 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import LeadForm, { LeadFormData } from '@/components/crm/LeadForm';
-import LeadDetailsModal from '@/components/crm/LeadDetailsModal';
-import LeadsDashboard from '@/components/crm/LeadsDashboard';
-import LeadsKanban from '@/components/crm/LeadsKanban';
-import ComingSoonModal from '@/components/modals/ComingSoonModal';
+import dynamic from 'next/dynamic';
+import { useDebounce } from '@/hooks/useDebounce';
 import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
+
+// Dynamic imports for better performance - load heavy components only when needed
+const LeadForm = dynamic(() => import('@/components/crm/LeadForm'), { ssr: false });
+const LeadDetailsModal = dynamic(() => import('@/components/crm/LeadDetailsModal'), { ssr: false });
+const LeadsDashboard = dynamic(() => import('@/components/crm/LeadsDashboard'), { ssr: false });
+const LeadsKanban = dynamic(() => import('@/components/crm/LeadsKanban'), { ssr: false });
+const ComingSoonModal = dynamic(() => import('@/components/modals/ComingSoonModal'), { ssr: false });
+
+import type { LeadFormData } from '@/components/crm/LeadForm';
 import { calculateLeadScore, getLeadScoreColor, getScoreBasedPriority } from '@/lib/utils/leadScore';
 
 export interface Lead {
@@ -60,6 +66,7 @@ export default function LeadsPage() {
   
   // Search and filter states
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300); // Debounce search by 300ms
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterLeadSource, setFilterLeadSource] = useState<string>('');
   const [filterEmployee, setFilterEmployee] = useState<string>('');
@@ -94,8 +101,8 @@ export default function LeadsPage() {
     }
   }, []);
 
-  // Fetch leads from API
-  const fetchLeads = async () => {
+  // Fetch leads from API - memoized with useCallback
+  const fetchLeads = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -134,7 +141,7 @@ export default function LeadsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin, username]);
 
   // Load leads on mount and when user info changes
   useEffect(() => {
@@ -177,12 +184,12 @@ export default function LeadsPage() {
     return followUp.getTime() < today.getTime();
   };
 
-  // Filtered and sorted leads
+  // Filtered and sorted leads - use debounced search query
   const filteredLeads = useMemo(() => {
     let filtered = leads.filter(lead => {
-      // Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
+      // Search filter - use debounced query for better performance
+      if (debouncedSearchQuery) {
+        const query = debouncedSearchQuery.toLowerCase();
         const matchesSearch = 
           lead.lead_name?.toLowerCase().includes(query) ||
           lead.contact_person?.toLowerCase().includes(query) ||
@@ -239,7 +246,7 @@ export default function LeadsPage() {
     });
 
     return filtered;
-  }, [leads, searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
+  }, [leads, debouncedSearchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
   
   // Paginated leads for performance (only render visible items)
   const paginatedLeads = useMemo(() => {
@@ -256,29 +263,29 @@ export default function LeadsPage() {
   }, [searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
 
 
-  // Handle open modal for create
-  const handleOpenModal = () => {
+  // Handle open modal for create - memoized
+  const handleOpenModal = useCallback(() => {
     setEditingLead(null);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  // Handle open modal for edit
-  const handleEditLead = (lead: Lead) => {
+  // Handle open modal for edit - memoized
+  const handleEditLead = useCallback((lead: Lead) => {
     setEditingLead(lead);
     setIsModalOpen(true);
-  };
+  }, []);
 
-  // Handle view details
-  const handleViewDetails = (lead: Lead) => {
+  // Handle view details - memoized
+  const handleViewDetails = useCallback((lead: Lead) => {
     setSelectedLead(lead);
     setDetailsModalOpen(true);
-  };
+  }, []);
 
-  // Handle close modal
-  const handleCloseModal = () => {
+  // Handle close modal - memoized
+  const handleCloseModal = useCallback(() => {
     setIsModalOpen(false);
     setEditingLead(null);
-  };
+  }, []);
 
   // Handle form submit
   const handleSubmit = async (formData: LeadFormData) => {
@@ -371,8 +378,8 @@ export default function LeadsPage() {
     }
   };
 
-  // Handle status change (for Kanban drag-and-drop)
-  const handleStatusChange = async (leadId: number, newStatus: string) => {
+  // Handle status change (for Kanban drag-and-drop) - memoized
+  const handleStatusChange = useCallback(async (leadId: number, newStatus: string) => {
     try {
       const response = await fetch('/api/crm/leads/update', {
         method: 'POST',
@@ -403,16 +410,16 @@ export default function LeadsPage() {
       // Refresh leads to revert UI
       await fetchLeads();
     }
-  };
+  }, [fetchLeads]);
 
-  // Handle delete click
-  const handleDeleteClick = (lead: Lead) => {
+  // Handle delete click - memoized
+  const handleDeleteClick = useCallback((lead: Lead) => {
     setLeadToDelete(lead);
     setDeleteConfirmOpen(true);
-  };
+  }, []);
 
-  // Handle delete confirm
-  const handleDeleteConfirm = async () => {
+  // Handle delete confirm - memoized
+  const handleDeleteConfirm = useCallback(async () => {
     if (!leadToDelete) return;
 
     try {
@@ -439,16 +446,16 @@ export default function LeadsPage() {
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [fetchLeads]);
 
-  // Handle delete cancel
-  const handleDeleteCancel = () => {
+  // Handle delete cancel - memoized
+  const handleDeleteCancel = useCallback(() => {
     setDeleteConfirmOpen(false);
     setLeadToDelete(null);
-  };
+  }, []);
 
-  // Handle quick action click
-  const handleQuickAction = (action: string, lead: Lead) => {
+  // Handle quick action click - memoized
+  const handleQuickAction = useCallback((action: string, lead: Lead) => {
     // Note and followup are handled in the modal itself
     if (action === 'note' || action === 'followup') {
       // These are handled in LeadDetailsModal
@@ -464,10 +471,10 @@ export default function LeadsPage() {
       setComingSoonFeature(actionNames[action]);
       setComingSoonOpen(true);
     }
-  };
+  }, []);
 
-  // Handle priority change (save to database)
-  const handlePriorityChange = async (leadId: number, priority: Priority) => {
+  // Handle priority change (save to database) - memoized
+  const handlePriorityChange = useCallback(async (leadId: number, priority: Priority) => {
     try {
       // Optimistic update - update UI immediately
       setLeads(prevLeads => 
@@ -508,10 +515,10 @@ export default function LeadsPage() {
       await fetchLeads();
       setToast({ message: error.message || 'Failed to update priority', type: 'error' });
     }
-  };
+  }, [fetchLeads]);
 
-  // Get priority color
-  const getPriorityColor = (priority: Priority) => {
+  // Get priority color - memoized
+  const getPriorityColor = useCallback((priority: Priority) => {
     switch (priority) {
       case 'High Priority':
         return 'bg-red-500/20 text-red-300 border-red-500/30';
@@ -522,17 +529,17 @@ export default function LeadsPage() {
       default:
         return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
     }
-  };
+  }, []);
 
-  // Format date helper
-  const formatDate = (dateString: string | null | undefined) => {
+  // Format date helper - memoized
+  const formatDate = useCallback((dateString: string | null | undefined) => {
     if (!dateString) return '-';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
+  }, []);
 
-  // Get status color
-  const getStatusColor = (status: string | null) => {
+  // Get status color - memoized
+  const getStatusColor = useCallback((status: string | null) => {
     if (!status) return 'bg-slate-500/20 text-slate-300';
     switch (status) {
       case 'New':
@@ -553,10 +560,10 @@ export default function LeadsPage() {
       default:
         return 'bg-slate-500/20 text-slate-300';
     }
-  };
+  }, []);
 
-  // Prepare form data for editing
-  const getFormDataFromLead = (lead: Lead): LeadFormData => {
+  // Prepare form data for editing - memoized
+  const getFormDataFromLead = useCallback((lead: Lead): LeadFormData => {
     return {
       lead_name: lead.lead_name || '',
       contact_person: lead.contact_person || '',
@@ -571,7 +578,7 @@ export default function LeadsPage() {
       sub_accounts: lead.sub_accounts,
       contact_id: lead.contact_id,
     };
-  };
+  }, []);
 
   return (
     <>
