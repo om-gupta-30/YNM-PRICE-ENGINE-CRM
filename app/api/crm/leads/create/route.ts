@@ -83,24 +83,29 @@ export async function POST(request: NextRequest) {
     // CRITICAL: Empty string will violate the constraint - must be NULL or valid value
     let normalizedPriority: string | null = null;
     
-    // Only process if priority is provided and not empty
-    if (priority !== undefined && priority !== null && priority !== '') {
+    // Handle all possible priority values - be very strict
+    if (priority !== undefined && priority !== null) {
+      // Convert to string and trim
       const priorityStr = String(priority).trim();
-      // Exact matches only - database constraint is strict
+      
+      // Only accept exact matches - database constraint is strict
       if (priorityStr === 'High Priority') {
         normalizedPriority = 'High Priority';
       } else if (priorityStr === 'Medium Priority') {
         normalizedPriority = 'Medium Priority';
       } else if (priorityStr === 'Low Priority') {
         normalizedPriority = 'Low Priority';
+      } else if (priorityStr === '' || priorityStr === 'null' || priorityStr === 'undefined') {
+        // Explicitly handle empty strings and string representations of null/undefined
+        normalizedPriority = null;
       } else {
-        // Invalid priority value - set to null and exclude from insert
-        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}), excluding from insert`);
+        // Any other value is invalid - set to null
+        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}, string: "${priorityStr}"), setting to null`);
         normalizedPriority = null;
       }
     }
     
-    console.log('Normalized priority:', normalizedPriority);
+    console.log('Priority normalization:', { received: priority, type: typeof priority, normalized: normalizedPriority });
 
     // Determine assigned employee:
     // 1. If assigned_employee is explicitly provided, use it
@@ -161,15 +166,16 @@ export async function POST(request: NextRequest) {
       created_by: created_by || null,
     };
     
-    // CRITICAL: Only include priority if it's a valid value (not null, not empty string)
+    // CRITICAL: Only include priority if it's EXACTLY one of the three valid values
     // Database constraint requires: 'High Priority', 'Medium Priority', 'Low Priority', or NULL
-    // Empty string will violate the constraint, so we must exclude it completely
-    if (normalizedPriority !== null && normalizedPriority !== '' && 
-        (normalizedPriority === 'High Priority' || normalizedPriority === 'Medium Priority' || normalizedPriority === 'Low Priority')) {
+    // We MUST NOT include priority field at all if it's null/empty/invalid
+    // This allows the database to use NULL (default) which satisfies the constraint
+    const validPriorities = ['High Priority', 'Medium Priority', 'Low Priority'];
+    if (normalizedPriority && validPriorities.includes(normalizedPriority)) {
       insertData.priority = normalizedPriority;
     }
     // If normalizedPriority is null or invalid, we don't include it in the insert at all
-    // This allows the database to use its default (NULL) which satisfies the constraint
+    // This is the correct behavior - database will use NULL which satisfies the constraint
 
     // Log the insert data for debugging (without sensitive info)
     console.log('Inserting lead with data:', {
@@ -191,6 +197,20 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating lead:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
+      console.error('Insert data that caused error:', JSON.stringify(insertData, null, 2));
+      
+      // Provide helpful error message for constraint violations
+      if (error.message && error.message.includes('leads_priority_check')) {
+        return NextResponse.json(
+          { 
+            error: 'Invalid priority value. Priority must be "High Priority", "Medium Priority", "Low Priority", or empty.',
+            details: `Received priority: "${priority}", Normalized: "${normalizedPriority}", Valid values: High Priority, Medium Priority, Low Priority, or null`,
+            validValues: ['High Priority', 'Medium Priority', 'Low Priority', null]
+          },
+          { status: 400 }
+        );
+      }
+      
       return NextResponse.json({ 
         error: error.message || 'Failed to create lead',
         details: error.details || 'Check server logs for more information'
