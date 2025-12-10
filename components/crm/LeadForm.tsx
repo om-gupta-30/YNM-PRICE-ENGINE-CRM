@@ -476,10 +476,18 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     }
 
     // Sanitize form data - ensure priority is null or valid value (never empty string)
-    const sanitizedFormData: LeadFormData = {
+    // CRITICAL: Remove priority entirely if it's null to avoid any database constraint violations
+    const sanitizedFormData: any = {
       ...formData,
-      priority: formData.priority && LEAD_PRIORITIES.includes(formData.priority) ? formData.priority : null,
     };
+    
+    // Only include priority if it's a valid value
+    if (formData.priority && LEAD_PRIORITIES.includes(formData.priority)) {
+      sanitizedFormData.priority = formData.priority;
+    } else {
+      // Remove priority field completely if it's null or invalid
+      delete sanitizedFormData.priority;
+    }
 
     onSubmit(sanitizedFormData);
   };
@@ -799,8 +807,8 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                     ✓ Assigned to: {formData.assigned_employee}
                   </p>
                 ) : formData.accounts ? (
-                  <p className="text-xs text-slate-400 mt-1">
-                    Will auto-assign to the employee assigned to the selected account.
+                  <p className="text-xs text-red-400 mt-1 font-semibold">
+                    ⚠️ This account has no assigned employee. Please assign an employee to this account first before creating a lead.
                   </p>
                 ) : (
                   <p className="text-xs text-slate-400 mt-1">

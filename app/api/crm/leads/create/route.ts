@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
       created_by,
     } = body;
 
+    // Log incoming priority value for debugging
+    console.log('Received priority value:', priority, 'Type:', typeof priority);
+
     // Map accounts/sub_accounts to account_id/sub_account_id for database
     const account_id = accounts || null;
     const sub_account_id = sub_accounts || null;
@@ -76,9 +79,11 @@ export async function POST(request: NextRequest) {
     const supabase = createSupabaseServerClient();
 
     // Normalize priority value to match database constraint
-    // Database expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
-    // IMPORTANT: Must be exactly one of these values or null - no empty strings allowed
+    // Database expects: 'High Priority', 'Medium Priority', 'Low Priority', or NULL
+    // CRITICAL: Empty string will violate the constraint - must be NULL or valid value
     let normalizedPriority: string | null = null;
+    
+    // Only process if priority is provided and not empty
     if (priority !== undefined && priority !== null && priority !== '') {
       const priorityStr = String(priority).trim();
       // Exact matches only - database constraint is strict
@@ -89,13 +94,13 @@ export async function POST(request: NextRequest) {
       } else if (priorityStr === 'Low Priority') {
         normalizedPriority = 'Low Priority';
       } else {
-        // Invalid priority value - set to null (empty string would violate constraint)
-        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}), setting to null`);
+        // Invalid priority value - set to null and exclude from insert
+        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}), excluding from insert`);
         normalizedPriority = null;
       }
     }
-    // If priority is undefined, null, or empty string, normalizedPriority stays null (correct)
-    // CRITICAL: Do not pass empty string to database - it will violate the constraint
+    
+    console.log('Normalized priority:', normalizedPriority);
 
     // Determine assigned employee:
     // 1. If assigned_employee is explicitly provided, use it
@@ -140,7 +145,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build insert object - only include priority if it's not null
+    // Build insert object - NEVER include priority if it's null or empty
     const insertData: any = {
       lead_name: lead_name.trim(),
       contact_person: contact_person?.trim() || null,
@@ -156,11 +161,25 @@ export async function POST(request: NextRequest) {
       created_by: created_by || null,
     };
     
-    // Only include priority if it's a valid value (not null)
-    if (normalizedPriority !== null) {
+    // CRITICAL: Only include priority if it's a valid value (not null, not empty string)
+    // Database constraint requires: 'High Priority', 'Medium Priority', 'Low Priority', or NULL
+    // Empty string will violate the constraint, so we must exclude it completely
+    if (normalizedPriority !== null && normalizedPriority !== '' && 
+        (normalizedPriority === 'High Priority' || normalizedPriority === 'Medium Priority' || normalizedPriority === 'Low Priority')) {
       insertData.priority = normalizedPriority;
     }
-    // If normalizedPriority is null, we don't include it in the insert (database will use default/null)
+    // If normalizedPriority is null or invalid, we don't include it in the insert at all
+    // This allows the database to use its default (NULL) which satisfies the constraint
+
+    // Log the insert data for debugging (without sensitive info)
+    console.log('Inserting lead with data:', {
+      lead_name: insertData.lead_name,
+      account_id: insertData.account_id,
+      sub_account_id: insertData.sub_account_id,
+      assigned_employee: insertData.assigned_employee,
+      priority: insertData.priority || 'NULL (excluded)',
+      has_priority_field: 'priority' in insertData,
+    });
 
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase
@@ -171,7 +190,11 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error creating lead:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      return NextResponse.json({ 
+        error: error.message || 'Failed to create lead',
+        details: error.details || 'Check server logs for more information'
+      }, { status: 500 });
     }
 
     // Log activity for lead creation

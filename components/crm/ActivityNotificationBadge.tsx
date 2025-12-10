@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 
 interface ActivityNotification {
@@ -26,6 +27,7 @@ export default function ActivityNotificationBadge({
   isAdmin,
   onMarkAsSeen,
 }: ActivityNotificationBadgeProps) {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<ActivityNotification[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -87,7 +89,11 @@ export default function ActivityNotificationBadge({
     }
   }, [showDropdown]);
 
-  const handleMarkAsSeen = async (activityIds: number[]) => {
+  const handleMarkAsSeen = async (activityIds: number[], e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation(); // Prevent navigation when clicking "Seen" button
+    }
+    
     try {
       const response = await fetch('/api/crm/activity-notifications', {
         method: 'PATCH',
@@ -105,20 +111,45 @@ export default function ActivityNotificationBadge({
         setNotifications((prev) =>
           prev.filter((notif) => !activityIds.includes(notif.id))
         );
+        // Refresh notifications to ensure UI is updated
+        await fetchNotifications();
         if (onMarkAsSeen) {
           onMarkAsSeen();
         }
+      } else {
+        console.error('Failed to mark notifications as seen:', data.error);
       }
     } catch (error) {
       console.error('Error marking notifications as seen:', error);
     }
   };
 
-  const handleMarkAllAsSeen = () => {
+  const handleMarkAllAsSeen = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent any navigation
     if (notifications.length > 0) {
       const activityIds = notifications.map((n) => n.id);
-      handleMarkAsSeen(activityIds);
+      handleMarkAsSeen(activityIds, e);
     }
+  };
+
+  // Navigate to the relevant page when clicking on a notification
+  const handleNotificationClick = (notification: ActivityNotification) => {
+    const metadata = notification.metadata || {};
+    
+    // Determine the route based on section type and metadata
+    if (sectionType === 'accounts' && metadata.account_id) {
+      router.push(`/crm/accounts/${metadata.account_id}`);
+    } else if (sectionType === 'tasks' && metadata.task_id) {
+      router.push(`/crm/tasks`);
+    } else if (sectionType === 'leads' && metadata.lead_id) {
+      router.push(`/crm/leads`);
+    } else {
+      // Fallback to the section page
+      router.push(`/crm/${sectionType}`);
+    }
+    
+    // Close dropdown after navigation
+    setShowDropdown(false);
   };
 
   const unreadCount = notifications.length;
@@ -139,6 +170,7 @@ export default function ActivityNotificationBadge({
         right: `${dropdownPosition.right}px`,
         zIndex: 999999,
       }}
+      ref={dropdownRef}
       onClick={(e) => e.stopPropagation()}
     >
       <div className="p-3 border-b border-slate-700 flex items-center justify-between">
@@ -148,7 +180,7 @@ export default function ActivityNotificationBadge({
         {unreadCount > 0 && (
           <button
             onClick={handleMarkAllAsSeen}
-            className="text-xs text-premium-gold hover:text-amber-400 transition-colors"
+            className="text-xs text-premium-gold hover:text-amber-400 transition-colors px-2 py-1 rounded hover:bg-slate-700/50"
           >
             Mark all as seen
           </button>
@@ -164,7 +196,8 @@ export default function ActivityNotificationBadge({
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className="p-3 hover:bg-slate-700/50 transition-colors group"
+                className="p-3 hover:bg-slate-700/50 transition-colors group cursor-pointer"
+                onClick={() => handleNotificationClick(notification)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -178,7 +211,7 @@ export default function ActivityNotificationBadge({
                     </div>
                   </div>
                   <button
-                    onClick={() => handleMarkAsSeen([notification.id])}
+                    onClick={(e) => handleMarkAsSeen([notification.id], e)}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-premium-gold hover:text-amber-400 px-2 py-1 rounded hover:bg-slate-600/50"
                     title="Mark as seen"
                   >
@@ -195,11 +228,10 @@ export default function ActivityNotificationBadge({
 
   return (
     <>
-      <div className="relative inline-block" ref={dropdownRef}>
+      <div className="relative inline-block">
         <button
           ref={buttonRef}
           onClick={() => setShowDropdown(!showDropdown)}
-          onMouseEnter={() => setShowDropdown(true)}
           className="relative inline-flex items-center justify-center"
         >
           <span className="relative">
