@@ -99,6 +99,31 @@ export async function POST(request: NextRequest) {
     }
     // If priority is undefined, null, or empty string, normalizedPriority stays null (correct)
 
+    // Determine assigned employee:
+    // 1. If assigned_employee is explicitly provided, use it
+    // 2. If admin creates lead and no assigned_employee provided, auto-assign to account's assigned employee
+    // 3. Otherwise, leave as null
+    let finalAssignedEmployee = assigned_employee || null;
+    
+    // If no assigned employee is provided and account_id exists, check if account has an assigned employee
+    if (!finalAssignedEmployee && account_id) {
+      try {
+        const { data: accountData, error: accountError } = await supabase
+          .from('accounts')
+          .select('assigned_employee')
+          .eq('id', account_id)
+          .single();
+        
+        if (!accountError && accountData && accountData.assigned_employee) {
+          // Auto-assign lead to the employee assigned to the account
+          finalAssignedEmployee = accountData.assigned_employee;
+        }
+      } catch (err) {
+        console.warn('Error fetching account assigned employee:', err);
+        // Continue without auto-assignment if there's an error
+      }
+    }
+
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase
       .from('leads')
@@ -111,7 +136,7 @@ export async function POST(request: NextRequest) {
         lead_source: lead_source || null,
         status: status || 'New',
         priority: normalizedPriority,
-        assigned_employee: assigned_employee || null,
+        assigned_employee: finalAssignedEmployee,
         account_id: account_id,
         sub_account_id: sub_account_id,
         contact_id: contact_id || null,
@@ -126,11 +151,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Log activity for lead creation
-    if (created_by || assigned_employee) {
+    if (created_by || finalAssignedEmployee) {
       try {
         await logActivity({
           account_id: account_id,
-          employee_id: created_by || assigned_employee || 'System',
+          employee_id: created_by || finalAssignedEmployee || 'System',
           activity_type: 'create',
           description: `Lead created: ${lead_name.trim()}`,
           metadata: {

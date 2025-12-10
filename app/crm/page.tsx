@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 import CoachButton from '@/components/CoachButton';
+import ActivityNotificationBadge from '@/components/crm/ActivityNotificationBadge';
 
 // Interfaces
 interface WeeklyInsights {
@@ -319,21 +320,42 @@ export default function CRMDashboard() {
             {/* Quick Stats Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
-                <div className="text-3xl mb-2">📊</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-3xl">📊</div>
+                  <ActivityNotificationBadge
+                    sectionType="accounts"
+                    employee={username}
+                    isAdmin={isAdmin}
+                  />
+                </div>
                 <p className="text-slate-400 text-sm">Go to</p>
                 <button onClick={() => router.push('/crm/accounts')} className="text-white font-semibold hover:text-premium-gold transition-colors">
                   Accounts →
                 </button>
               </div>
               <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
-                <div className="text-3xl mb-2">✅</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-3xl">✅</div>
+                  <ActivityNotificationBadge
+                    sectionType="tasks"
+                    employee={username}
+                    isAdmin={isAdmin}
+                  />
+                </div>
                 <p className="text-slate-400 text-sm">Go to</p>
                 <button onClick={() => router.push('/crm/tasks')} className="text-white font-semibold hover:text-premium-gold transition-colors">
                   Tasks →
                 </button>
               </div>
               <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 border border-slate-700/50">
-                <div className="text-3xl mb-2">🎯</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-3xl">🎯</div>
+                  <ActivityNotificationBadge
+                    sectionType="leads"
+                    employee={username}
+                    isAdmin={isAdmin}
+                  />
+                </div>
                 <p className="text-slate-400 text-sm">Go to</p>
                 <button onClick={() => router.push('/crm/leads')} className="text-white font-semibold hover:text-premium-gold transition-colors">
                   Leads →

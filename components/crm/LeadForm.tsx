@@ -27,7 +27,7 @@ interface LeadFormProps {
   mode?: 'create' | 'edit';
 }
 
-const LEAD_SOURCES = ['Website', 'Referral', 'Inbound Call', 'Existing Customer', 'Marketing', 'Other'];
+const LEAD_SOURCES = ['Website', 'Referral', 'Inbound Call', 'Existing Customer', 'Marketing', 'Email', 'India Mart', 'Dollar Business', 'WhatsApp', 'Exhibition', 'Other'];
 const LEAD_STATUSES = ['New', 'In Progress', 'Quotation Sent', 'Follow-up', 'Closed', 'Lost'];
 const LEAD_PRIORITIES = ['High Priority', 'Medium Priority', 'Low Priority'];
 
@@ -67,7 +67,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
   const [contacts, setContacts] = useState<Array<{ id: number; name: string; email: string | null; phone: string | null; designation: string | null }>>([]);
   const [employees, setEmployees] = useState<string[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [username, setUsername] = useState('');
   const hasInitializedRef = useRef(false);
+
+  // Load user info on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+      setUsername(localStorage.getItem('username') || '');
+    }
+  }, []);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -100,6 +110,9 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
           setLoadingData(false);
         });
       } else {
+        // For sales employees creating a new lead, auto-assign to themselves
+        const autoAssignedEmployee = !isAdmin && username ? username : '';
+        
         setFormData({
           lead_name: '',
           contact_person: '',
@@ -109,7 +122,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
           lead_source: '',
           status: 'New',
           priority: null,
-          assigned_employee: '',
+          assigned_employee: autoAssignedEmployee,
           accounts: null,
           sub_accounts: null,
           contact_id: null,
@@ -120,7 +133,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         setLoadingData(false);
       }
     }
-  }, [isOpen, initialData, mode]);
+  }, [isOpen, initialData, mode, isAdmin, username]);
 
   // Load accounts and employees on mount
   useEffect(() => {
@@ -132,11 +145,20 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         console.error('Error loading initial data:', error);
       });
     }
-  }, [isOpen]);
+  }, [isOpen, isAdmin, username]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadAccounts = async () => {
     try {
-      const response = await fetch('/api/accounts', {
+      // Build query params based on user role
+      const params = new URLSearchParams();
+      if (!isAdmin && username) {
+        params.append('employee', username);
+      }
+      if (isAdmin) {
+        params.append('isAdmin', 'true');
+      }
+      
+      const response = await fetch(`/api/accounts?${params.toString()}`, {
         cache: 'no-store', // Ensure fresh data
       });
       const data = await response.json();
@@ -207,25 +229,31 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const loadEmployees = async () => {
     try {
-      // Fetch employees from the employees table
-      // If no employees table exists, we'll use a simple list
-      const response = await fetch('/api/employees');
+      // For admins, fetch only sales employees
+      // For non-admins, we don't need to load employees (they can't assign)
+      if (!isAdmin) {
+        setEmployees([]);
+        return;
+      }
+      
+      // Fetch only sales employees for admin
+      const response = await fetch('/api/employees?type=sales');
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.employees) {
           setEmployees(data.employees);
         } else {
-          // Fallback: use new employee names
-          setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
+          // Fallback: use sales employee names only
+          setEmployees(['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
         }
       } else {
-        // Fallback list
-        setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
+        // Fallback list (sales employees only)
+        setEmployees(['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
       }
     } catch (error) {
       console.error('Error loading employees:', error);
-      // Fallback list
-      setEmployees(['Admin', 'Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
+      // Fallback list (sales employees only)
+      setEmployees(['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet']);
     }
   };
 
@@ -391,9 +419,17 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                 className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50 disabled:cursor-wait"
               >
                 <option value="">Select Account *</option>
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id}>{acc.account_name}</option>
-                ))}
+                {accounts.length === 0 && !loadingData ? (
+                  <option value="" disabled>
+                    {!isAdmin && username 
+                      ? `No accounts assigned to you. Please contact admin to assign accounts.`
+                      : 'No accounts available. Please create an account first.'}
+                  </option>
+                ) : (
+                  accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.account_name}</option>
+                  ))
+                )}
                 {/* Show selected account even if not in list yet (for edit mode) */}
                 {formData.accounts && !accounts.find(a => a.id === formData.accounts) && (
                   <option value={formData.accounts} disabled>
@@ -401,7 +437,14 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                   </option>
                 )}
               </select>
-              {!formData.accounts && (
+              {!formData.accounts && accounts.length === 0 && !loadingData && (
+                <p className="text-xs text-yellow-400 mt-1">
+                  {!isAdmin && username 
+                    ? '⚠️ No accounts are assigned to you. Please contact admin to assign accounts before creating leads.'
+                    : '⚠️ No accounts available. Please create an account first.'}
+                </p>
+              )}
+              {!formData.accounts && accounts.length > 0 && (
                 <p className="text-xs text-slate-400 mt-1">Please select an account first</p>
               )}
             </div>
@@ -628,22 +671,27 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               )}
             </div>
 
-            {/* Assigned Employee */}
-            <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Assigned Employee
-              </label>
-              <select
-                value={formData.assigned_employee || ''}
-                onChange={(e) => handleInputChange('assigned_employee', e.target.value)}
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
-              >
-                <option value="">Select Employee</option>
-                {employees.map(emp => (
-                  <option key={emp} value={emp}>{emp}</option>
-                ))}
-              </select>
-            </div>
+            {/* Assigned Employee - Only visible to admins */}
+            {isAdmin && (
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Assigned Employee
+                </label>
+                <select
+                  value={formData.assigned_employee || ''}
+                  onChange={(e) => handleInputChange('assigned_employee', e.target.value)}
+                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+                >
+                  <option value="">Select Employee (Optional - will auto-assign to account employee)</option>
+                  {employees.map(emp => (
+                    <option key={emp} value={emp}>{emp}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">
+                  If not selected, lead will be auto-assigned to the employee assigned to the selected account.
+                </p>
+              </div>
+            )}
 
 
             {/* Created By - Auto-filled, read-only */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { PricingAnalysisOutput } from '@/lib/services/aiPricingAnalysis';
 
 // Alias for backward compatibility
@@ -25,6 +25,22 @@ export default function AIPricingModal({
   priceUnit = '₹',
   confidenceLevel,
 }: AIPricingModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      // Small delay to ensure modal is rendered
+      setTimeout(() => {
+        modalRef.current?.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'nearest'
+        });
+      }, 100);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleApply = (price?: number) => {
@@ -54,7 +70,10 @@ export default function AIPricingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-purple-500/30 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div 
+        ref={modalRef}
+        className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-purple-500/30 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+      >
         {/* Header */}
         <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-blue-600 px-6 py-4 rounded-t-2xl flex items-center justify-between">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">

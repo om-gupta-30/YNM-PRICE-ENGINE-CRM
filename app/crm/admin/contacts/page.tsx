@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 
 interface Contact {
@@ -27,16 +27,42 @@ interface Contact {
 
 export default function AdminContactsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Filter states
-  const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
-  const [filterSubAccountId, setFilterSubAccountId] = useState<number | null>(null);
-  const [filterCallStatus, setFilterCallStatus] = useState<string>('all');
-  const [filterEmployeeId, setFilterEmployeeId] = useState<string>('all');
+  // Helper function to parse URL params
+  const getInitialFiltersFromURL = () => {
+    if (!searchParams) {
+      return {
+        accountId: null,
+        subAccountId: null,
+        callStatus: 'all',
+        employeeId: 'all',
+      };
+    }
+    return {
+      accountId: searchParams.get('accountId') ? parseInt(searchParams.get('accountId')!) : null,
+      subAccountId: searchParams.get('subAccountId') ? parseInt(searchParams.get('subAccountId')!) : null,
+      callStatus: searchParams.get('callStatus') || 'all',
+      employeeId: searchParams.get('employeeId') || 'all',
+    };
+  };
+
+  // Active filter states (applied filters) - initialized from URL
+  const initialFilters = getInitialFiltersFromURL();
+  const [filterAccountId, setFilterAccountId] = useState<number | null>(initialFilters.accountId);
+  const [filterSubAccountId, setFilterSubAccountId] = useState<number | null>(initialFilters.subAccountId);
+  const [filterCallStatus, setFilterCallStatus] = useState<string>(initialFilters.callStatus);
+  const [filterEmployeeId, setFilterEmployeeId] = useState<string>(initialFilters.employeeId);
+
+  // Pending filter states (what user is selecting, not yet applied)
+  const [pendingFilterAccountId, setPendingFilterAccountId] = useState<number | null>(initialFilters.accountId);
+  const [pendingFilterSubAccountId, setPendingFilterSubAccountId] = useState<number | null>(initialFilters.subAccountId);
+  const [pendingFilterCallStatus, setPendingFilterCallStatus] = useState<string>(initialFilters.callStatus);
+  const [pendingFilterEmployeeId, setPendingFilterEmployeeId] = useState<string>(initialFilters.employeeId);
 
   // Sort states
   type SortField = 'name' | 'accountName' | 'subAccountName' | null;
@@ -59,6 +85,49 @@ export default function AdminContactsPage() {
     }
   }, [router]);
 
+  // Apply pending filters (called when user clicks confirm)
+  const applyFilters = () => {
+    setFilterAccountId(pendingFilterAccountId);
+    setFilterSubAccountId(pendingFilterSubAccountId);
+    setFilterCallStatus(pendingFilterCallStatus);
+    setFilterEmployeeId(pendingFilterEmployeeId);
+    
+    // Update URL with new filters
+    const params = new URLSearchParams();
+    if (pendingFilterAccountId) params.set('accountId', pendingFilterAccountId.toString());
+    if (pendingFilterSubAccountId) params.set('subAccountId', pendingFilterSubAccountId.toString());
+    if (pendingFilterCallStatus !== 'all') params.set('callStatus', pendingFilterCallStatus);
+    if (pendingFilterEmployeeId !== 'all') params.set('employeeId', pendingFilterEmployeeId);
+    
+    // Update URL without page reload
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  };
+
+  // Check if there are pending filter changes
+  const hasPendingFilterChanges = useMemo(() => {
+    return (
+      pendingFilterAccountId !== filterAccountId ||
+      pendingFilterSubAccountId !== filterSubAccountId ||
+      pendingFilterCallStatus !== filterCallStatus ||
+      pendingFilterEmployeeId !== filterEmployeeId
+    );
+  }, [pendingFilterAccountId, pendingFilterSubAccountId, pendingFilterCallStatus, pendingFilterEmployeeId, filterAccountId, filterSubAccountId, filterCallStatus, filterEmployeeId]);
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setPendingFilterAccountId(null);
+    setPendingFilterSubAccountId(null);
+    setPendingFilterCallStatus('all');
+    setPendingFilterEmployeeId('all');
+    // Also clear active filters immediately
+    setFilterAccountId(null);
+    setFilterSubAccountId(null);
+    setFilterCallStatus('all');
+    setFilterEmployeeId('all');
+    router.replace(window.location.pathname, { scroll: false });
+  };
+
   useEffect(() => {
     if (isAdmin) {
       fetchContacts();
@@ -68,13 +137,15 @@ export default function AdminContactsPage() {
   }, [isAdmin, filterAccountId, filterSubAccountId, filterCallStatus, filterEmployeeId]);
 
   useEffect(() => {
-    if (filterAccountId) {
-      fetchSubAccountsForAccount(filterAccountId);
+    if (pendingFilterAccountId) {
+      fetchSubAccountsForAccount(pendingFilterAccountId);
     } else {
       setSubAccounts([]);
-      setFilterSubAccountId(null);
+      if (!pendingFilterAccountId) {
+        setPendingFilterSubAccountId(null);
+      }
     }
-  }, [filterAccountId]);
+  }, [pendingFilterAccountId]);
 
   const fetchContacts = async () => {
     try {
@@ -194,16 +265,24 @@ export default function AdminContactsPage() {
 
           {/* Filters */}
           <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 mb-6">
-            <h2 className="text-lg font-bold text-white mb-4">Filters</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Filters</h2>
+              {hasPendingFilterChanges && (
+                <span className="text-xs text-yellow-400 font-semibold animate-pulse">
+                  ⚠️ Changes pending
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Account Filter */}
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Account</label>
                 <select
-                  value={filterAccountId || ''}
+                  value={pendingFilterAccountId || ''}
                   onChange={(e) => {
-                    setFilterAccountId(e.target.value ? parseInt(e.target.value) : null);
-                    setFilterSubAccountId(null);
+                    const newAccountId = e.target.value ? parseInt(e.target.value) : null;
+                    setPendingFilterAccountId(newAccountId);
+                    setPendingFilterSubAccountId(null);
                   }}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
@@ -220,9 +299,9 @@ export default function AdminContactsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Sub-Account</label>
                 <select
-                  value={filterSubAccountId || ''}
-                  onChange={(e) => setFilterSubAccountId(e.target.value ? parseInt(e.target.value) : null)}
-                  disabled={!filterAccountId}
+                  value={pendingFilterSubAccountId || ''}
+                  onChange={(e) => setPendingFilterSubAccountId(e.target.value ? parseInt(e.target.value) : null)}
+                  disabled={!pendingFilterAccountId}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">All Sub-Accounts</option>
@@ -238,8 +317,8 @@ export default function AdminContactsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Call Status</label>
                 <select
-                  value={filterCallStatus}
-                  onChange={(e) => setFilterCallStatus(e.target.value)}
+                  value={pendingFilterCallStatus}
+                  onChange={(e) => setPendingFilterCallStatus(e.target.value)}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
                   <option value="all">All Statuses</option>
@@ -255,8 +334,8 @@ export default function AdminContactsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Created By</label>
                 <select
-                  value={filterEmployeeId}
-                  onChange={(e) => setFilterEmployeeId(e.target.value)}
+                  value={pendingFilterEmployeeId}
+                  onChange={(e) => setPendingFilterEmployeeId(e.target.value)}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
                   <option value="all">All Employees</option>
@@ -267,21 +346,26 @@ export default function AdminContactsPage() {
                   ))}
                 </select>
               </div>
-
-              {/* Clear Filters */}
-              <div className="flex items-end">
+            </div>
+            
+            {/* Filter Actions */}
+            <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-700/50">
+              <button
+                onClick={applyFilters}
+                disabled={!hasPendingFilterChanges}
+                className="px-6 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Apply Filters</span>
+              </button>
+              {(filterAccountId || filterSubAccountId || filterCallStatus !== 'all' || filterEmployeeId !== 'all') && (
                 <button
-                  onClick={() => {
-                    setFilterAccountId(null);
-                    setFilterSubAccountId(null);
-                    setFilterCallStatus('all');
-                    setFilterEmployeeId('all');
-                  }}
-                  className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
+                  onClick={clearAllFilters}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
                 >
-                  Clear Filters
+                  Clear All Filters
                 </button>
-              </div>
+              )}
             </div>
           </div>
 

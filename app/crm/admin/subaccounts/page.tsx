@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
 import StateCitySelect from '@/components/forms/StateCitySelect';
@@ -30,19 +30,54 @@ interface SubAccount {
 
 export default function AdminSubAccountsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [subAccounts, setSubAccounts] = useState<SubAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  // Filter states
-  const [filterAccountId, setFilterAccountId] = useState<number | null>(null);
-  const [filterStateId, setFilterStateId] = useState<number | null>(null);
-  const [filterCityId, setFilterCityId] = useState<number | null>(null);
-  const [filterOfficeType, setFilterOfficeType] = useState<string>('all');
-  const [filterIsActive, setFilterIsActive] = useState<string>('all');
-  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(null);
-  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(null);
+  // Helper function to parse URL params
+  const getInitialFiltersFromURL = () => {
+    if (!searchParams) {
+      return {
+        accountId: null,
+        stateId: null,
+        cityId: null,
+        officeType: 'all',
+        isActive: 'all',
+        industryId: null,
+        subIndustryId: null,
+      };
+    }
+    return {
+      accountId: searchParams.get('accountId') ? parseInt(searchParams.get('accountId')!) : null,
+      stateId: searchParams.get('stateId') ? parseInt(searchParams.get('stateId')!) : null,
+      cityId: searchParams.get('cityId') ? parseInt(searchParams.get('cityId')!) : null,
+      officeType: searchParams.get('officeType') || 'all',
+      isActive: searchParams.get('isActive') || 'all',
+      industryId: searchParams.get('industryId') ? parseInt(searchParams.get('industryId')!) : null,
+      subIndustryId: searchParams.get('subIndustryId') ? parseInt(searchParams.get('subIndustryId')!) : null,
+    };
+  };
+
+  // Active filter states (applied filters) - initialized from URL
+  const initialFilters = getInitialFiltersFromURL();
+  const [filterAccountId, setFilterAccountId] = useState<number | null>(initialFilters.accountId);
+  const [filterStateId, setFilterStateId] = useState<number | null>(initialFilters.stateId);
+  const [filterCityId, setFilterCityId] = useState<number | null>(initialFilters.cityId);
+  const [filterOfficeType, setFilterOfficeType] = useState<string>(initialFilters.officeType);
+  const [filterIsActive, setFilterIsActive] = useState<string>(initialFilters.isActive);
+  const [filterIndustryId, setFilterIndustryId] = useState<number | null>(initialFilters.industryId);
+  const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(initialFilters.subIndustryId);
+
+  // Pending filter states (what user is selecting, not yet applied)
+  const [pendingFilterAccountId, setPendingFilterAccountId] = useState<number | null>(initialFilters.accountId);
+  const [pendingFilterStateId, setPendingFilterStateId] = useState<number | null>(initialFilters.stateId);
+  const [pendingFilterCityId, setPendingFilterCityId] = useState<number | null>(initialFilters.cityId);
+  const [pendingFilterOfficeType, setPendingFilterOfficeType] = useState<string>(initialFilters.officeType);
+  const [pendingFilterIsActive, setPendingFilterIsActive] = useState<string>(initialFilters.isActive);
+  const [pendingFilterIndustryId, setPendingFilterIndustryId] = useState<number | null>(initialFilters.industryId);
+  const [pendingFilterSubIndustryId, setPendingFilterSubIndustryId] = useState<number | null>(initialFilters.subIndustryId);
 
   // Sort states
   type SortField = 'subAccountName' | 'accountName' | null;
@@ -66,6 +101,64 @@ export default function AdminSubAccountsPage() {
     }
   }, [router]);
 
+  // Apply pending filters (called when user clicks confirm)
+  const applyFilters = () => {
+    setFilterAccountId(pendingFilterAccountId);
+    setFilterStateId(pendingFilterStateId);
+    setFilterCityId(pendingFilterCityId);
+    setFilterOfficeType(pendingFilterOfficeType);
+    setFilterIsActive(pendingFilterIsActive);
+    setFilterIndustryId(pendingFilterIndustryId);
+    setFilterSubIndustryId(pendingFilterSubIndustryId);
+    
+    // Update URL with new filters
+    const params = new URLSearchParams();
+    if (pendingFilterAccountId) params.set('accountId', pendingFilterAccountId.toString());
+    if (pendingFilterStateId) params.set('stateId', pendingFilterStateId.toString());
+    if (pendingFilterCityId) params.set('cityId', pendingFilterCityId.toString());
+    if (pendingFilterOfficeType !== 'all') params.set('officeType', pendingFilterOfficeType);
+    if (pendingFilterIsActive !== 'all') params.set('isActive', pendingFilterIsActive);
+    if (pendingFilterIndustryId) params.set('industryId', pendingFilterIndustryId.toString());
+    if (pendingFilterSubIndustryId) params.set('subIndustryId', pendingFilterSubIndustryId.toString());
+    
+    // Update URL without page reload
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    router.replace(newUrl, { scroll: false });
+  };
+
+  // Check if there are pending filter changes
+  const hasPendingFilterChanges = useMemo(() => {
+    return (
+      pendingFilterAccountId !== filterAccountId ||
+      pendingFilterStateId !== filterStateId ||
+      pendingFilterCityId !== filterCityId ||
+      pendingFilterOfficeType !== filterOfficeType ||
+      pendingFilterIsActive !== filterIsActive ||
+      pendingFilterIndustryId !== filterIndustryId ||
+      pendingFilterSubIndustryId !== filterSubIndustryId
+    );
+  }, [pendingFilterAccountId, pendingFilterStateId, pendingFilterCityId, pendingFilterOfficeType, pendingFilterIsActive, pendingFilterIndustryId, pendingFilterSubIndustryId, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId]);
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setPendingFilterAccountId(null);
+    setPendingFilterStateId(null);
+    setPendingFilterCityId(null);
+    setPendingFilterOfficeType('all');
+    setPendingFilterIsActive('all');
+    setPendingFilterIndustryId(null);
+    setPendingFilterSubIndustryId(null);
+    // Also clear active filters immediately
+    setFilterAccountId(null);
+    setFilterStateId(null);
+    setFilterCityId(null);
+    setFilterOfficeType('all');
+    setFilterIsActive('all');
+    setFilterIndustryId(null);
+    setFilterSubIndustryId(null);
+    router.replace(window.location.pathname, { scroll: false });
+  };
+
   useEffect(() => {
     if (isAdmin) {
       fetchSubAccounts();
@@ -76,19 +169,22 @@ export default function AdminSubAccountsPage() {
   }, [isAdmin, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId]);
 
   useEffect(() => {
-    if (filterStateId) {
-      fetchCities(filterStateId);
+    if (pendingFilterStateId) {
+      fetchCities(pendingFilterStateId);
     } else {
       setCities([]);
+      if (!pendingFilterStateId) {
+        setPendingFilterCityId(null);
+      }
     }
-  }, [filterStateId]);
+  }, [pendingFilterStateId]);
 
   useEffect(() => {
     // Reset sub-industry filter when industry changes
-    if (!filterIndustryId) {
-      setFilterSubIndustryId(null);
+    if (!pendingFilterIndustryId) {
+      setPendingFilterSubIndustryId(null);
     }
-  }, [filterIndustryId]);
+  }, [pendingFilterIndustryId]);
 
   const fetchSubAccounts = async () => {
     try {
@@ -231,14 +327,21 @@ export default function AdminSubAccountsPage() {
 
           {/* Filters */}
           <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 mb-6">
-            <h2 className="text-lg font-bold text-white mb-4">Filters</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white">Filters</h2>
+              {hasPendingFilterChanges && (
+                <span className="text-xs text-yellow-400 font-semibold animate-pulse">
+                  ⚠️ Changes pending
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {/* Account Filter */}
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Account</label>
                 <select
-                  value={filterAccountId || ''}
-                  onChange={(e) => setFilterAccountId(e.target.value ? parseInt(e.target.value) : null)}
+                  value={pendingFilterAccountId || ''}
+                  onChange={(e) => setPendingFilterAccountId(e.target.value ? parseInt(e.target.value) : null)}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
                   <option value="">All Accounts</option>
@@ -254,10 +357,11 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">State</label>
                 <select
-                  value={filterStateId || ''}
+                  value={pendingFilterStateId || ''}
                   onChange={(e) => {
-                    setFilterStateId(e.target.value ? parseInt(e.target.value) : null);
-                    setFilterCityId(null);
+                    const newStateId = e.target.value ? parseInt(e.target.value) : null;
+                    setPendingFilterStateId(newStateId);
+                    setPendingFilterCityId(null);
                   }}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
@@ -274,9 +378,9 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">City</label>
                 <select
-                  value={filterCityId || ''}
-                  onChange={(e) => setFilterCityId(e.target.value ? parseInt(e.target.value) : null)}
-                  disabled={!filterStateId}
+                  value={pendingFilterCityId || ''}
+                  onChange={(e) => setPendingFilterCityId(e.target.value ? parseInt(e.target.value) : null)}
+                  disabled={!pendingFilterStateId}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">All Cities</option>
@@ -292,8 +396,8 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Office Type</label>
                 <select
-                  value={filterOfficeType}
-                  onChange={(e) => setFilterOfficeType(e.target.value)}
+                  value={pendingFilterOfficeType}
+                  onChange={(e) => setPendingFilterOfficeType(e.target.value)}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
                   <option value="all">All Types</option>
@@ -309,8 +413,8 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Status</label>
                 <select
-                  value={filterIsActive}
-                  onChange={(e) => setFilterIsActive(e.target.value)}
+                  value={pendingFilterIsActive}
+                  onChange={(e) => setPendingFilterIsActive(e.target.value)}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
                   <option value="all">All</option>
@@ -323,10 +427,11 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Industry</label>
                 <select
-                  value={filterIndustryId || ''}
+                  value={pendingFilterIndustryId || ''}
                   onChange={(e) => {
-                    setFilterIndustryId(e.target.value ? parseInt(e.target.value) : null);
-                    setFilterSubIndustryId(null);
+                    const newIndustryId = e.target.value ? parseInt(e.target.value) : null;
+                    setPendingFilterIndustryId(newIndustryId);
+                    setPendingFilterSubIndustryId(null);
                   }}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                 >
@@ -343,37 +448,39 @@ export default function AdminSubAccountsPage() {
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Sub-Industry</label>
                 <select
-                  value={filterSubIndustryId || ''}
-                  onChange={(e) => setFilterSubIndustryId(e.target.value ? parseInt(e.target.value) : null)}
-                  disabled={!filterIndustryId}
+                  value={pendingFilterSubIndustryId || ''}
+                  onChange={(e) => setPendingFilterSubIndustryId(e.target.value ? parseInt(e.target.value) : null)}
+                  disabled={!pendingFilterIndustryId}
                   className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <option value="">All Sub-Industries</option>
-                  {filterIndustryId && industries.find(i => i.id === filterIndustryId)?.subIndustries.map((subIndustry) => (
+                  {pendingFilterIndustryId && industries.find(i => i.id === pendingFilterIndustryId)?.subIndustries.map((subIndustry) => (
                     <option key={subIndustry.id} value={subIndustry.id}>
                       {subIndustry.name}
                     </option>
                   ))}
                 </select>
               </div>
-
-              {/* Clear Filters */}
-              <div className="flex items-end">
+            </div>
+            
+            {/* Filter Actions */}
+            <div className="flex items-center gap-3 mt-4 pt-4 border-t border-slate-700/50">
+              <button
+                onClick={applyFilters}
+                disabled={!hasPendingFilterChanges}
+                className="px-6 py-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <span>✓</span>
+                <span>Apply Filters</span>
+              </button>
+              {(filterAccountId || filterStateId || filterCityId || filterOfficeType !== 'all' || filterIsActive !== 'all' || filterIndustryId || filterSubIndustryId) && (
                 <button
-                  onClick={() => {
-                    setFilterAccountId(null);
-                    setFilterStateId(null);
-                    setFilterCityId(null);
-                    setFilterOfficeType('all');
-                    setFilterIsActive('all');
-                    setFilterIndustryId(null);
-                    setFilterSubIndustryId(null);
-                  }}
-                  className="w-full px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
+                  onClick={clearAllFilters}
+                  className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
                 >
-                  Clear Filters
+                  Clear All Filters
                 </button>
-              </div>
+              )}
             </div>
           </div>
 

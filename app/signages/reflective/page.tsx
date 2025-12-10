@@ -129,6 +129,16 @@ export default function ReflectivePartPage() {
   const router = useRouter();
   const { username } = useUser();
   
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Load admin status from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsAdmin(localStorage.getItem('isAdmin') === 'true');
+    }
+  }, []);
+  
   // Toast state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
@@ -210,13 +220,14 @@ export default function ReflectivePartPage() {
                                contactId !== null;
   
   // Track if quotation information is confirmed
-  // Check if user is MBCB or Admin (price checking only, no save)
+  // Check if user is MBCB (price checking only, no save)
+  // Admin users can save quotes, only MBCB users are view-only
   const isMBCBUser = username === 'MBCB';
-  const isAdminUser = username === 'Admin';
-  const isViewOnlyUser = isMBCBUser || isAdminUser;
+  const isViewOnlyUser = isMBCBUser; // Only MBCB users are view-only, admin can save
   
   // Track if quotation information is confirmed
-  // For MBCB and Admin users, always treat as confirmed (they skip quotation details)
+  // For MBCB users, always treat as confirmed (they skip quotation details)
+  // Admin users need to confirm like sales employees
   const [isQuotationConfirmed, setIsQuotationConfirmed] = useState<boolean>(isViewOnlyUser);
   const [isEditingQuotation, setIsEditingQuotation] = useState<boolean>(false);
   
