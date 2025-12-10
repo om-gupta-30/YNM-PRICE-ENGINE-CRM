@@ -153,6 +153,7 @@ export default function LeadsPage() {
     if (username || isAdmin) {
       fetchLeads();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username, isAdmin]);
 
   // Get unique values for filters
@@ -411,10 +412,10 @@ export default function LeadsPage() {
         setToast({ message: 'Lead Created Successfully! Refreshing...', type: 'success' });
       }
 
-      handleCloseModal();
-      
       // Force immediate refresh with cache busting
       await fetchLeads();
+      
+      handleCloseModal();
       
       setToast({ message: editingLead ? 'Lead updated successfully' : 'Lead Created Successfully', type: 'success' });
     } catch (error: any) {

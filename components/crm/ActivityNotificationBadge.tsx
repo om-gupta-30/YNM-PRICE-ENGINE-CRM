@@ -113,7 +113,7 @@ export default function ActivityNotificationBadge({
   }
 
   return (
-    <div className="relative inline-block" ref={dropdownRef}>
+    <div className="relative inline-block z-[10000]" ref={dropdownRef}>
       <button
         onClick={() => setShowDropdown(!showDropdown)}
         onMouseEnter={() => setShowDropdown(true)}
@@ -128,7 +128,7 @@ export default function ActivityNotificationBadge({
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
+        <div className="absolute right-0 top-full z-[9999] mt-2 w-80 rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
           <div className="p-3 border-b border-slate-700 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-white capitalize">
               {sectionType} Notifications

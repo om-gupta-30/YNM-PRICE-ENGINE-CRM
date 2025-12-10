@@ -84,6 +84,26 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     if (!isOpen) {
       hasInitializedRef.current = false;
       setLoadingData(false);
+      // Reset form when modal closes
+      if (mode === 'create') {
+        const autoAssignedEmployee = !isAdmin && username ? username : '';
+        setFormData({
+          lead_name: '',
+          contact_person: '',
+          phone: '',
+          email: '',
+          requirements: '',
+          lead_source: '',
+          status: 'New',
+          priority: null,
+          assigned_employee: autoAssignedEmployee,
+          accounts: null,
+          sub_accounts: null,
+          contact_id: null,
+        });
+        setSubAccounts([]);
+        setContacts([]);
+      }
       return;
     }
     
@@ -368,8 +388,43 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     
     const validationError = validateForm();
     if (validationError) {
-      alert(validationError);
+      // Use a better error display method
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'fixed top-4 right-4 z-[10002] bg-red-500 text-white px-6 py-4 rounded-lg shadow-lg max-w-md';
+      errorDiv.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="font-semibold">${validationError}</span>
+          <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-red-200">×</button>
+        </div>
+      `;
+      document.body.appendChild(errorDiv);
+      setTimeout(() => {
+        if (errorDiv.parentElement) {
+          errorDiv.remove();
+        }
+      }, 5000);
       return;
+    }
+
+    // Ensure all required fields are present
+    if (mode === 'create') {
+      if (!formData.accounts || !formData.sub_accounts || !formData.contact_id || !formData.lead_name.trim() || !formData.phone.trim()) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'fixed top-4 right-4 z-[10002] bg-red-500 text-white px-6 py-4 rounded-lg shadow-lg max-w-md';
+        errorDiv.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="font-semibold">Please fill in all required fields</span>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-red-200">×</button>
+          </div>
+        `;
+        document.body.appendChild(errorDiv);
+        setTimeout(() => {
+          if (errorDiv.parentElement) {
+            errorDiv.remove();
+          }
+        }, 5000);
+        return;
+      }
     }
 
     onSubmit(formData);

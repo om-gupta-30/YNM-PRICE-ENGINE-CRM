@@ -637,6 +637,25 @@ export default function AccountsPage() {
     }
   }, []);
 
+  // Sync filter states from URL params when navigating back
+  useEffect(() => {
+    const urlFilters = getInitialFiltersFromURL();
+    
+    // Update active filter states from URL
+    setFilterIndustryId(urlFilters.industryId);
+    setFilterSubIndustryId(urlFilters.subIndustryId);
+    setSearchQuery(urlFilters.search);
+    setFilterStateId(urlFilters.stateId);
+    setFilterCityId(urlFilters.cityId);
+    
+    // Also update pending filter states to match URL
+    setPendingFilterIndustryId(urlFilters.industryId);
+    setPendingFilterSubIndustryId(urlFilters.subIndustryId);
+    setPendingSearchQuery(urlFilters.search);
+    setPendingFilterStateId(urlFilters.stateId);
+    setPendingFilterCityId(urlFilters.cityId);
+  }, [searchParams]);
+
   // Fetch accounts on mount and when user info changes
   useEffect(() => {
     // Wait for user info to be loaded before fetching
@@ -669,6 +688,14 @@ export default function AccountsPage() {
     }
   }, [pendingFilterIndustryId, industries]);
 
+  // Load sub-industries when filterIndustryId is set from URL
+  useEffect(() => {
+    if (filterIndustryId && industries.length > 0) {
+      const selectedIndustry = industries.find(ind => ind.id === filterIndustryId);
+      setSubIndustries(selectedIndustry?.subIndustries || []);
+    }
+  }, [filterIndustryId, industries]);
+
   // Fetch cities when pending state filter changes
   useEffect(() => {
     if (pendingFilterStateId) {
@@ -680,6 +707,13 @@ export default function AccountsPage() {
       }
     }
   }, [pendingFilterStateId]);
+
+  // Load cities when filterStateId is set from URL
+  useEffect(() => {
+    if (filterStateId) {
+      fetchCities(filterStateId);
+    }
+  }, [filterStateId]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
