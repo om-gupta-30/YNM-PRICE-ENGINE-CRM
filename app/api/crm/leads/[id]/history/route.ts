@@ -33,12 +33,22 @@ export async function GET(
       );
     }
 
-    // Fetch lead details
-    const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .select('id, lead_name, created_by, created_at, status, priority, account_id, sub_account_id')
-      .eq('id', leadId)
-      .single();
+    // Fetch lead details and activities in parallel for better performance
+    const [leadResult, activitiesResult] = await Promise.all([
+      supabase
+        .from('leads')
+        .select('id, lead_name, created_by, created_at, status, priority, account_id, sub_account_id')
+        .eq('id', leadId)
+        .single(),
+      supabase
+        .from('activities')
+        .select('id, employee_id, activity_type, description, metadata, created_at')
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true })
+    ]);
+
+    const { data: lead, error: leadError } = leadResult;
+    const { data: allActivities, error: activitiesError } = activitiesResult;
 
     if (leadError || !lead) {
       return NextResponse.json(
@@ -46,13 +56,6 @@ export async function GET(
         { status: 404 }
       );
     }
-
-    // Fetch all activities related to this lead
-    const { data: allActivities, error: activitiesError } = await supabase
-      .from('activities')
-      .select('id, employee_id, activity_type, description, metadata, created_at')
-      .eq('lead_id', leadId)
-      .order('created_at', { ascending: true });
 
     // Build history array
     const history: any[] = [];
@@ -163,18 +166,13 @@ export async function GET(
       return timeB - timeA; // Reverse order - newest first
     });
 
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
       history: history.map(entry => ({
         ...entry,
         changed_at: formatTimestampIST(entry.changed_at),
       })),
     });
-
-    // Add caching headers (cache for 60 seconds)
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
-    
-    return response;
   } catch (error: any) {
     console.error('Lead history API error:', error);
     return NextResponse.json(

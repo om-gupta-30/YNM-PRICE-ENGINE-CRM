@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';

@@ -157,7 +157,8 @@ export default function ThrieBeamPage() {
   } | null>(null);
   
   // Check if all quotation fields are filled
-  const isQuotationComplete = stateId !== null && 
+  // For admin users, always treat as complete (they don't have quotation information card)
+  const isQuotationComplete = isAdmin || (stateId !== null && 
                                cityId !== null && 
                                quotationDate.trim() !== '' && 
                                estimateDate !== null &&
@@ -167,7 +168,7 @@ export default function ThrieBeamPage() {
                                termsAndConditions.trim() !== '' &&
                                purpose.trim() !== '' && 
                                customerName.trim() !== '' &&
-                               contactId !== null;
+                               contactId !== null);
   
   // Check if user is MBCB (price checking only, no save)
   // Admin users can save quotes, only MBCB users are view-only
@@ -175,10 +176,16 @@ export default function ThrieBeamPage() {
   const isViewOnlyUser = isMBCBUser; // Only MBCB users are view-only, admin can save
   
   // Track if quotation information is confirmed
-  // For MBCB users, always treat as confirmed (they skip quotation details)
-  // Admin users need to confirm like sales employees
+  // For MBCB users and Admin users, always treat as confirmed (they skip quotation details)
   const [isQuotationConfirmed, setIsQuotationConfirmed] = useState<boolean>(isViewOnlyUser);
   const [isEditingQuotation, setIsEditingQuotation] = useState<boolean>(false);
+  
+  // Auto-confirm quotation for admin users when isAdmin is loaded
+  useEffect(() => {
+    if (isAdmin) {
+      setIsQuotationConfirmed(true);
+    }
+  }, [isAdmin]);
   
   // Progressive disclosure steps
   const showDates = stateId !== null && cityId !== null;
@@ -270,6 +277,10 @@ export default function ThrieBeamPage() {
   const [isCostConfirmed, setIsCostConfirmed] = useState<boolean>(false);
   const [isEditingCost, setIsEditingCost] = useState<boolean>(false);
   
+  // Track if pincode inputs are confirmed
+  const [isPincodeConfirmed, setIsPincodeConfirmed] = useState<boolean>(false);
+  const [isEditingPincode, setIsEditingPincode] = useState<boolean>(false);
+  
   // Track if quantity is confirmed
   const [isQuantityConfirmed, setIsQuantityConfirmed] = useState<boolean>(false);
   const [isEditingQuantity, setIsEditingQuantity] = useState<boolean>(false);
@@ -313,6 +324,13 @@ export default function ThrieBeamPage() {
   const [transportCostPerKg, setTransportCostPerKg] = useState<number | null>(null);
   const [installationCostPerRm, setInstallationCostPerRm] = useState<number | null>(null);
   const [quantityRm, setQuantityRm] = useState<number | null>(null);
+  
+  // Transportation pincode and distance state
+  const [fromPincode, setFromPincode] = useState<string>('');
+  const [toPincode, setToPincode] = useState<string>('');
+  const [calculatedDistance, setCalculatedDistance] = useState<{ value: number; text: string } | null>(null);
+  const [isCalculatingDistance, setIsCalculatingDistance] = useState<boolean>(false);
+  const [distanceError, setDistanceError] = useState<string | null>(null);
   
   // New AI pricing fields
   const [competitorPricePerUnit, setCompetitorPricePerUnit] = useState<number | null>(null);
@@ -360,6 +378,67 @@ export default function ThrieBeamPage() {
       setSpacerResult(null);
     }
   }, [fastenerMode]);
+
+  // Calculate distance when both pincodes are entered
+  useEffect(() => {
+    const calculateDistance = async () => {
+      if (!fromPincode || !toPincode) {
+        setCalculatedDistance(null);
+        setDistanceError(null);
+        return;
+      }
+
+      // Validate pincode format (6 digits)
+      const pincodeRegex = /^\d{6}$/;
+      if (!pincodeRegex.test(fromPincode) || !pincodeRegex.test(toPincode)) {
+        setCalculatedDistance(null);
+        setDistanceError(null);
+        return;
+      }
+
+      // Only calculate if both pincodes are valid 6-digit numbers
+      if (fromPincode.length === 6 && toPincode.length === 6) {
+        setIsCalculatingDistance(true);
+        setDistanceError(null);
+        
+        try {
+          const response = await fetch('/api/distance/calculate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fromPincode,
+              toPincode,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.distance) {
+            setCalculatedDistance({
+              value: data.distance.value,
+              text: data.distance.text,
+            });
+            setDistanceError(null);
+          } else {
+            setCalculatedDistance(null);
+            setDistanceError(data.error || 'Failed to calculate distance');
+          }
+        } catch (error) {
+          console.error('Error calculating distance:', error);
+          setCalculatedDistance(null);
+          setDistanceError('Failed to calculate distance. Please try again.');
+        } finally {
+          setIsCalculatingDistance(false);
+        }
+      }
+    };
+
+    // Debounce the distance calculation
+    const timeoutId = setTimeout(calculateDistance, 800);
+    return () => clearTimeout(timeoutId);
+  }, [fromPincode, toPincode]);
 
   // Function to update overall totals with multipliers and fasteners (Single Thrie-Beam)
   // Single Thrie-Beam: Thrie-Beam × 1, Post × 2, Spacer × 2, Fasteners (default or manual)
@@ -437,6 +516,11 @@ export default function ThrieBeamPage() {
       setTransportCostPerKg(null);
       setInstallationCostPerRm(null);
       setQuantityRm(null);
+      
+      setFromPincode('');
+      setToPincode('');
+      setCalculatedDistance(null);
+      setDistanceError(null);
       
       setFastenerMode('default');
       setHexBoltQty(0);
@@ -1141,7 +1225,7 @@ export default function ThrieBeamPage() {
       <div className="w-full max-w-6xl mx-auto px-4">
 
         {/* Quotation Information Card - Uniform Style - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && (
+        {!isViewOnlyUser && !isAdmin && (
         <div className="glassmorphic-premium rounded-3xl p-12 animate-fade-up card-hover-gold mb-10 card-3d card-depth" style={{ overflow: 'visible' }}>
           <h2 className="text-3xl font-extrabold text-white mb-3 drop-shadow-lg">Quotation Information</h2>
           <p className="text-sm text-slate-300 mb-8">Enter quotation details. You can type manually or select from dropdown suggestions.</p>
@@ -2037,6 +2121,10 @@ export default function ThrieBeamPage() {
                       setIncludeTransportation(e.target.checked);
                       if (!e.target.checked) {
                         setTransportCostPerKg(null);
+                        setFromPincode('');
+                        setToPincode('');
+                        setCalculatedDistance(null);
+                        setDistanceError(null);
                       }
                       setIsCostConfirmed(false);
                       setIsEditingCost(false);
@@ -2047,22 +2135,145 @@ export default function ThrieBeamPage() {
                   <span className="text-slate-200 font-semibold group-hover:text-premium-gold transition-colors">Include Transportation Cost?</span>
                 </label>
                 {includeTransportation && (
-                  <div className="mt-4">
-                    <label className="block text-sm font-semibold text-slate-200 mb-2">
-                      Transportation Cost per kg (₹/kg)
-                    </label>
-                    <input
-                      type="number"
-                      value={transportCostPerKg || ''}
-                      onChange={(e) => {
-                        setTransportCostPerKg(e.target.value ? parseFloat(e.target.value) : null);
-                        setIsCostConfirmed(false);
-                        setIsEditingCost(false);
-                      }}
-                      placeholder="Enter transportation cost per kg"
-                      className="input-premium w-full md:w-1/2 px-6 py-4 text-white placeholder-slate-400"
-                      disabled={(!isQuotationComplete) || (isCostConfirmed && !isEditingCost)}
-                    />
+                  <div className="mt-4 space-y-4">
+                    {/* Pincode inputs */}
+                    {!isPincodeConfirmed && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-200 mb-2">
+                            From Pincode
+                          </label>
+                          <input
+                            type="text"
+                            value={fromPincode}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                              setFromPincode(value);
+                              setIsCostConfirmed(false);
+                              setIsEditingCost(false);
+                              setIsPincodeConfirmed(false);
+                            }}
+                            placeholder="Enter 6-digit pincode"
+                            className="input-premium w-full px-6 py-4 text-white placeholder-slate-400"
+                            disabled={(!isQuotationComplete) || (isCostConfirmed && !isEditingCost)}
+                            maxLength={6}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-200 mb-2">
+                            To Pincode
+                          </label>
+                          <input
+                            type="text"
+                            value={toPincode}
+                            onChange={(e) => {
+                              const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                              setToPincode(value);
+                              setIsCostConfirmed(false);
+                              setIsEditingCost(false);
+                              setIsPincodeConfirmed(false);
+                            }}
+                            placeholder="Enter 6-digit pincode"
+                            className="input-premium w-full px-6 py-4 text-white placeholder-slate-400"
+                            disabled={(!isQuotationComplete) || (isCostConfirmed && !isEditingCost)}
+                            maxLength={6}
+                          />
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Confirm Pincode Button */}
+                    {!isPincodeConfirmed && fromPincode.length === 6 && toPincode.length === 6 && (
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => {
+                            setIsPincodeConfirmed(true);
+                            setIsEditingPincode(false);
+                          }}
+                          className="btn-premium-gold px-6 py-2 text-sm shimmer relative overflow-hidden"
+                          style={{
+                            boxShadow: '0 0 15px rgba(209, 168, 90, 0.3)',
+                          }}
+                        >
+                          ✓ Confirm Pincodes
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Confirmed Pincode Display */}
+                    {isPincodeConfirmed && !isEditingPincode && (
+                      <div className="mt-4 p-4 bg-green-500/20 border border-green-400/50 rounded-xl backdrop-blur-sm animate-fade-up flex items-center justify-between">
+                        <div>
+                          <p className="text-green-200 text-sm font-medium flex items-center space-x-2 mb-1">
+                            <span>✓</span>
+                            <span>Pincodes confirmed.</span>
+                          </p>
+                          <p className="text-slate-300 text-xs">
+                            From: <span className="font-semibold">{fromPincode}</span> → To: <span className="font-semibold">{toPincode}</span>
+                          </p>
+                          {calculatedDistance && (
+                            <p className="text-slate-300 text-xs mt-1">
+                              Distance: <span className="font-semibold text-blue-300">{calculatedDistance.text}</span>
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setIsEditingPincode(true);
+                            setIsPincodeConfirmed(false);
+                          }}
+                          className="btn-premium-gold btn-ripple btn-press btn-3d px-4 py-2 text-sm ml-4"
+                          style={{
+                            boxShadow: '0 0 15px rgba(209, 168, 90, 0.3)',
+                          }}
+                        >
+                          ✏️ Edit
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Distance display - only show when calculating or if there's an error */}
+                    {!isPincodeConfirmed && (
+                      <>
+                        {isCalculatingDistance && (
+                          <div className="text-sm text-slate-300 flex items-center space-x-2">
+                            <span className="animate-spin">⏳</span>
+                            <span>Calculating distance...</span>
+                          </div>
+                        )}
+                        {calculatedDistance && !isCalculatingDistance && !isPincodeConfirmed && (
+                          <div className="p-3 bg-blue-500/20 border border-blue-400/50 rounded-lg">
+                            <p className="text-sm text-blue-200 font-medium">
+                              Distance: <span className="text-blue-100 font-bold">{calculatedDistance.text}</span>
+                            </p>
+                          </div>
+                        )}
+                        {distanceError && !isCalculatingDistance && (
+                          <div className="p-3 bg-red-500/20 border border-red-400/50 rounded-lg">
+                            <p className="text-sm text-red-200">{distanceError}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    
+                    {/* Transportation Cost input */}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-200 mb-2">
+                        Transportation Cost per kg (₹/kg)
+                      </label>
+                      <input
+                        type="number"
+                        value={transportCostPerKg || ''}
+                        onChange={(e) => {
+                          setTransportCostPerKg(e.target.value ? parseFloat(e.target.value) : null);
+                          setIsCostConfirmed(false);
+                          setIsEditingCost(false);
+                        }}
+                        placeholder="Enter transportation cost per kg"
+                        className="input-premium w-full md:w-1/2 px-6 py-4 text-white placeholder-slate-400"
+                        disabled={(!isQuotationComplete) || (isCostConfirmed && !isEditingCost)}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

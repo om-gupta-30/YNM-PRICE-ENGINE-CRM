@@ -133,7 +133,12 @@ export default function ActivityNotificationBadge({
   };
 
   // Navigate to the relevant page when clicking on a notification
-  const handleNotificationClick = (notification: ActivityNotification) => {
+  const handleNotificationClick = (notification: ActivityNotification, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
     const metadata = notification.metadata || {};
     
     // Determine the route based on section type and metadata
@@ -141,8 +146,14 @@ export default function ActivityNotificationBadge({
       router.push(`/crm/accounts/${metadata.account_id}`);
     } else if (sectionType === 'tasks' && metadata.task_id) {
       router.push(`/crm/tasks`);
-    } else if (sectionType === 'leads' && metadata.lead_id) {
-      router.push(`/crm/leads`);
+    } else if (sectionType === 'leads') {
+      // For leads, navigate to the leads page
+      // If there's a lead_id in metadata, we could add a query param to highlight it
+      if (metadata.lead_id) {
+        router.push(`/crm/leads?lead=${metadata.lead_id}`);
+      } else {
+        router.push(`/crm/leads`);
+      }
     } else {
       // Fallback to the section page
       router.push(`/crm/${sectionType}`);
@@ -197,7 +208,7 @@ export default function ActivityNotificationBadge({
               <div
                 key={notification.id}
                 className="p-3 hover:bg-slate-700/50 transition-colors group cursor-pointer"
-                onClick={() => handleNotificationClick(notification)}
+                onClick={(e) => handleNotificationClick(notification, e)}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -211,7 +222,11 @@ export default function ActivityNotificationBadge({
                     </div>
                   </div>
                   <button
-                    onClick={(e) => handleMarkAsSeen([notification.id], e)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMarkAsSeen([notification.id], e);
+                    }}
                     className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-premium-gold hover:text-amber-400 px-2 py-1 rounded hover:bg-slate-600/50"
                     title="Mark as seen"
                   >

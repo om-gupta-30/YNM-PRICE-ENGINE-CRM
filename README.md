@@ -432,6 +432,9 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 # Required - AI (Google Gemini)
 GOOGLE_GEMINI_API_KEY=your_gemini_api_key
 
+# Required - Google Maps (for distance calculation in MBCB price engine)
+GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+
 # Optional - Cron Security
 CRON_SECRET=your_cron_secret
 ```
@@ -471,6 +474,7 @@ SALES EMPLOYEES (Employee Portal):
 - npm or yarn
 - Supabase account
 - Google Gemini API key
+- Google Maps API key (for distance calculation)
 
 ### Installation
 

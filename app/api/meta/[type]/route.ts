@@ -34,7 +34,10 @@ export async function GET(
         return NextResponse.json({ data: [] });
       }
 
-      return NextResponse.json({ data: data.map((item) => item.state_name) });
+      const response = NextResponse.json({ data: data.map((item) => item.state_name) });
+      // Cache states/places for 1 hour (rarely changes)
+      response.headers.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+      return response;
     }
 
     if (type === 'customers') {
@@ -62,7 +65,10 @@ export async function GET(
         return NextResponse.json({ data: [] });
       }
 
-      return NextResponse.json({ data: data.map((item) => item.account_name) });
+      const response = NextResponse.json({ data: data.map((item) => item.account_name) });
+      // Cache accounts for 5 minutes (changes more frequently)
+      response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+      return response;
     }
 
     return NextResponse.json({ error: 'Invalid type' }, { status: 400 });

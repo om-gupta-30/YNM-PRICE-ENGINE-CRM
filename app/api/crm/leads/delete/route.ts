@@ -24,33 +24,30 @@ export async function POST(request: NextRequest) {
       .eq('id', id)
       .single();
 
+    // Delete lead
     const { error } = await supabase
       .from('leads')
       .delete()
       .eq('id', id);
 
     if (error) {
-      console.error('Error deleting lead:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Log activity for lead deletion
+    // Log activity asynchronously (don't block response)
     if (leadData) {
-      try {
-        await logActivity({
-          account_id: leadData.account_id,
-          employee_id: leadData.created_by || 'System',
-          activity_type: 'delete',
-          description: `Lead deleted: ${leadData.lead_name}`,
-          metadata: {
-            entity_type: 'lead',
-            lead_id: id,
-            deleted_data: leadData,
-          },
-        });
-      } catch (activityError) {
-        console.warn('Failed to log lead deletion activity:', activityError);
-      }
+      logActivity({
+        account_id: leadData.account_id,
+        employee_id: leadData.created_by || 'System',
+        activity_type: 'delete',
+        description: `Lead deleted: ${leadData.lead_name}`,
+        metadata: {
+          entity_type: 'lead',
+          lead_id: id,
+        },
+      }).catch(() => {
+        // Silently fail - activity logging shouldn't block the response
+      });
     }
 
     return NextResponse.json({ success: true });

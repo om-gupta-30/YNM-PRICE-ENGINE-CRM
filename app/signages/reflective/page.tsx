@@ -226,10 +226,16 @@ export default function ReflectivePartPage() {
   const isViewOnlyUser = isMBCBUser; // Only MBCB users are view-only, admin can save
   
   // Track if quotation information is confirmed
-  // For MBCB users, always treat as confirmed (they skip quotation details)
-  // Admin users need to confirm like sales employees
+  // For MBCB users and Admin users, always treat as confirmed (they skip quotation details)
   const [isQuotationConfirmed, setIsQuotationConfirmed] = useState<boolean>(isViewOnlyUser);
   const [isEditingQuotation, setIsEditingQuotation] = useState<boolean>(false);
+  
+  // Auto-confirm quotation for admin users when isAdmin is loaded
+  useEffect(() => {
+    if (isAdmin) {
+      setIsQuotationConfirmed(true);
+    }
+  }, [isAdmin]);
   
   // Progressive disclosure steps
   const showDates = stateId !== null && cityId !== null;
@@ -1222,7 +1228,7 @@ export default function ReflectivePartPage() {
       
       <div className="w-full max-w-6xl mx-auto px-4">
         {/* Quotation Information Card - Uniform Style - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && (
+        {!isViewOnlyUser && !isAdmin && (
         <div className="glassmorphic-premium rounded-3xl p-12 animate-fade-up card-hover-gold mb-10 card-3d card-depth" style={{ overflow: 'visible' }}>
           <h2 className="text-3xl font-extrabold text-white mb-3 drop-shadow-lg">Quotation Information</h2>
           <p className="text-sm text-slate-300 mb-8">Enter quotation details. You can type manually or select from dropdown suggestions.</p>
@@ -2396,7 +2402,7 @@ export default function ReflectivePartPage() {
         )}
 
         {/* Save Quotation Button - Only show when quotation is confirmed - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && (
+        {!isViewOnlyUser && !isAdmin && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button
               onClick={handleSaveQuotation}
@@ -2410,7 +2416,7 @@ export default function ReflectivePartPage() {
             </button>
             
             {/* Generate PDF Button - Employee Only */}
-            {!isViewOnlyUser && gstCalculations && (
+            {!isViewOnlyUser && !isAdmin && gstCalculations && (
               <button
                 onClick={handleGeneratePDF}
                 className="btn-premium-gold btn-ripple btn-press btn-3d px-12 py-4 text-lg shimmer relative overflow-hidden"

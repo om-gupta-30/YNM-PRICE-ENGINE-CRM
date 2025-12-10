@@ -22,9 +22,6 @@ export async function POST(request: NextRequest) {
       created_by,
     } = body;
 
-    // Log incoming priority value for debugging
-    console.log('Received priority value:', priority, 'Type:', typeof priority);
-
     // Map accounts/sub_accounts to account_id/sub_account_id for database
     const account_id = accounts || null;
     const sub_account_id = sub_accounts || null;
@@ -100,13 +97,10 @@ export async function POST(request: NextRequest) {
         normalizedPriority = null;
       } else {
         // Any other value is invalid - set to null
-        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}, string: "${priorityStr}"), setting to null`);
         normalizedPriority = null;
       }
     }
     
-    console.log('Priority normalization:', { received: priority, type: typeof priority, normalized: normalizedPriority });
-
     // Determine assigned employee:
     // 1. If assigned_employee is explicitly provided, use it
     // 2. If no assigned_employee provided, auto-assign to account's assigned employee
@@ -114,38 +108,27 @@ export async function POST(request: NextRequest) {
     let finalAssignedEmployee = assigned_employee && assigned_employee.trim() ? assigned_employee.trim() : null;
     
     // If no assigned employee is provided and account_id exists, check if account has an assigned employee
+    // OPTIMIZED: Use a single query with select to get only what we need
     if (!finalAssignedEmployee && account_id) {
-      try {
-        const { data: accountData, error: accountError } = await supabase
-          .from('accounts')
-          .select('assigned_employee')
-          .eq('id', account_id)
-          .single();
-        
-        if (accountError) {
-          console.error('Error fetching account assigned employee:', accountError);
-          return NextResponse.json(
-            { error: `Failed to fetch account details: ${accountError.message}` },
-            { status: 500 }
-          );
-        }
-        
-        if (accountData && accountData.assigned_employee) {
-          // Auto-assign lead to the employee assigned to the account
-          finalAssignedEmployee = accountData.assigned_employee;
-          console.log(`Auto-assigned lead to employee: ${finalAssignedEmployee} from account ${account_id}`);
-        } else {
-          // Account has no assigned employee - return error
-          return NextResponse.json(
-            { error: 'This account has no assigned employee. Please assign an employee to this account first before creating a lead.' },
-            { status: 400 }
-          );
-        }
-      } catch (err: any) {
-        console.error('Error fetching account assigned employee:', err);
+      const { data: accountData, error: accountError } = await supabase
+        .from('accounts')
+        .select('assigned_employee')
+        .eq('id', account_id)
+        .single();
+      
+      if (accountError) {
         return NextResponse.json(
-          { error: `Failed to fetch account details: ${err.message || 'Unknown error'}` },
+          { error: `Failed to fetch account details: ${accountError.message}` },
           { status: 500 }
+        );
+      }
+      
+      if (accountData?.assigned_employee) {
+        finalAssignedEmployee = accountData.assigned_employee;
+      } else {
+        return NextResponse.json(
+          { error: 'This account has no assigned employee. Please assign an employee to this account first before creating a lead.' },
+          { status: 400 }
         );
       }
     }
@@ -178,16 +161,6 @@ export async function POST(request: NextRequest) {
       insertData.priority = null;
     }
 
-    // Log the insert data for debugging (without sensitive info)
-    console.log('Inserting lead with data:', {
-      lead_name: insertData.lead_name,
-      account_id: insertData.account_id,
-      sub_account_id: insertData.sub_account_id,
-      assigned_employee: insertData.assigned_employee,
-      priority: insertData.priority || 'NULL (excluded)',
-      has_priority_field: 'priority' in insertData,
-    });
-
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase
       .from('leads')
@@ -196,16 +169,11 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Error creating lead:', error);
-      console.error('Error details:', JSON.stringify(error, null, 2));
-      console.error('Insert data that caused error:', JSON.stringify(insertData, null, 2));
-      
       // Provide helpful error message for constraint violations
       if (error.message && error.message.includes('leads_priority_check')) {
         return NextResponse.json(
           { 
             error: 'Invalid priority value. Priority must be "High Priority", "Medium Priority", "Low Priority", or empty.',
-            details: `Received priority: "${priority}", Normalized: "${normalizedPriority}", Valid values: High Priority, Medium Priority, Low Priority, or null`,
             validValues: ['High Priority', 'Medium Priority', 'Low Priority', null]
           },
           { status: 400 }
@@ -213,30 +181,27 @@ export async function POST(request: NextRequest) {
       }
       
       return NextResponse.json({ 
-        error: error.message || 'Failed to create lead',
-        details: error.details || 'Check server logs for more information'
+        error: error.message || 'Failed to create lead'
       }, { status: 500 });
     }
 
-    // Log activity for lead creation
+    // Log activity asynchronously (don't block response)
     if (created_by || finalAssignedEmployee) {
-      try {
-        await logActivity({
-          account_id: account_id,
-          employee_id: created_by || finalAssignedEmployee || 'System',
-          activity_type: 'create',
-          description: `Lead created: ${lead_name.trim()}`,
-          metadata: {
-            entity_type: 'lead',
-            lead_id: data.id,
-            lead_name: lead_name.trim(),
-            status: data.status,
-            lead_source: lead_source || null,
-          },
-        });
-      } catch (activityError) {
-        console.warn('Failed to log lead creation activity:', activityError);
-      }
+      logActivity({
+        account_id: account_id,
+        employee_id: created_by || finalAssignedEmployee || 'System',
+        activity_type: 'create',
+        description: `Lead created: ${lead_name.trim()}`,
+        metadata: {
+          entity_type: 'lead',
+          lead_id: data.id,
+          lead_name: lead_name.trim(),
+          status: data.status,
+          lead_source: lead_source || null,
+        },
+      }).catch(() => {
+        // Silently fail - activity logging shouldn't block the response
+      });
     }
 
     return NextResponse.json({ success: true, data });

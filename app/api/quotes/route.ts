@@ -329,7 +329,10 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      return NextResponse.json({ data });
+      // Add cache headers for better performance
+      const response = NextResponse.json({ data });
+      response.headers.set('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=59');
+      return response;
     }
 
     // If no product_type specified, fetch from all tables and combine
@@ -425,7 +428,10 @@ export async function GET(request: NextRequest) {
       return dateB - dateA; // Descending order
     }).slice(0, limit);
 
-    return NextResponse.json({ data: allQuotes || [] });
+    // Add cache headers for better performance
+    const response = NextResponse.json({ data: allQuotes || [] });
+    response.headers.set('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=59');
+    return response;
   } catch (error) {
     console.error('API error:', error);
     return NextResponse.json(

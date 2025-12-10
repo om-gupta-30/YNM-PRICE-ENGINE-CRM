@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
         },
       };
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         data: {
           totalCustomers,
           totalLeads,
@@ -111,6 +111,9 @@ export async function GET(request: NextRequest) {
           productBreakdown,
         },
       });
+      // Cache dashboard data for 30 seconds
+      response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=59');
+      return response;
     } else {
       if (!employeeUsername) {
         return NextResponse.json(
@@ -157,7 +160,7 @@ export async function GET(request: NextRequest) {
       const tasksDueToday = tasks?.filter(t => t.due_date === today && t.status !== 'Completed').length || 0;
       const pendingFollowUps = tasks?.filter(t => t.task_type === 'Follow-up' && t.status === 'Pending').length || 0;
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         data: {
           assignedCustomers,
           assignedLeads,
@@ -167,6 +170,9 @@ export async function GET(request: NextRequest) {
           pendingFollowUps,
         },
       });
+      // Cache dashboard data for 30 seconds
+      response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=59');
+      return response;
     }
   } catch (error: any) {
     console.error('Dashboard API error:', error);

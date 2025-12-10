@@ -117,14 +117,8 @@ export default function LeadsPage() {
       if (isAdmin) {
         params.append('isAdmin', 'true');
       }
-      // Add cache busting timestamp
-      params.append('_t', Date.now().toString());
-      
       const response = await fetch(`/api/crm/leads/list?${params}`, {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
       });
       
       if (!response.ok) {
@@ -293,28 +287,22 @@ export default function LeadsPage() {
     setEditingLead(null);
   }, []);
 
-  // Load lead history
+  // Load lead history - optimized
   const loadLeadHistory = useCallback(async (leadId: number) => {
     try {
       setLoadingHistory(true);
-      const response = await fetch(`/api/crm/leads/${leadId}/history`);
+      const response = await fetch(`/api/crm/leads/${leadId}/history`, {
+        cache: 'no-store',
+      });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Error loading lead history:', errorData.error || `HTTP error! status: ${response.status}`);
         setLeadHistory([]);
         return;
       }
       
       const data = await response.json();
-      
-      if (data.success) {
-        setLeadHistory(data.history || []);
-      } else {
-        setLeadHistory([]);
-      }
+      setLeadHistory(data.success ? (data.history || []) : []);
     } catch (err: any) {
-      console.error('Error loading lead history:', err.message || err);
       setLeadHistory([]);
     } finally {
       setLoadingHistory(false);
@@ -398,9 +386,7 @@ export default function LeadsPage() {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
           },
-          cache: 'no-store',
           body: JSON.stringify(normalizedFormData),
         });
 
@@ -415,15 +401,32 @@ export default function LeadsPage() {
           throw new Error(data.error || 'Failed to create lead');
         }
 
-        setToast({ message: 'Lead Created Successfully! Refreshing...', type: 'success' });
+        // Optimistic update - add lead to list immediately
+        if (data.data) {
+          const newLead: Lead = {
+            ...data.data,
+            accounts: data.data.account_id,
+            sub_accounts: data.data.sub_account_id,
+            account_name: null, // Will be populated on next fetch
+            sub_account_name: null, // Will be populated on next fetch
+          };
+          setLeads(prev => [newLead, ...prev]);
+        }
+
+        handleCloseModal();
+        setToast({ message: 'Lead Created Successfully!', type: 'success' });
+        
+        // Refresh in background (non-blocking)
+        fetchLeads().catch(() => {
+          // Silently fail - we already updated optimistically
+        });
+        return;
       }
 
-      // Force immediate refresh with cache busting
+      // For updates, refresh immediately
       await fetchLeads();
-      
       handleCloseModal();
-      
-      setToast({ message: editingLead ? 'Lead updated successfully' : 'Lead Created Successfully', type: 'success' });
+      setToast({ message: 'Lead updated successfully', type: 'success' });
     } catch (error: any) {
       console.error('Error saving lead:', error);
       setToast({ message: error.message || 'Failed to save lead', type: 'error' });
@@ -476,31 +479,41 @@ export default function LeadsPage() {
   const handleDeleteConfirm = useCallback(async () => {
     if (!leadToDelete) return;
 
+    const leadIdToDelete = leadToDelete.id;
+    
+    // Optimistic update - remove from list immediately
+    setLeads(prev => prev.filter(lead => lead.id !== leadIdToDelete));
+    setDeleteConfirmOpen(false);
+    setLeadToDelete(null);
+    setIsDeleting(false);
+    setToast({ message: 'Lead deleted successfully', type: 'success' });
+
     try {
-      setIsDeleting(true);
       const response = await fetch('/api/crm/leads/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: leadToDelete.id }),
+        body: JSON.stringify({ id: leadIdToDelete }),
       });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete lead');
+        // Revert optimistic update on error
+        await fetchLeads();
+        setToast({ message: data.error || 'Failed to delete lead', type: 'error' });
+        return;
       }
 
-      setToast({ message: 'Lead deleted successfully', type: 'success' });
-      setDeleteConfirmOpen(false);
-      setLeadToDelete(null);
-      await fetchLeads(); // Refresh list
+      // Refresh in background to ensure sync (non-blocking)
+      fetchLeads().catch(() => {
+        // Silently fail - we already removed it optimistically
+      });
     } catch (error: any) {
-      console.error('Error deleting lead:', error);
+      // Revert on error
+      await fetchLeads();
       setToast({ message: error.message || 'Failed to delete lead', type: 'error' });
-    } finally {
-      setIsDeleting(false);
     }
-  }, [fetchLeads]);
+  }, [fetchLeads, leadToDelete]);
 
   // Handle delete cancel - memoized
   const handleDeleteCancel = useCallback(() => {
