@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 import CoachButton from '@/components/CoachButton';
 
@@ -51,6 +52,7 @@ interface AnalystReport {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [errorInsights, setErrorInsights] = useState<string | null>(null);
@@ -187,6 +189,56 @@ export default function DashboardPage() {
       }
     } catch (err: any) {
       console.error('Error marking notification as read:', err);
+    }
+  };
+
+  // Mark all notifications as read
+  const handleMarkAllAsRead = async () => {
+    const unreadNotifications = adminNotifications.filter(n => !n.is_read);
+    if (unreadNotifications.length === 0) return;
+
+    try {
+      // Mark all unread notifications as read
+      const promises = unreadNotifications.map(notification =>
+        fetch('/api/notifications-admin', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: notification.id, is_read: true }),
+        }).then(res => res.json())
+      );
+
+      const results = await Promise.all(promises);
+      const allSuccess = results.every(data => data.success);
+
+      if (allSuccess) {
+        // Update local state
+        setAdminNotifications(prev =>
+          prev.map(n => ({ ...n, is_read: true }))
+        );
+      }
+    } catch (err: any) {
+      console.error('Error marking all notifications as read:', err);
+    }
+  };
+
+  // Navigate based on notification content
+  const handleNotificationClick = (notification: AdminNotification) => {
+    // Mark as read first
+    if (!notification.is_read) {
+      handleMarkAsRead(notification.id);
+    }
+
+    // Navigate based on notification content
+    // Try to extract account/lead/task references from message
+    const message = notification.message.toLowerCase();
+    
+    // Navigate to employee's page if employee is mentioned
+    if (notification.employee) {
+      // Navigate to CRM main page - employee-specific views can be added later
+      router.push('/crm');
+    } else {
+      // Default navigation to CRM
+      router.push('/crm');
     }
   };
 
@@ -512,11 +564,21 @@ export default function DashboardPage() {
 
             {/* AI Alerts & Escalations Section */}
             <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6">
-              <div className="mb-4">
-                <h2 className="text-xl font-bold text-white mb-2">AI Alerts & Escalations</h2>
-                <p className="text-slate-400 text-sm">
-                  Engagement alerts and escalation notifications from AI monitoring
-                </p>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white mb-2">AI Alerts & Escalations</h2>
+                  <p className="text-slate-400 text-sm">
+                    Engagement alerts and escalation notifications from AI monitoring
+                  </p>
+                </div>
+                {sortedNotifications.filter(n => !n.is_read).length > 0 && (
+                  <button
+                    onClick={handleMarkAllAsRead}
+                    className="px-4 py-2 text-sm font-semibold text-premium-gold hover:text-amber-400 bg-premium-gold/10 hover:bg-premium-gold/20 border border-premium-gold/30 hover:border-premium-gold/50 rounded-lg transition-all duration-200"
+                  >
+                    Mark all as seen
+                  </button>
+                )}
               </div>
 
               {loadingNotifications && (
@@ -551,11 +613,7 @@ export default function DashboardPage() {
                       return (
                         <div
                           key={notification.id}
-                          onClick={() => {
-                            if (!notification.is_read) {
-                              handleMarkAsRead(notification.id);
-                            }
-                          }}
+                          onClick={() => handleNotificationClick(notification)}
                           className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer group ${
                             !notification.is_read
                               ? 'bg-slate-800/80 border-premium-gold/50 hover:border-premium-gold hover:bg-slate-800/95 shadow-lg shadow-premium-gold/10'
@@ -599,11 +657,9 @@ export default function DashboardPage() {
                             </div>
                             
                             {/* Click indicator */}
-                            {!notification.is_read && (
-                              <div className="text-premium-gold opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 transition-all duration-200">
-                                Click to mark as read →
-                              </div>
-                            )}
+                            <div className="text-premium-gold opacity-0 group-hover:opacity-100 transform translate-x-2 group-hover:translate-x-0 transition-all duration-200">
+                              {!notification.is_read ? 'Click to mark as read and navigate →' : 'Click to navigate →'}
+                            </div>
                           </div>
                         </div>
                       );
