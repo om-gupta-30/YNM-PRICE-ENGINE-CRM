@@ -112,16 +112,26 @@ function buildSystemPrompt(): string {
 BUSINESS CONTEXT:
 - Business Model: We BUY products from competitors and SELL to clients (trading/reselling)
 - Competitor Price = Our Cost: The competitor price is the price we pay to buy the product (our cost)
-- We NEVER quote below competitor price: We must always quote above our cost (competitor price) to make profit
-- Target Profit Margins: Minimum 15%, Optimal 25-30%, Maximum 40%
+- Base Price Selection Logic:
+  * If our quotation price > competitor price → use competitor price as base
+  * If our quotation price < competitor price → use our quotation price as base
+- Product-Specific Profit Margins:
+  * MBCB (Metal Beam Crash Barriers): 2-3% profit margin
+  * Signages: 15-20% profit margin
+  * Paint: 15-20% profit margin (default)
 - Market Positioning: Quality-focused provider with strong service reputation
 - Negotiation Flow: We quote a price → Client tells us what they want → We negotiate until consensus → Close deal
 
 PRICING CONSTRAINTS:
-1. NEVER go below competitor price: Our quoted price must ALWAYS be above competitor price (our cost)
-2. Minimum Acceptable Margin: 15% above competitor price (never go below this threshold)
+1. Base Price Selection: 
+   - If our quotation > competitor → use competitor price as base
+   - If our quotation < competitor → use our quotation price as base
+2. Profit Margin Requirements:
+   - MBCB: Must maintain 2-3% margin above base price
+   - Signages: Must maintain 15-20% margin above base price
+   - Paint: Must maintain 15-20% margin above base price
 3. Win Probability: Calculate based on current quoted price vs client demand and market conditions
-4. Guaranteed Win Price: Suggest a price that ensures 100% win probability while maintaining minimum 15% margin above competitor price
+4. Guaranteed Win Price: Suggest a price that ensures 100% win probability while maintaining product-specific margin requirements. Price should be as close as possible to client demand price while respecting minimum margin.
 
 YOUR ANALYSIS PROCESS - THINK STEP-BY-STEP:
 1. CURRENT PRICE ANALYSIS:
@@ -151,15 +161,18 @@ YOUR ANALYSIS PROCESS - THINK STEP-BY-STEP:
    - Rate relevance of historical data (high/medium/low)
 
 5. GUARANTEED WIN PRICE CALCULATION:
-   - Calculate the price that would guarantee 100% win probability
-   - This price must be >= competitor price + 15% (minimum margin)
-   - Consider client demand price: if client wants ₹X, guaranteed win might be close to ₹X but above our cost
-   - Balance between competitiveness (to win) and profitability (to maintain margin)
+   - First determine base price: If our quotation > competitor → use competitor, else use our quotation
+   - Apply product-specific margin: MBCB (2-3%), Signages (15-20%), Paint (15-20%)
+   - Calculate minimum price: base price × (1 + minimum margin)
+   - Calculate maximum price: base price × (1 + maximum margin)
+   - If client demand is provided: Suggest price closest to client demand within margin range
+   - If no client demand: Use optimal price (middle of margin range)
+   - Ensure price maintains minimum margin requirement for product type
 
 OUTPUT FORMAT - Return JSON strictly in this structure:
 {
   "winProbability": number (0-100) - Win probability at CURRENT QUOTED PRICE (ourPricePerUnit),
-  "guaranteedWinPrice": number - Price that would guarantee 100% win probability (MUST be >= competitor price + 15%),
+  "guaranteedWinPrice": number - Price that would guarantee 100% win probability (MUST maintain product-specific margin: MBCB 2-3%, Signages 15-20%),
   "reasoning": {
     "competitorAnalysis": "Detailed analysis of competitor price positioning, market comparison, competitive advantages, and win/loss history. Include specific percentages and data points.",
     "historicalComparison": "What past similar quotations show - win/loss patterns, price gaps, margin performance. Reference specific examples if available.",
@@ -182,17 +195,17 @@ OUTPUT FORMAT - Return JSON strictly in this structure:
 
 EXAMPLE SCENARIOS:
 
-Example 1 - Competitive Win Scenario:
-Input: Our quoted price ₹500, Competitor (cost) ₹480, Client demand ₹470, Quantity 1000
+Example 1 - MBCB Competitive Win Scenario:
+Input: Our quoted price ₹500, Competitor (cost) ₹480, Client demand ₹470, Quantity 1000, Product: MBCB
 Expected Output:
 {
   "winProbability": 75,
-  "guaranteedWinPrice": 485,
+  "guaranteedWinPrice": 489.60,
   "reasoning": {
-    "competitorAnalysis": "We are 4.2% above competitor/cost (₹500 vs ₹480). Margin = 4.17% which is below minimum 15%. We must maintain at least 15% margin above cost. Competitor data reliability: high (verified quote).",
-    "historicalComparison": "Last 5 similar quotes: 3 wins at ₹485-495 range (avg margin 21%), 2 losses at ₹510+ (too high). Pattern: Sweet spot is ₹485-495 for this quantity. Historical relevance: high (same product, similar quantity).",
-    "demandAssessment": "Client demand ₹470 is 6% below our quoted price ₹500. At current price, win probability is 75%. Client wants ₹470 but we can't go below cost ₹480. Negotiation room: ₹500 down to ₹485-490 range.",
-    "marginConsideration": "At current price ₹500: Margin = 4.17% (BELOW minimum 15% - WARNING). At guaranteed win price ₹485: Margin = 1.04% (STILL BELOW minimum - need to recalculate). Must ensure guaranteed win price maintains 15% margin minimum."
+    "competitorAnalysis": "Our quotation ₹500 > competitor ₹480, so base price = competitor ₹480. For MBCB, we need 2-3% margin. Minimum price = ₹480 × 1.02 = ₹489.60. Competitor data reliability: high (verified quote).",
+    "historicalComparison": "Last 5 similar quotes: 3 wins at ₹485-495 range (avg margin 2.5%), 2 losses at ₹510+ (too high). Pattern: Sweet spot is ₹489-495 for this quantity. Historical relevance: high (same product, similar quantity).",
+    "demandAssessment": "Client demand ₹470 is below our minimum price ₹489.60 (with 2% margin). At current price ₹500, win probability is 75%. To guarantee win, suggest ₹489.60 (minimum with 2% margin) or negotiate up to ₹494.40 (3% margin).",
+    "marginConsideration": "Base price: ₹480 (competitor, since our quotation > competitor). At guaranteed win price ₹489.60: Margin = 2% (meets MBCB minimum). Maximum margin price: ₹494.40 (3%)."
   },
   "confidenceFactors": {
     "dataQuality": "high",
@@ -201,17 +214,17 @@ Expected Output:
   }
 }
 
-Example 2 - Premium Positioning Scenario:
-Input: Our quoted price ₹600, Competitor (cost) ₹550, Client demand ₹580, Quantity 500
+Example 2 - Signages Premium Positioning Scenario:
+Input: Our quoted price ₹600, Competitor (cost) ₹550, Client demand ₹580, Quantity 500, Product: Signages
 Expected Output:
 {
   "winProbability": 65,
-  "guaranteedWinPrice": 590,
+  "guaranteedWinPrice": 580,
   "reasoning": {
-    "competitorAnalysis": "We are 9.1% above competitor/cost (₹600 vs ₹550). Margin = 9.09% which is below minimum 15%. We must maintain at least 15% margin above cost. Competitor data reliability: medium (estimated quote).",
-    "historicalComparison": "Similar premium quotes: 2 wins at ₹585-595 (clients valued quality), 3 losses at ₹600+ (too high). Pattern: Premium acceptable up to ₹595. Historical relevance: medium (similar specs, different quantity).",
-    "demandAssessment": "Client demand ₹580 is 3.4% below our quoted price ₹600. At current price, win probability is 65%. Client wants ₹580, we can negotiate down to ₹590-595 range while maintaining margin.",
-    "marginConsideration": "At current price ₹600: Margin = 9.09% (BELOW minimum 15% - WARNING). At guaranteed win price ₹590: Margin = 7.27% (STILL BELOW minimum - need to recalculate). Must ensure guaranteed win price maintains 15% margin minimum (₹632.50 minimum)."
+    "competitorAnalysis": "Our quotation ₹600 > competitor ₹550, so base price = competitor ₹550. For Signages, we need 15-20% margin. Minimum price = ₹550 × 1.15 = ₹632.50. However, client demand ₹580 is below minimum. Competitor data reliability: medium (estimated quote).",
+    "historicalComparison": "Similar premium quotes: 2 wins at ₹630-650 (clients valued quality), 3 losses at ₹600+ (too high). Pattern: Premium acceptable up to ₹650. Historical relevance: medium (similar specs, different quantity).",
+    "demandAssessment": "Client demand ₹580 is below our minimum price ₹632.50 (with 15% margin). At current price ₹600, win probability is 65%. To guarantee win while maintaining margin, suggest ₹632.50 (minimum with 15% margin). If client insists on ₹580, explain margin requirement.",
+    "marginConsideration": "Base price: ₹550 (competitor, since our quotation > competitor). At guaranteed win price ₹632.50: Margin = 15% (meets Signages minimum). Maximum margin price: ₹660 (20%). Client demand ₹580 is below minimum - cannot accept without losing margin."
   },
   "confidenceFactors": {
     "dataQuality": "high",
@@ -241,16 +254,22 @@ Expected Output:
 
 CRITICAL REQUIREMENTS:
 - Calculate win probability (0-100) at the CURRENT QUOTED PRICE (ourPricePerUnit)
-- Calculate guaranteedWinPrice that ensures 100% win probability
-- guaranteedWinPrice MUST be >= competitor price + 15% (minimum margin requirement)
-- NEVER suggest a price below competitor price (our cost)
+- Calculate guaranteedWinPrice that ensures 100% win probability using new business logic:
+  1. Determine base price: If our quotation > competitor → use competitor, else use our quotation
+  2. Apply product-specific margin: MBCB (2-3%), Signages (15-20%), Paint (15-20%)
+  3. Suggest price closest to client demand while maintaining minimum margin
+- guaranteedWinPrice MUST maintain product-specific minimum margin:
+  * MBCB: >= base price × 1.02 (2% minimum)
+  * Signages: >= base price × 1.15 (15% minimum)
+  * Paint: >= base price × 1.15 (15% minimum)
+- NEVER suggest a price below the minimum margin requirement
 - Always provide step-by-step reasoning in the reasoning object
 - Include specific percentages, numbers, and data points in your analysis
 - Rate confidence for each factor (dataQuality, historicalRelevance, competitorDataReliability)
 - Always explain what specific data influenced your recommendation
 - If historical data is missing, state clearly and use analytical reasoning
 - Provide actionable suggestions for negotiation strategy
-- Focus on: What's the win probability at current price? What price should we close at for 100% win?`;
+- Focus on: What's the win probability at current price? What price should we close at for 100% win while maintaining margin?`;
 }
 
 // ============================================
@@ -370,26 +389,34 @@ When competitor price was around ₹${competitorPricePerUnit.toFixed(2)}:
 
   pricingContext += `\n\nAnalyze the pricing situation and provide:
 1. Win probability (0-100) at the CURRENT QUOTED PRICE (₹${ourPricePerUnit.toFixed(2)})
-2. A guaranteed win price (price that would ensure 100% win probability)
-   - MUST be >= competitor price + 15% (minimum margin requirement)
-   - Balance between competitiveness (to win) and profitability (to maintain margin)
-   - Consider client demand price if provided
+2. A guaranteed win price (price that would ensure 100% win probability) using NEW BUSINESS LOGIC:
+   - Step 1: Determine base price: If our quotation > competitor → use competitor, else use our quotation
+   - Step 2: Apply product-specific margin:
+     * MBCB: 2-3% margin above base price
+     * Signages: 15-20% margin above base price
+     * Paint: 15-20% margin above base price
+   - Step 3: Suggest price closest to client demand while maintaining minimum margin
+   - MUST maintain product-specific minimum margin (MBCB: 2%, Signages: 15%, Paint: 15%)
 3. Clear reasoning for your analysis
 4. 2-3 actionable suggestions for negotiation strategy
 5. Margin analysis at current price and guaranteed win price
 
 CRITICAL CONSTRAINTS:
-- We NEVER quote below competitor price (our cost)
-- Minimum margin: 15% above competitor price
-- Guaranteed win price must maintain minimum 15% margin
-- If client demand is below our minimum price (cost + 15%), explain the situation
+- Base price selection: If our quotation > competitor → use competitor, else use our quotation
+- Product-specific margins:
+  * MBCB: Minimum 2%, Maximum 3%
+  * Signages: Minimum 15%, Maximum 20%
+  * Paint: Minimum 15%, Maximum 20%
+- Guaranteed win price must maintain product-specific minimum margin
+- If client demand is below our minimum price (base + minimum margin), explain the situation
 
 Consider:
-- Current quoted price vs client demand (negotiation room)
-- Margin at current price (must be >= 15%)
+- Current quoted price vs competitor price (determines base price)
+- Base price vs client demand (negotiation room)
+- Margin at current price (must meet product-specific minimum)
 - Historical win/loss patterns at similar price points
 - How much can we negotiate down while maintaining minimum margin?
-- What price should we close at for 100% guaranteed win?`;
+- What price should we close at for 100% guaranteed win while maintaining margin?`;
 
   return pricingContext;
 }
@@ -627,6 +654,97 @@ function analyzeMarginTrends(
     bySeason,
     overallTrend,
   };
+}
+
+// ============================================
+// PRICING LOGIC FUNCTIONS
+// ============================================
+
+/**
+ * Calculate suggested price based on business rules:
+ * 1. If our quotation price > competitor price → use competitor price
+ * 2. If our quotation price < competitor price → use our quotation price
+ * 3. Apply profit margins: MBCB (2-3%), Signages (15-20%)
+ * 4. Suggest price closer to client demand while maintaining margin
+ * 
+ * @param ourQuotationPrice - Our calculated quotation price
+ * @param competitorPrice - Competitor price (if available)
+ * @param clientDemandPrice - Client demand price (if available)
+ * @param productType - Product type (mbcb, signages, paint)
+ * @returns Suggested price that ensures win while maintaining profit margin
+ */
+function calculateSuggestedPrice(
+  ourQuotationPrice: number,
+  competitorPrice: number | null | undefined,
+  clientDemandPrice: number | null | undefined,
+  productType: 'mbcb' | 'signages' | 'paint'
+): number {
+  // Step 1: Determine base price
+  let basePrice: number;
+  
+  if (competitorPrice && competitorPrice > 0) {
+    // If our quotation > competitor → use competitor price
+    // If our quotation < competitor → use our quotation price
+    if (ourQuotationPrice > competitorPrice) {
+      basePrice = competitorPrice;
+    } else {
+      basePrice = ourQuotationPrice;
+    }
+  } else {
+    // No competitor price available, use our quotation price
+    basePrice = ourQuotationPrice;
+  }
+  
+  // Step 2: Determine profit margin requirements
+  let minMargin: number;
+  let maxMargin: number;
+  
+  if (productType === 'mbcb') {
+    minMargin = 0.02; // 2%
+    maxMargin = 0.03; // 3%
+  } else if (productType === 'signages') {
+    minMargin = 0.15; // 15%
+    maxMargin = 0.20; // 20%
+  } else {
+    // Paint - use default margins (can be adjusted later)
+    minMargin = 0.15; // 15%
+    maxMargin = 0.20; // 20%
+  }
+  
+  // Step 3: Calculate minimum acceptable price (base price + minimum margin)
+  const minimumPrice = basePrice * (1 + minMargin);
+  const maximumPrice = basePrice * (1 + maxMargin);
+  
+  // Step 4: Suggest price closer to client demand while maintaining margin
+  let suggestedPrice: number;
+  
+  if (clientDemandPrice && clientDemandPrice > 0) {
+    // Try to get as close to client demand as possible
+    // But ensure we maintain minimum margin
+    if (clientDemandPrice >= minimumPrice) {
+      // Client demand is acceptable - use it if within max margin, otherwise cap at max margin
+      if (clientDemandPrice <= maximumPrice) {
+        suggestedPrice = clientDemandPrice;
+      } else {
+        // Client demand is too high (above our max margin) - use max margin price
+        suggestedPrice = maximumPrice;
+      }
+    } else {
+      // Client demand is below our minimum - use minimum price
+      suggestedPrice = minimumPrice;
+    }
+  } else {
+    // No client demand - use optimal price (middle of margin range)
+    const optimalMargin = (minMargin + maxMargin) / 2;
+    suggestedPrice = basePrice * (1 + optimalMargin);
+  }
+  
+  // Ensure suggested price is never below minimum
+  if (suggestedPrice < minimumPrice) {
+    suggestedPrice = minimumPrice;
+  }
+  
+  return suggestedPrice;
 }
 
 // ============================================
@@ -902,32 +1020,65 @@ ${baseContext}
       ? Math.max(0, Math.min(100, response.winProbability))
       : 50; // Fallback to neutral probability
 
-    // Parse guaranteed win price (price that would ensure 100% win probability)
+    // Calculate suggested price using new business logic
+    // This ensures we follow the rules:
+    // 1. If our quotation > competitor → use competitor price
+    // 2. If our quotation < competitor → use our quotation price
+    // 3. Apply profit margins: MBCB (2-3%), Signages (15-20%)
+    // 4. Suggest price closer to client demand while maintaining margin
     let guaranteedWinPrice: number;
+    
+    // Use the new pricing logic function
+    guaranteedWinPrice = calculateSuggestedPrice(
+      input.ourPricePerUnit,
+      input.competitorPricePerUnit,
+      input.clientDemandPricePerUnit,
+      input.productType
+    );
+    
+    // If AI provided a guaranteedWinPrice, we can consider it but our business logic takes precedence
+    // However, we can use AI's suggestion as a reference if it's reasonable
     if (typeof response.guaranteedWinPrice === 'number' && response.guaranteedWinPrice > 0) {
-      guaranteedWinPrice = response.guaranteedWinPrice;
-    } else {
-      // Calculate guaranteed win price if not provided by AI
-      // Use client demand price if available, otherwise calculate from current price
-      if (input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0) {
-        // If client demand is provided, guaranteed win should be close to it but above minimum
-        guaranteedWinPrice = input.clientDemandPricePerUnit;
-      } else {
-        // Fallback: 5% below current quoted price
-        guaranteedWinPrice = input.ourPricePerUnit * 0.95;
+      // Check if AI's suggestion is within acceptable range (within 10% of our calculated price)
+      const aiPrice = response.guaranteedWinPrice;
+      const priceDifference = Math.abs(aiPrice - guaranteedWinPrice) / guaranteedWinPrice;
+      
+      if (priceDifference <= 0.10) {
+        // AI suggestion is close to our calculated price - can use it if it's better (closer to client demand)
+        if (input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0) {
+          const ourDistanceToDemand = Math.abs(guaranteedWinPrice - input.clientDemandPricePerUnit);
+          const aiDistanceToDemand = Math.abs(aiPrice - input.clientDemandPricePerUnit);
+          
+          // Use AI price if it's closer to client demand and still maintains margin
+          if (aiDistanceToDemand < ourDistanceToDemand) {
+            // Verify AI price maintains minimum margin
+            const basePrice = (input.competitorPricePerUnit && input.competitorPricePerUnit > 0 && input.ourPricePerUnit > input.competitorPricePerUnit)
+              ? input.competitorPricePerUnit
+              : input.ourPricePerUnit;
+            
+            const minMargin = input.productType === 'mbcb' ? 0.02 : 0.15;
+            const minimumPrice = basePrice * (1 + minMargin);
+            
+            if (aiPrice >= minimumPrice) {
+              guaranteedWinPrice = aiPrice;
+              console.log(`[AI Pricing] Using AI suggested price ${aiPrice} as it's closer to client demand`);
+            }
+          }
+        }
       }
     }
     
-    // CRITICAL: Ensure guaranteed win price is NEVER below competitor price (our cost)
-    if (costPerUnit && costPerUnit > 0) {
-      const minimumPrice = costPerUnit * 1.15; // 15% minimum margin above cost
+    // Final validation: Ensure guaranteed win price maintains minimum margin
+    if (input.competitorPricePerUnit && input.competitorPricePerUnit > 0) {
+      const basePrice = (input.ourPricePerUnit > input.competitorPricePerUnit)
+        ? input.competitorPricePerUnit
+        : input.ourPricePerUnit;
+      
+      const minMargin = input.productType === 'mbcb' ? 0.02 : 0.15;
+      const minimumPrice = basePrice * (1 + minMargin);
+      
       if (guaranteedWinPrice < minimumPrice) {
         console.log(`[AI Pricing] Guaranteed win price ${guaranteedWinPrice} is below minimum (${minimumPrice}), adjusting...`);
-        guaranteedWinPrice = minimumPrice;
-      }
-      // Also ensure it's not below cost
-      if (guaranteedWinPrice < costPerUnit) {
-        console.warn(`[AI Pricing] WARNING: Guaranteed win price ${guaranteedWinPrice} is below cost ${costPerUnit}, setting to minimum`);
         guaranteedWinPrice = minimumPrice;
       }
     }
