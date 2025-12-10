@@ -97,8 +97,35 @@ export default function AccountsPage() {
     };
   };
 
-  // Active filter states (applied filters) - initialized from URL
-  const initialFilters = getInitialFiltersFromURL();
+  // Helper to get initial filters from localStorage or URL
+  const getInitialFilters = () => {
+    if (typeof window === 'undefined') {
+      return getInitialFiltersFromURL();
+    }
+    
+    // First try localStorage (persisted filters)
+    try {
+      const stored = localStorage.getItem('crm_filters_accounts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          industryId: parsed.industryId ?? null,
+          subIndustryId: parsed.subIndustryId ?? null,
+          stateId: parsed.stateId ?? null,
+          cityId: parsed.cityId ?? null,
+          search: parsed.searchQuery ?? '',
+        };
+      }
+    } catch (error) {
+      console.error('Error loading filters from storage:', error);
+    }
+    
+    // Fallback to URL params
+    return getInitialFiltersFromURL();
+  };
+
+  // Active filter states (applied filters) - initialized from localStorage or URL
+  const initialFilters = getInitialFilters();
   const [filterIndustryId, setFilterIndustryId] = useState<number | null>(initialFilters.industryId);
   const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(initialFilters.subIndustryId);
   const [searchQuery, setSearchQuery] = useState<string>(initialFilters.search);
@@ -140,6 +167,39 @@ export default function AccountsPage() {
   const [bulkAssigning, setBulkAssigning] = useState(false);
 
   // ========== FUNCTIONS AFTER STATE ==========
+  // Save filters to localStorage
+  const saveFiltersToStorage = () => {
+    if (typeof window === 'undefined') return;
+    const filterData = {
+      industryId: pendingFilterIndustryId,
+      subIndustryId: pendingFilterSubIndustryId,
+      searchQuery: pendingSearchQuery,
+      stateId: pendingFilterStateId,
+      cityId: pendingFilterCityId,
+    };
+    localStorage.setItem('crm_filters_accounts', JSON.stringify(filterData));
+  };
+
+  // Load filters from localStorage
+  const loadFiltersFromStorage = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem('crm_filters_accounts');
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (error) {
+      console.error('Error loading filters from storage:', error);
+    }
+    return null;
+  };
+
+  // Clear filters from localStorage
+  const clearFiltersFromStorage = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('crm_filters_accounts');
+  };
+
   // Apply pending filters (called when user clicks confirm)
   const applyFilters = () => {
     setFilterIndustryId(pendingFilterIndustryId);
@@ -148,6 +208,9 @@ export default function AccountsPage() {
     setFilterStateId(pendingFilterStateId);
     setFilterCityId(pendingFilterCityId);
     setCurrentPage(1); // Reset to first page when filters change
+    
+    // Save to localStorage for persistence across pages
+    saveFiltersToStorage();
     
     // Update URL with new filters
     const params = new URLSearchParams();
@@ -187,6 +250,8 @@ export default function AccountsPage() {
     setFilterStateId(null);
     setFilterCityId(null);
     setCurrentPage(1);
+    // Clear from localStorage
+    clearFiltersFromStorage();
     router.replace(window.location.pathname, { scroll: false });
   };
 
@@ -637,27 +702,59 @@ export default function AccountsPage() {
     }
   }, []);
 
-  // Sync filter states from URL params when navigating back - this is critical for persistence
+  // Sync filter states from localStorage or URL when navigating back - this is critical for persistence
   useEffect(() => {
-    if (!searchParams) return;
+    if (typeof window === 'undefined') return;
     
-    const urlFilters = getInitialFiltersFromURL();
+    // First check localStorage (persisted filters)
+    const storedFilters = (() => {
+      try {
+        const stored = localStorage.getItem('crm_filters_accounts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return {
+            industryId: parsed.industryId ?? null,
+            subIndustryId: parsed.subIndustryId ?? null,
+            stateId: parsed.stateId ?? null,
+            cityId: parsed.cityId ?? null,
+            search: parsed.searchQuery ?? '',
+          };
+        }
+      } catch (error) {
+        console.error('Error loading filters from storage:', error);
+      }
+      return null;
+    })();
     
-    // Always sync from URL - this ensures filters persist when navigating back
-    // Update active filter states from URL
+    // If no stored filters, check URL params
+    const urlFilters = storedFilters || getInitialFiltersFromURL();
+    
+    // Update active filter states
     setFilterIndustryId(urlFilters.industryId);
     setFilterSubIndustryId(urlFilters.subIndustryId);
     setSearchQuery(urlFilters.search);
     setFilterStateId(urlFilters.stateId);
     setFilterCityId(urlFilters.cityId);
     
-    // Also update pending filter states to match URL
+    // Also update pending filter states to match
     setPendingFilterIndustryId(urlFilters.industryId);
     setPendingFilterSubIndustryId(urlFilters.subIndustryId);
     setPendingSearchQuery(urlFilters.search);
     setPendingFilterStateId(urlFilters.stateId);
     setPendingFilterCityId(urlFilters.cityId);
-  }, [searchParams]);
+    
+    // If we loaded from storage, update URL to match
+    if (storedFilters) {
+      const params = new URLSearchParams();
+      if (urlFilters.industryId) params.set('industryId', urlFilters.industryId.toString());
+      if (urlFilters.subIndustryId) params.set('subIndustryId', urlFilters.subIndustryId.toString());
+      if (urlFilters.stateId) params.set('stateId', urlFilters.stateId.toString());
+      if (urlFilters.cityId) params.set('cityId', urlFilters.cityId.toString());
+      if (urlFilters.search.trim()) params.set('search', urlFilters.search.trim());
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, [searchParams, router]); // Include router in dependencies
 
   // Fetch accounts on mount and when user info changes
   useEffect(() => {

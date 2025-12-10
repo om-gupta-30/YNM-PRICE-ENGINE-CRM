@@ -60,8 +60,37 @@ export default function AdminSubAccountsPage() {
     };
   };
 
-  // Active filter states (applied filters) - initialized from URL
-  const initialFilters = getInitialFiltersFromURL();
+  // Helper to get initial filters from localStorage or URL
+  const getInitialFilters = () => {
+    if (typeof window === 'undefined') {
+      return getInitialFiltersFromURL();
+    }
+    
+    // First try localStorage (persisted filters)
+    try {
+      const stored = localStorage.getItem('crm_filters_subaccounts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          accountId: parsed.accountId ?? null,
+          stateId: parsed.stateId ?? null,
+          cityId: parsed.cityId ?? null,
+          officeType: parsed.officeType ?? 'all',
+          isActive: parsed.isActive ?? 'all',
+          industryId: parsed.industryId ?? null,
+          subIndustryId: parsed.subIndustryId ?? null,
+        };
+      }
+    } catch (error) {
+      console.error('Error loading filters from storage:', error);
+    }
+    
+    // Fallback to URL params
+    return getInitialFiltersFromURL();
+  };
+
+  // Active filter states (applied filters) - initialized from localStorage or URL
+  const initialFilters = getInitialFilters();
   const [filterAccountId, setFilterAccountId] = useState<number | null>(initialFilters.accountId);
   const [filterStateId, setFilterStateId] = useState<number | null>(initialFilters.stateId);
   const [filterCityId, setFilterCityId] = useState<number | null>(initialFilters.cityId);
@@ -101,6 +130,27 @@ export default function AdminSubAccountsPage() {
     }
   }, [router]);
 
+  // Save filters to localStorage
+  const saveFiltersToStorage = () => {
+    if (typeof window === 'undefined') return;
+    const filterData = {
+      accountId: pendingFilterAccountId,
+      stateId: pendingFilterStateId,
+      cityId: pendingFilterCityId,
+      officeType: pendingFilterOfficeType,
+      isActive: pendingFilterIsActive,
+      industryId: pendingFilterIndustryId,
+      subIndustryId: pendingFilterSubIndustryId,
+    };
+    localStorage.setItem('crm_filters_subaccounts', JSON.stringify(filterData));
+  };
+
+  // Clear filters from localStorage
+  const clearFiltersFromStorage = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('crm_filters_subaccounts');
+  };
+
   // Apply pending filters (called when user clicks confirm)
   const applyFilters = () => {
     setFilterAccountId(pendingFilterAccountId);
@@ -110,6 +160,9 @@ export default function AdminSubAccountsPage() {
     setFilterIsActive(pendingFilterIsActive);
     setFilterIndustryId(pendingFilterIndustryId);
     setFilterSubIndustryId(pendingFilterSubIndustryId);
+    
+    // Save to localStorage for persistence across pages
+    saveFiltersToStorage();
     
     // Update URL with new filters
     const params = new URLSearchParams();
@@ -156,8 +209,67 @@ export default function AdminSubAccountsPage() {
     setFilterIsActive('all');
     setFilterIndustryId(null);
     setFilterSubIndustryId(null);
+    // Clear from localStorage
+    clearFiltersFromStorage();
     router.replace(window.location.pathname, { scroll: false });
   };
+
+  // Sync filters from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Check localStorage (persisted filters)
+    const storedFilters = (() => {
+      try {
+        const stored = localStorage.getItem('crm_filters_subaccounts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return {
+            accountId: parsed.accountId ?? null,
+            stateId: parsed.stateId ?? null,
+            cityId: parsed.cityId ?? null,
+            officeType: parsed.officeType ?? 'all',
+            isActive: parsed.isActive ?? 'all',
+            industryId: parsed.industryId ?? null,
+            subIndustryId: parsed.subIndustryId ?? null,
+          };
+        }
+      } catch (error) {
+        console.error('Error loading filters from storage:', error);
+      }
+      return null;
+    })();
+    
+    // If we have stored filters, update states and URL
+    if (storedFilters) {
+      setFilterAccountId(storedFilters.accountId);
+      setPendingFilterAccountId(storedFilters.accountId);
+      setFilterStateId(storedFilters.stateId);
+      setPendingFilterStateId(storedFilters.stateId);
+      setFilterCityId(storedFilters.cityId);
+      setPendingFilterCityId(storedFilters.cityId);
+      setFilterOfficeType(storedFilters.officeType);
+      setPendingFilterOfficeType(storedFilters.officeType);
+      setFilterIsActive(storedFilters.isActive);
+      setPendingFilterIsActive(storedFilters.isActive);
+      setFilterIndustryId(storedFilters.industryId);
+      setPendingFilterIndustryId(storedFilters.industryId);
+      setFilterSubIndustryId(storedFilters.subIndustryId);
+      setPendingFilterSubIndustryId(storedFilters.subIndustryId);
+      
+      // Update URL to match
+      const params = new URLSearchParams();
+      if (storedFilters.accountId) params.set('accountId', storedFilters.accountId.toString());
+      if (storedFilters.stateId) params.set('stateId', storedFilters.stateId.toString());
+      if (storedFilters.cityId) params.set('cityId', storedFilters.cityId.toString());
+      if (storedFilters.officeType !== 'all') params.set('officeType', storedFilters.officeType);
+      if (storedFilters.isActive !== 'all') params.set('isActive', storedFilters.isActive);
+      if (storedFilters.industryId) params.set('industryId', storedFilters.industryId.toString());
+      if (storedFilters.subIndustryId) params.set('subIndustryId', storedFilters.subIndustryId.toString());
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, []); // Only run on mount
 
   useEffect(() => {
     if (isAdmin) {

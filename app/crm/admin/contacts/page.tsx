@@ -51,8 +51,34 @@ export default function AdminContactsPage() {
     };
   };
 
-  // Active filter states (applied filters) - initialized from URL
-  const initialFilters = getInitialFiltersFromURL();
+  // Helper to get initial filters from localStorage or URL
+  const getInitialFilters = () => {
+    if (typeof window === 'undefined') {
+      return getInitialFiltersFromURL();
+    }
+    
+    // First try localStorage (persisted filters)
+    try {
+      const stored = localStorage.getItem('crm_filters_contacts');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return {
+          accountId: parsed.accountId ?? null,
+          subAccountId: parsed.subAccountId ?? null,
+          callStatus: parsed.callStatus ?? 'all',
+          employeeId: parsed.employeeId ?? 'all',
+        };
+      }
+    } catch (error) {
+      console.error('Error loading filters from storage:', error);
+    }
+    
+    // Fallback to URL params
+    return getInitialFiltersFromURL();
+  };
+
+  // Active filter states (applied filters) - initialized from localStorage or URL
+  const initialFilters = getInitialFilters();
   const [filterAccountId, setFilterAccountId] = useState<number | null>(initialFilters.accountId);
   const [filterSubAccountId, setFilterSubAccountId] = useState<number | null>(initialFilters.subAccountId);
   const [filterCallStatus, setFilterCallStatus] = useState<string>(initialFilters.callStatus);
@@ -85,12 +111,33 @@ export default function AdminContactsPage() {
     }
   }, [router]);
 
+  // Save filters to localStorage
+  const saveFiltersToStorage = () => {
+    if (typeof window === 'undefined') return;
+    const filterData = {
+      accountId: pendingFilterAccountId,
+      subAccountId: pendingFilterSubAccountId,
+      callStatus: pendingFilterCallStatus,
+      employeeId: pendingFilterEmployeeId,
+    };
+    localStorage.setItem('crm_filters_contacts', JSON.stringify(filterData));
+  };
+
+  // Clear filters from localStorage
+  const clearFiltersFromStorage = () => {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('crm_filters_contacts');
+  };
+
   // Apply pending filters (called when user clicks confirm)
   const applyFilters = () => {
     setFilterAccountId(pendingFilterAccountId);
     setFilterSubAccountId(pendingFilterSubAccountId);
     setFilterCallStatus(pendingFilterCallStatus);
     setFilterEmployeeId(pendingFilterEmployeeId);
+    
+    // Save to localStorage for persistence across pages
+    saveFiltersToStorage();
     
     // Update URL with new filters
     const params = new URLSearchParams();
@@ -125,8 +172,55 @@ export default function AdminContactsPage() {
     setFilterSubAccountId(null);
     setFilterCallStatus('all');
     setFilterEmployeeId('all');
+    // Clear from localStorage
+    clearFiltersFromStorage();
     router.replace(window.location.pathname, { scroll: false });
   };
+
+  // Sync filters from localStorage on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // Check localStorage (persisted filters)
+    const storedFilters = (() => {
+      try {
+        const stored = localStorage.getItem('crm_filters_contacts');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return {
+            accountId: parsed.accountId ?? null,
+            subAccountId: parsed.subAccountId ?? null,
+            callStatus: parsed.callStatus ?? 'all',
+            employeeId: parsed.employeeId ?? 'all',
+          };
+        }
+      } catch (error) {
+        console.error('Error loading filters from storage:', error);
+      }
+      return null;
+    })();
+    
+    // If we have stored filters, update states and URL
+    if (storedFilters) {
+      setFilterAccountId(storedFilters.accountId);
+      setPendingFilterAccountId(storedFilters.accountId);
+      setFilterSubAccountId(storedFilters.subAccountId);
+      setPendingFilterSubAccountId(storedFilters.subAccountId);
+      setFilterCallStatus(storedFilters.callStatus);
+      setPendingFilterCallStatus(storedFilters.callStatus);
+      setFilterEmployeeId(storedFilters.employeeId);
+      setPendingFilterEmployeeId(storedFilters.employeeId);
+      
+      // Update URL to match
+      const params = new URLSearchParams();
+      if (storedFilters.accountId) params.set('accountId', storedFilters.accountId.toString());
+      if (storedFilters.subAccountId) params.set('subAccountId', storedFilters.subAccountId.toString());
+      if (storedFilters.callStatus !== 'all') params.set('callStatus', storedFilters.callStatus);
+      if (storedFilters.employeeId !== 'all') params.set('employeeId', storedFilters.employeeId);
+      const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, []); // Only run on mount
 
   useEffect(() => {
     if (isAdmin) {

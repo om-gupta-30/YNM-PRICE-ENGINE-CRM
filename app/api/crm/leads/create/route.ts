@@ -99,9 +99,9 @@ export async function POST(request: NextRequest) {
 
     // Determine assigned employee:
     // 1. If assigned_employee is explicitly provided, use it
-    // 2. If admin creates lead and no assigned_employee provided, auto-assign to account's assigned employee
+    // 2. If no assigned_employee provided, auto-assign to account's assigned employee
     // 3. Otherwise, leave as null
-    let finalAssignedEmployee = assigned_employee || null;
+    let finalAssignedEmployee = assigned_employee && assigned_employee.trim() ? assigned_employee.trim() : null;
     
     // If no assigned employee is provided and account_id exists, check if account has an assigned employee
     if (!finalAssignedEmployee && account_id) {
@@ -112,13 +112,31 @@ export async function POST(request: NextRequest) {
           .eq('id', account_id)
           .single();
         
-        if (!accountError && accountData && accountData.assigned_employee) {
+        if (accountError) {
+          console.error('Error fetching account assigned employee:', accountError);
+          return NextResponse.json(
+            { error: `Failed to fetch account details: ${accountError.message}` },
+            { status: 500 }
+          );
+        }
+        
+        if (accountData && accountData.assigned_employee) {
           // Auto-assign lead to the employee assigned to the account
           finalAssignedEmployee = accountData.assigned_employee;
+          console.log(`Auto-assigned lead to employee: ${finalAssignedEmployee} from account ${account_id}`);
+        } else {
+          // Account has no assigned employee - return error
+          return NextResponse.json(
+            { error: 'This account has no assigned employee. Please assign an employee to this account first before creating a lead.' },
+            { status: 400 }
+          );
         }
-      } catch (err) {
-        console.warn('Error fetching account assigned employee:', err);
-        // Continue without auto-assignment if there's an error
+      } catch (err: any) {
+        console.error('Error fetching account assigned employee:', err);
+        return NextResponse.json(
+          { error: `Failed to fetch account details: ${err.message || 'Unknown error'}` },
+          { status: 500 }
+        );
       }
     }
 

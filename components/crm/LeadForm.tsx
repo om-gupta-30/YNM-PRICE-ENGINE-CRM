@@ -280,12 +280,21 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
   // Fetch assigned employee for an account
   const fetchAccountAssignedEmployee = async (accountId: number): Promise<string | null> => {
     try {
-      const response = await fetch(`/api/accounts/${accountId}`);
+      // Add isAdmin param to ensure we can access the account
+      const response = await fetch(`/api/accounts/${accountId}?isAdmin=true`);
       if (response.ok) {
         const data = await response.json();
-        if (data.success && data.data && data.data.assigned_employee) {
+        // API returns { data: {...} } structure
+        if (data && data.data && data.data.assigned_employee) {
           return data.data.assigned_employee;
         }
+        // Also check if data is directly the account object
+        if (data && data.assigned_employee) {
+          return data.assigned_employee;
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to fetch account:', response.status, errorData);
       }
       return null;
     } catch (error) {
@@ -318,13 +327,19 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
           loadSubAccounts(value as number);
           // For admins: Auto-assign employee from account
           if (isAdmin) {
+            // Reset assigned_employee first to show loading state
+            updated.assigned_employee = '';
+            // Fetch and set employee asynchronously
             fetchAccountAssignedEmployee(value as number).then((employee) => {
               if (employee) {
                 setFormData(prev => ({ ...prev, assigned_employee: employee }));
               } else {
-                // Account has no assigned employee - show warning
+                // Account has no assigned employee - clear it
                 setFormData(prev => ({ ...prev, assigned_employee: '' }));
               }
+            }).catch((error) => {
+              console.error('Error in fetchAccountAssignedEmployee:', error);
+              setFormData(prev => ({ ...prev, assigned_employee: '' }));
             });
           }
         } else {
@@ -394,10 +409,8 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       if (!formData.phone.trim()) {
         return 'Phone is required';
       }
-      // For admins: Check if account has assigned employee
-      if (isAdmin && !formData.assigned_employee) {
-        return 'This account has no assigned employee. Please assign an employee to this account first before creating a lead.';
-      }
+      // Note: For admins, assigned_employee validation is handled in the API
+      // The API will auto-assign from account if not provided
     } else {
       // Edit mode - only validate fields that have values or are required
       if (formData.lead_name !== undefined && !formData.lead_name.trim()) {
@@ -774,26 +787,24 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                 <select
                   value={formData.assigned_employee || ''}
                   onChange={(e) => handleInputChange('assigned_employee', e.target.value)}
-                  className={`w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold ${
-                    formData.accounts && !formData.assigned_employee ? 'border-red-500/50' : 'border-slate-500'
-                  }`}
+                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
                 >
                   <option value="">Select Employee (Auto-assigned from account)</option>
                   {employees.map(emp => (
                     <option key={emp} value={emp}>{emp}</option>
                   ))}
                 </select>
-                {formData.accounts && !formData.assigned_employee ? (
-                  <p className="text-xs text-red-400 mt-1 font-semibold">
-                    ⚠️ This account has no assigned employee. Please assign an employee to this account first before creating a lead.
-                  </p>
-                ) : formData.assigned_employee ? (
+                {formData.assigned_employee ? (
                   <p className="text-xs text-green-400 mt-1">
                     ✓ Assigned to: {formData.assigned_employee}
                   </p>
-                ) : (
+                ) : formData.accounts ? (
                   <p className="text-xs text-slate-400 mt-1">
                     Will auto-assign to the employee assigned to the selected account.
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Select an account to auto-assign employee.
                   </p>
                 )}
               </div>
