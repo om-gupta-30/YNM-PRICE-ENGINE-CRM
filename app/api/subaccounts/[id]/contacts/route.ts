@@ -4,6 +4,7 @@ import { syncContactNotification } from '@/lib/utils/notificationSync';
 import { formatDateIST, formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
 import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // GET - Fetch contacts for a sub-account
 export async function GET(
@@ -172,6 +173,35 @@ export async function POST(
           follow_up_date,
         },
       });
+    }
+
+    // Create dashboard notification for contact creation
+    // Get account's assigned employee to notify them
+    try {
+      const { data: accountData } = await supabase
+        .from('accounts')
+        .select('assigned_employee, account_name')
+        .eq('id', subAccount.account_id)
+        .single();
+      
+      const notificationEmployee = accountData?.assigned_employee || created_by || 'Admin';
+      createDashboardNotification({
+        type: 'contact_added',
+        employee: notificationEmployee,
+        message: `New contact "${name}" has been added`,
+        entityName: name,
+        entityId: contact.id,
+        priority: 'normal',
+        metadata: {
+          contact_id: contact.id,
+          account_id: subAccount.account_id,
+          sub_account_id: subAccountId,
+        },
+      }).catch(() => {
+        // Silently fail - notification creation is non-critical
+      });
+    } catch (err) {
+      // Silently fail - notification creation is non-critical
     }
 
     // Sync notification if follow-up date exists and call status is not "Connected"
@@ -351,6 +381,35 @@ export async function PUT(
           notes: 'Notes',
         },
       });
+
+      // Create dashboard notification for contact edit
+      // Get account's assigned employee to notify them
+      try {
+        const { data: accountData } = await supabase
+          .from('accounts')
+          .select('assigned_employee, account_name')
+          .eq('id', existingContact.account_id)
+          .single();
+        
+        const notificationEmployee = accountData?.assigned_employee || employeeId || 'Admin';
+        createDashboardNotification({
+          type: 'contact_edited',
+          employee: notificationEmployee,
+          message: `Contact "${displayName}" has been updated`,
+          entityName: displayName,
+          entityId: contact_id,
+          priority: 'normal',
+          metadata: {
+            contact_id,
+            account_id: existingContact.account_id,
+            sub_account_id: subAccountId,
+          },
+        }).catch(() => {
+          // Silently fail - notification creation is non-critical
+        });
+      } catch (err) {
+        // Silently fail - notification creation is non-critical
+      }
     }
 
     // Sync notifications when call status or follow-up date changes

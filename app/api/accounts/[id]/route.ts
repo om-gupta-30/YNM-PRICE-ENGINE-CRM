@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logEditActivity, logDeleteActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // GET - Fetch single account by ID
 export async function GET(
@@ -158,6 +159,10 @@ export async function PUT(
 
     // Log activity for account update with change detection (non-blocking - fire and forget)
     const updatedBy = body.updatedBy || 'System';
+    const wasAssigned = oldAccount?.assigned_employee;
+    const isNowAssigned = data.assigned_employee;
+    const wasAssignedChanged = body.assignedEmployee !== undefined && wasAssigned !== isNowAssigned;
+    
     Promise.resolve().then(async () => {
       try {
         await logEditActivity({
@@ -187,6 +192,52 @@ export async function PUT(
         is_active: 'Status',
       },
       });
+
+      // Create dashboard notifications
+      // 1. If account was assigned to a new employee, notify them
+      if (wasAssignedChanged && isNowAssigned) {
+        createDashboardNotification({
+          type: 'account_assigned',
+          employee: isNowAssigned,
+          message: `Account "${data.account_name}" has been assigned to you`,
+          entityName: data.account_name,
+          entityId: id,
+          priority: 'normal',
+          metadata: {
+            account_id: id,
+            previous_employee: wasAssigned || null,
+          },
+        }).catch(() => {
+          // Silently fail - notification creation is non-critical
+        });
+      }
+
+      // 2. If account was edited (and not just assignment change), notify assigned employee or admin
+      const hasOtherChanges = 
+        (body.accountName !== undefined && body.accountName !== oldAccount?.account_name) ||
+        (body.companyStage !== undefined && body.companyStage !== oldAccount?.company_stage) ||
+        (body.companyTag !== undefined && body.companyTag !== oldAccount?.company_tag) ||
+        (body.notes !== undefined && body.notes !== oldAccount?.notes) ||
+        (body.industries !== undefined) ||
+        (body.industryProjects !== undefined) ||
+        (body.is_active !== undefined && body.is_active !== oldAccount?.is_active);
+
+      if (hasOtherChanges) {
+        const notificationEmployee = isNowAssigned || wasAssigned || 'Admin';
+        createDashboardNotification({
+          type: 'account_edited',
+          employee: notificationEmployee,
+          message: `Account "${data.account_name}" has been updated`,
+          entityName: data.account_name,
+          entityId: id,
+          priority: 'normal',
+          metadata: {
+            account_id: id,
+          },
+        }).catch(() => {
+          // Silently fail - notification creation is non-critical
+        });
+      }
       } catch (activityError) {
         console.warn('Failed to log account update activity:', activityError);
       }

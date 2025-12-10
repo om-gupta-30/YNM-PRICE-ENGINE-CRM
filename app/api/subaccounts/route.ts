@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -193,6 +194,34 @@ export async function POST(request: NextRequest) {
       console.warn('Failed to log sub-account creation activity:', activityError);
     }
 
+    // Create dashboard notification for sub-account creation
+    // Get account's assigned employee to notify them
+    try {
+      const { data: accountData } = await supabase
+        .from('accounts')
+        .select('assigned_employee, account_name')
+        .eq('id', parseInt(accountId))
+        .single();
+      
+      const notificationEmployee = accountData?.assigned_employee || body.created_by || 'Admin';
+      createDashboardNotification({
+        type: 'sub_account_added',
+        employee: notificationEmployee,
+        message: `New sub-account "${subAccountName}" has been added to account "${accountData?.account_name || 'Unknown'}"`,
+        entityName: subAccountName,
+        entityId: subAccount.id,
+        priority: 'normal',
+        metadata: {
+          sub_account_id: subAccount.id,
+          account_id: parseInt(accountId),
+        },
+      }).catch(() => {
+        // Silently fail - notification creation is non-critical
+      });
+    } catch (err) {
+      // Silently fail - notification creation is non-critical
+    }
+
     return NextResponse.json({ success: true, subAccountId: subAccount.id }, { status: 201 });
   } catch (error: any) {
     console.error('API error in /api/subaccounts POST:', error);
@@ -323,6 +352,34 @@ export async function PUT(request: NextRequest) {
           office_type: 'Office Type',
         },
       });
+
+      // Create dashboard notification for sub-account edit
+      // Get account's assigned employee to notify them
+      try {
+        const { data: accountData } = await supabase
+          .from('accounts')
+          .select('assigned_employee, account_name')
+          .eq('id', oldSubAccount.account_id)
+          .single();
+        
+        const notificationEmployee = accountData?.assigned_employee || updatedBy || 'Admin';
+        createDashboardNotification({
+          type: 'sub_account_edited',
+          employee: notificationEmployee,
+          message: `Sub-account "${entityName}" has been updated`,
+          entityName,
+          entityId: parseInt(id),
+          priority: 'normal',
+          metadata: {
+            sub_account_id: parseInt(id),
+            account_id: oldSubAccount.account_id,
+          },
+        }).catch(() => {
+          // Silently fail - notification creation is non-critical
+        });
+      } catch (err) {
+        // Silently fail - notification creation is non-critical
+      }
     }
 
     return NextResponse.json({ success: true });

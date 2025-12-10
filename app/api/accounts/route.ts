@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 import { logCreateActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification, createDashboardNotificationsForEmployees } from '@/lib/utils/dashboardNotificationLogger';
 
 export async function GET(request: NextRequest) {
   try {
@@ -260,6 +261,25 @@ export async function POST(request: NextRequest) {
         company_tag: companyTag,
         assigned_employee: finalAssignedEmployee,
       },
+    });
+
+    // Create dashboard notification for account creation
+    // If assigned to an employee, notify them; otherwise notify admin
+    const notificationEmployee = finalAssignedEmployee || 'Admin';
+    createDashboardNotification({
+      type: 'account_added',
+      employee: notificationEmployee,
+      message: `New account "${accountName}" has been created${finalAssignedEmployee ? ` and assigned to you` : ''}`,
+      entityName: accountName,
+      entityId: account.id,
+      priority: 'normal',
+      metadata: {
+        account_id: account.id,
+        company_stage: companyStage,
+        company_tag: companyTag,
+      },
+    }).catch(() => {
+      // Silently fail - notification creation is non-critical
     });
 
     return NextResponse.json({ success: true, accountId: account.id }, { status: 201 });

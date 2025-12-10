@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // POST - Update an existing task
 export async function POST(request: NextRequest) {
@@ -236,6 +237,26 @@ export async function POST(request: NextRequest) {
               old_data: oldTask,
               new_data: task,
             },
+          });
+        }
+
+        // Create dashboard notification for task edit
+        if (changes.length > 0) {
+          const notificationEmployee = task.assigned_employee || task.created_by || 'Admin';
+          createDashboardNotification({
+            type: 'task_edited',
+            employee: notificationEmployee,
+            message: `Task "${task.title}" has been updated`,
+            entityName: task.title,
+            entityId: task.id,
+            priority: 'normal',
+            metadata: {
+              task_id: task.id,
+              changes,
+              status: task.status,
+            },
+          }).catch(() => {
+            // Silently fail - notification creation is non-critical
           });
         }
       } catch (activityError) {

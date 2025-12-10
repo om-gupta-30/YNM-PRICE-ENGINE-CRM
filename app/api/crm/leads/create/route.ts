@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { logActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // POST - Create new lead
 export async function POST(request: NextRequest) {
@@ -203,6 +204,24 @@ export async function POST(request: NextRequest) {
         // Silently fail - activity logging shouldn't block the response
       });
     }
+
+    // Create dashboard notification for lead creation
+    const notificationEmployee = finalAssignedEmployee || created_by || 'Admin';
+    createDashboardNotification({
+      type: 'lead_added',
+      employee: notificationEmployee,
+      message: `New lead "${lead_name.trim()}" has been created${finalAssignedEmployee ? ` and assigned to you` : ''}`,
+      entityName: lead_name.trim(),
+      entityId: data.id,
+      priority: 'normal',
+      metadata: {
+        lead_id: data.id,
+        status: data.status,
+        lead_source: lead_source || null,
+      },
+    }).catch(() => {
+      // Silently fail - notification creation is non-critical
+    });
 
     return NextResponse.json({ success: true, data });
   } catch (error: any) {

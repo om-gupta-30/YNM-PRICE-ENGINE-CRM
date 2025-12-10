@@ -17,12 +17,33 @@ export async function GET(request: NextRequest) {
     const supabase = createSupabaseServerClient();
 
     // Fetch notifications for the employee, newest first
+    // Filter to only show dashboard notifications (task, lead, account, sub-account, contact related)
+    // Follow-up notifications are shown in the notification bell, not in dashboard
     const { data: notifications, error } = await supabase
       .from('employee_notifications')
       .select('*')
       .eq('employee', employee)
       .order('created_at', { ascending: false })
       .limit(100); // Limit to 100 most recent
+    
+    // Filter notifications to only show dashboard-specific types
+    // Dashboard notifications have metadata.type matching: task_added, task_edited, lead_added, lead_edited,
+    // account_added, account_edited, account_assigned, sub_account_added, sub_account_edited,
+    // contact_added, contact_edited
+    const dashboardNotificationTypes = [
+      'task_added', 'task_edited',
+      'lead_added', 'lead_edited',
+      'account_added', 'account_edited', 'account_assigned',
+      'sub_account_added', 'sub_account_edited',
+      'contact_added', 'contact_edited'
+    ];
+    
+    const filteredNotifications = (notifications || []).filter((notif: any) => {
+      // Check if metadata.type exists and matches dashboard notification types
+      const metadata = notif.metadata || {};
+      const notificationType = metadata.type;
+      return notificationType && dashboardNotificationTypes.includes(notificationType);
+    });
 
     if (error) {
       console.error('Error fetching employee notifications:', error);
@@ -34,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      notifications: notifications || [],
+      notifications: filteredNotifications || [],
     });
   } catch (error: any) {
     console.error('Get employee notifications error:', error);

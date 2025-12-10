@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // POST - Update lead
 export async function POST(request: NextRequest) {
@@ -233,6 +234,24 @@ export async function POST(request: NextRequest) {
             old_data: oldLead,
             new_data: data,
           },
+        });
+
+        // Create dashboard notification for lead edit
+        const notificationEmployee = data.assigned_employee || body.assigned_employee || 'Admin';
+        createDashboardNotification({
+          type: 'lead_edited',
+          employee: notificationEmployee,
+          message: `Lead "${data.lead_name}" has been updated`,
+          entityName: data.lead_name,
+          entityId: data.id,
+          priority: 'normal',
+          metadata: {
+            lead_id: data.id,
+            changes,
+            status: data.status,
+          },
+        }).catch(() => {
+          // Silently fail - notification creation is non-critical
         });
       }
     } catch (activityError) {

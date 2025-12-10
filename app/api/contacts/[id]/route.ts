@@ -4,6 +4,7 @@ import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { syncContactNotification } from '@/lib/utils/notificationSync';
 import { logEditActivity, logDeleteActivity } from '@/lib/utils/activityLogger';
 import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // GET - Fetch single contact
 export async function GET(
@@ -148,6 +149,34 @@ export async function PUT(
             phone: 'Phone',
           },
         });
+
+        // Create dashboard notification for contact edit
+        // Get account's assigned employee to notify them
+        try {
+          const { data: accountData } = await supabase
+            .from('accounts')
+            .select('assigned_employee, account_name')
+            .eq('id', data.account_id)
+            .single();
+          
+          const notificationEmployee = accountData?.assigned_employee || updatedBy || 'Admin';
+          createDashboardNotification({
+            type: 'contact_edited',
+            employee: notificationEmployee,
+            message: `Contact "${data.name || 'Contact'}" has been updated`,
+            entityName: data.name || 'Contact',
+            entityId: id,
+            priority: 'normal',
+            metadata: {
+              contact_id: id,
+              account_id: data.account_id,
+            },
+          }).catch(() => {
+            // Silently fail - notification creation is non-critical
+          });
+        } catch (err) {
+          // Silently fail - notification creation is non-critical
+        }
       } catch (activityError) {
         console.warn('Failed to log contact update activity:', activityError);
       }

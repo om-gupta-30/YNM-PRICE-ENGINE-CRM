@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { getCurrentISTTime } from '@/lib/utils/dateFormatters';
 import { logActivity } from '@/lib/utils/activityLogger';
+import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
 // POST - Create a new task
 export async function POST(request: NextRequest) {
@@ -141,6 +142,26 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    // Create dashboard notification for task creation
+    // Notify the assigned employee (or admin if no assigned employee)
+    const notificationEmployee = assigned_to?.trim() || created_by?.trim() || 'Admin';
+    createDashboardNotification({
+      type: 'task_added',
+      employee: notificationEmployee,
+      message: `New task "${title.trim()}" has been created${assigned_to ? ` and assigned to you` : ''}`,
+      entityName: title.trim(),
+      entityId: task.id,
+      priority: 'normal',
+      metadata: {
+        task_id: task.id,
+        task_type: task.task_type,
+        due_date,
+        status: task.status,
+      },
+    }).catch(() => {
+      // Silently fail - notification creation is non-critical
+    });
 
     // Create notification asynchronously if reminder is enabled
     if (reminder_enabled && reminder_value && reminder_unit && task) {
