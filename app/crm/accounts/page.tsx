@@ -637,10 +637,13 @@ export default function AccountsPage() {
     }
   }, []);
 
-  // Sync filter states from URL params when navigating back
+  // Sync filter states from URL params when navigating back - this is critical for persistence
   useEffect(() => {
+    if (!searchParams) return;
+    
     const urlFilters = getInitialFiltersFromURL();
     
+    // Always sync from URL - this ensures filters persist when navigating back
     // Update active filter states from URL
     setFilterIndustryId(urlFilters.industryId);
     setFilterSubIndustryId(urlFilters.subIndustryId);
@@ -1081,7 +1084,11 @@ export default function AccountsPage() {
                       </td>
                       <td className="crm-td actions-col text-right">
                         <div className="grid grid-cols-2 gap-2 w-full text-right">
-                          <button onClick={() => router.push(`/crm/accounts/${account.id}`)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-green-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Details</button>
+                          <button onClick={() => {
+                            // Preserve current filter URL params when navigating to details
+                            const currentParams = new URLSearchParams(window.location.search);
+                            router.push(`/crm/accounts/${account.id}?${currentParams.toString()}`);
+                          }} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-green-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Details</button>
                           <button onClick={() => handleViewSubAccounts(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-blue-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Sub-Accounts</button>
                           <button onClick={() => handleEditAccount(account)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-yellow-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Edit</button>
                           {isAdmin && !isDataAnalyst && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}

@@ -379,14 +379,19 @@ export default function LeadsPage() {
         setToast({ message: 'Lead updated successfully! Refreshing...', type: 'success' });
       } else {
         // Create new lead
-        // Normalize priority value - ensure it's either a valid priority or null
+        // Normalize priority value - ensure it's either a valid priority or null (never empty string)
         const normalizedFormData = {
           ...formData,
           priority: formData.priority && ['High Priority', 'Medium Priority', 'Low Priority'].includes(formData.priority)
             ? formData.priority
-            : null,
+            : null, // Explicitly set to null if not valid
           created_by: username,
         };
+        
+        // Remove priority field entirely if it's null to avoid any issues
+        if (normalizedFormData.priority === null) {
+          delete (normalizedFormData as any).priority;
+        }
         
         const response = await fetch('/api/crm/leads/create', {
           method: 'POST',

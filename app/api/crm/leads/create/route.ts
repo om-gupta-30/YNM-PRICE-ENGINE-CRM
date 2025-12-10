@@ -77,27 +77,25 @@ export async function POST(request: NextRequest) {
 
     // Normalize priority value to match database constraint
     // Database expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
-    let normalizedPriority = null;
+    // IMPORTANT: Must be exactly one of these values or null - no empty strings allowed
+    let normalizedPriority: string | null = null;
     if (priority !== undefined && priority !== null && priority !== '') {
       const priorityStr = String(priority).trim();
-      // Exact matches first
-      if (priorityStr === 'High Priority' || priorityStr === 'Medium Priority' || priorityStr === 'Low Priority') {
-        normalizedPriority = priorityStr;
-      } 
-      // Handle variations
-      else if (priorityStr === 'High' || priorityStr.toLowerCase() === 'high priority') {
+      // Exact matches only - database constraint is strict
+      if (priorityStr === 'High Priority') {
         normalizedPriority = 'High Priority';
-      } else if (priorityStr === 'Medium' || priorityStr.toLowerCase() === 'medium priority') {
+      } else if (priorityStr === 'Medium Priority') {
         normalizedPriority = 'Medium Priority';
-      } else if (priorityStr === 'Low' || priorityStr.toLowerCase() === 'low priority') {
+      } else if (priorityStr === 'Low Priority') {
         normalizedPriority = 'Low Priority';
       } else {
-        // Invalid priority value - set to null
+        // Invalid priority value - set to null (empty string would violate constraint)
         console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}), setting to null`);
         normalizedPriority = null;
       }
     }
     // If priority is undefined, null, or empty string, normalizedPriority stays null (correct)
+    // CRITICAL: Do not pass empty string to database - it will violate the constraint
 
     // Determine assigned employee:
     // 1. If assigned_employee is explicitly provided, use it
@@ -124,24 +122,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Build insert object - only include priority if it's not null
+    const insertData: any = {
+      lead_name: lead_name.trim(),
+      contact_person: contact_person?.trim() || null,
+      phone: phone.trim(),
+      email: email?.trim() || null,
+      requirements: requirements?.trim() || null,
+      lead_source: lead_source || null,
+      status: status || 'New',
+      assigned_employee: finalAssignedEmployee,
+      account_id: account_id,
+      sub_account_id: sub_account_id,
+      contact_id: contact_id || null,
+      created_by: created_by || null,
+    };
+    
+    // Only include priority if it's a valid value (not null)
+    if (normalizedPriority !== null) {
+      insertData.priority = normalizedPriority;
+    }
+    // If normalizedPriority is null, we don't include it in the insert (database will use default/null)
+
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase
       .from('leads')
-      .insert({
-        lead_name: lead_name.trim(),
-        contact_person: contact_person?.trim() || null,
-        phone: phone.trim(),
-        email: email?.trim() || null,
-        requirements: requirements?.trim() || null,
-        lead_source: lead_source || null,
-        status: status || 'New',
-        priority: normalizedPriority,
-        assigned_employee: finalAssignedEmployee,
-        account_id: account_id,
-        sub_account_id: sub_account_id,
-        contact_id: contact_id || null,
-        created_by: created_by || null,
-      })
+      .insert(insertData)
       .select()
       .single();
 

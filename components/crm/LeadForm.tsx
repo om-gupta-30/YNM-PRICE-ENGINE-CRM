@@ -277,6 +277,23 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
     }
   };
 
+  // Fetch assigned employee for an account
+  const fetchAccountAssignedEmployee = async (accountId: number): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/accounts/${accountId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.data && data.data.assigned_employee) {
+          return data.data.assigned_employee;
+        }
+      }
+      return null;
+    } catch (error) {
+      console.error('Error fetching account assigned employee:', error);
+      return null;
+    }
+  };
+
   const handleInputChange = (field: keyof LeadFormData, value: string | number | null) => {
     setFormData(prev => {
       let updated: LeadFormData;
@@ -299,11 +316,25 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       if (field === 'accounts') {
         if (value) {
           loadSubAccounts(value as number);
+          // For admins: Auto-assign employee from account
+          if (isAdmin) {
+            fetchAccountAssignedEmployee(value as number).then((employee) => {
+              if (employee) {
+                setFormData(prev => ({ ...prev, assigned_employee: employee }));
+              } else {
+                // Account has no assigned employee - show warning
+                setFormData(prev => ({ ...prev, assigned_employee: '' }));
+              }
+            });
+          }
         } else {
           setSubAccounts([]);
           setContacts([]);
           updated.sub_accounts = null;
           updated.contact_id = null;
+          if (isAdmin) {
+            updated.assigned_employee = '';
+          }
         }
       }
       
@@ -362,6 +393,10 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       }
       if (!formData.phone.trim()) {
         return 'Phone is required';
+      }
+      // For admins: Check if account has assigned employee
+      if (isAdmin && !formData.assigned_employee) {
+        return 'This account has no assigned employee. Please assign an employee to this account first before creating a lead.';
       }
     } else {
       // Edit mode - only validate fields that have values or are required
@@ -427,7 +462,13 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       }
     }
 
-    onSubmit(formData);
+    // Sanitize form data - ensure priority is null or valid value (never empty string)
+    const sanitizedFormData: LeadFormData = {
+      ...formData,
+      priority: formData.priority && LEAD_PRIORITIES.includes(formData.priority) ? formData.priority : null,
+    };
+
+    onSubmit(sanitizedFormData);
   };
 
   if (!isOpen || !mounted) return null;
@@ -706,12 +747,10 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
                   // Ensure we send null for empty string, or the exact priority value
                   const value = e.target.value;
                   // Only set if it's a valid priority value, otherwise null
-                  if (value === '' || value === null || value === 'null') {
+                  if (value === '' || value === null || value === 'null' || !LEAD_PRIORITIES.includes(value as any)) {
                     handleInputChange('priority', null);
-                  } else if (LEAD_PRIORITIES.includes(value as any)) {
-                    handleInputChange('priority', value as 'High Priority' | 'Medium Priority' | 'Low Priority');
                   } else {
-                    handleInputChange('priority', null);
+                    handleInputChange('priority', value as 'High Priority' | 'Medium Priority' | 'Low Priority');
                   }
                 }}
                 className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
@@ -730,21 +769,33 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
             {isAdmin && (
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">
-                  Assigned Employee
+                  Assigned Employee <span className="text-xs text-slate-400">(Admin only)</span>
                 </label>
                 <select
                   value={formData.assigned_employee || ''}
                   onChange={(e) => handleInputChange('assigned_employee', e.target.value)}
-                  className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+                  className={`w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold ${
+                    formData.accounts && !formData.assigned_employee ? 'border-red-500/50' : 'border-slate-500'
+                  }`}
                 >
-                  <option value="">Select Employee (Optional - will auto-assign to account employee)</option>
+                  <option value="">Select Employee (Auto-assigned from account)</option>
                   {employees.map(emp => (
                     <option key={emp} value={emp}>{emp}</option>
                   ))}
                 </select>
-                <p className="text-xs text-slate-400 mt-1">
-                  If not selected, lead will be auto-assigned to the employee assigned to the selected account.
-                </p>
+                {formData.accounts && !formData.assigned_employee ? (
+                  <p className="text-xs text-red-400 mt-1 font-semibold">
+                    ⚠️ This account has no assigned employee. Please assign an employee to this account first before creating a lead.
+                  </p>
+                ) : formData.assigned_employee ? (
+                  <p className="text-xs text-green-400 mt-1">
+                    ✓ Assigned to: {formData.assigned_employee}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Will auto-assign to the employee assigned to the selected account.
+                  </p>
+                )}
               </div>
             )}
 

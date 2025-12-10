@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Account, Quote, Lead, Task, Contact, Activity } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
 import ActivityTimeline from '@/components/crm/ActivityTimeline';
@@ -18,6 +18,7 @@ type TabType = 'overview' | 'contacts' | 'leads' | 'quotations';
 export default function AccountDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const accountId = params?.id ? parseInt(params.id as string) : 0;
 
   const [account, setAccount] = useState<Account | null>(null);
@@ -99,8 +100,9 @@ export default function AccountDetailsPage() {
       if (result.error) {
         setError(result.error);
         if (response.status === 403) {
-          // Access denied - redirect to accounts page
-          router.push('/crm/accounts');
+          // Access denied - redirect to accounts page (preserve filters if any)
+          const filterParams = searchParams?.toString() || '';
+          router.push(`/crm/accounts${filterParams ? `?${filterParams}` : ''}`);
         }
       } else {
         setAccount(result.data);
@@ -224,7 +226,11 @@ export default function AccountDetailsPage() {
               <p className="text-red-200 text-center">{error || 'Account not found'}</p>
               <div className="text-center mt-4">
                 <button
-                  onClick={() => router.push('/crm/accounts')}
+                  onClick={() => {
+                    // Preserve filter query params when navigating back
+                    const filterParams = searchParams?.toString() || '';
+                    router.push(`/crm/accounts${filterParams ? `?${filterParams}` : ''}`);
+                  }}
                   className="px-4 py-2 text-sm font-semibold text-white bg-brand-primary hover:bg-brand-accent rounded-lg"
                 >
                   Back to Accounts
@@ -265,7 +271,11 @@ export default function AccountDetailsPage() {
             <div className="relative mb-8">
               {/* Back button */}
               <button
-                onClick={() => router.push('/crm/accounts')}
+                onClick={() => {
+                  // Preserve filter query params when navigating back
+                  const filterParams = searchParams?.toString() || '';
+                  router.push(`/crm/accounts${filterParams ? `?${filterParams}` : ''}`);
+                }}
                 className="group inline-flex items-center gap-2 text-slate-400 hover:text-premium-gold mb-6 transition-all"
               >
                 <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
