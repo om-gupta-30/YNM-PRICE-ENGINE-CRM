@@ -138,11 +138,12 @@ export async function POST(request: NextRequest) {
 
     for (const row of rows) {
       const accountName = cleanString(row.account_name);
-      const subAccountName = cleanString(row.sub_accounts) || accountName; // Use account name as fallback
       const contactNameRaw = row['contact name '];
 
       // If this row has account_name, it's a new account/sub-account
       if (accountName) {
+        // Ensure subAccountName is always a string (use accountName as fallback)
+        const subAccountName: string = cleanString(row.sub_accounts) || accountName;
         const key = `${accountName}|||${subAccountName}`;
         currentAccountKey = accountName;
         currentSubAccountKey = key;
@@ -422,7 +423,7 @@ export async function POST(request: NextRequest) {
 
               if (!createStateError && newState) {
                 stateId = newState.id;
-                stateMap.set(stateName, stateId);
+                stateMap.set(stateName, stateId!);
                 console.log(`🆕 Created new state: ${subAccountData.state}`);
               }
             }
@@ -466,20 +467,20 @@ export async function POST(request: NextRequest) {
 
                     if (!createCityError2 && newCity2) {
                       cityId = newCity2.id;
-                      cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                      cityMap.set(cityKey, { id: cityId!, state_id: stateId! });
                       console.log(`🆕 Created new city: ${subAccountData.city} (${subAccountData.state})`);
                     } else if (createCityError2?.code === '23505') {
                       // Duplicate key - city might have been created, try to find it
                       const { data: foundCity } = await supabase
                         .from('cities')
                         .select('id')
-                        .eq('state_id', stateId)
+                        .eq('state_id', stateId!)
                         .eq('city_name', subAccountData.city.trim())
                         .maybeSingle();
                       
                       if (foundCity) {
                         cityId = foundCity.id;
-                        cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                        cityMap.set(cityKey, { id: cityId!, state_id: stateId! });
                       }
                     }
                   } else if (createCityError.code === '23505') {
@@ -487,18 +488,18 @@ export async function POST(request: NextRequest) {
                     const { data: foundCity } = await supabase
                       .from('cities')
                       .select('id')
-                      .eq('state_id', stateId)
+                      .eq('state_id', stateId!)
                       .eq('name', subAccountData.city.trim())
                       .maybeSingle();
                     
                     if (foundCity) {
                       cityId = foundCity.id;
-                      cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                      cityMap.set(cityKey, { id: cityId!, state_id: stateId! });
                     }
                   }
                 } else if (newCity) {
                   cityId = newCity.id;
-                  cityMap.set(cityKey, { id: cityId, state_id: stateId });
+                  cityMap.set(cityKey, { id: cityId!, state_id: stateId! });
                   console.log(`🆕 Created new city: ${subAccountData.city} (${subAccountData.state})`);
                 }
               }
