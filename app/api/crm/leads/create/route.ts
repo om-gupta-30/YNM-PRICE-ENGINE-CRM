@@ -150,7 +150,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build insert object - NEVER include priority if it's null or empty
+    // Build insert object
     const insertData: any = {
       lead_name: lead_name.trim(),
       contact_person: contact_person?.trim() || null,
@@ -166,16 +166,17 @@ export async function POST(request: NextRequest) {
       created_by: created_by || null,
     };
     
-    // CRITICAL: Only include priority if it's EXACTLY one of the three valid values
-    // Database constraint requires: 'High Priority', 'Medium Priority', 'Low Priority', or NULL
-    // We MUST NOT include priority field at all if it's null/empty/invalid
-    // This allows the database to use NULL (default) which satisfies the constraint
+    // CRITICAL: Handle priority - database constraint requires exact values or NULL
+    // The constraint is: CHECK (priority IN ('High Priority', 'Medium Priority', 'Low Priority'))
+    // PostgreSQL CHECK constraints allow NULL by default, but we'll be explicit
     const validPriorities = ['High Priority', 'Medium Priority', 'Low Priority'];
     if (normalizedPriority && validPriorities.includes(normalizedPriority)) {
+      // Only set if it's a valid value
       insertData.priority = normalizedPriority;
+    } else {
+      // Explicitly set to NULL if invalid/missing - this satisfies the constraint
+      insertData.priority = null;
     }
-    // If normalizedPriority is null or invalid, we don't include it in the insert at all
-    // This is the correct behavior - database will use NULL which satisfies the constraint
 
     // Log the insert data for debugging (without sensitive info)
     console.log('Inserting lead with data:', {
