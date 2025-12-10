@@ -78,22 +78,26 @@ export async function POST(request: NextRequest) {
     // Normalize priority value to match database constraint
     // Database expects: 'High Priority', 'Medium Priority', 'Low Priority', or null
     let normalizedPriority = null;
-    if (priority) {
+    if (priority !== undefined && priority !== null && priority !== '') {
       const priorityStr = String(priority).trim();
+      // Exact matches first
       if (priorityStr === 'High Priority' || priorityStr === 'Medium Priority' || priorityStr === 'Low Priority') {
         normalizedPriority = priorityStr;
-      } else if (priorityStr === 'High') {
+      } 
+      // Handle variations
+      else if (priorityStr === 'High' || priorityStr.toLowerCase() === 'high priority') {
         normalizedPriority = 'High Priority';
-      } else if (priorityStr === 'Medium') {
+      } else if (priorityStr === 'Medium' || priorityStr.toLowerCase() === 'medium priority') {
         normalizedPriority = 'Medium Priority';
-      } else if (priorityStr === 'Low') {
+      } else if (priorityStr === 'Low' || priorityStr.toLowerCase() === 'low priority') {
         normalizedPriority = 'Low Priority';
       } else {
         // Invalid priority value - set to null
-        console.warn(`Invalid priority value: ${priority}, setting to null`);
+        console.warn(`Invalid priority value: "${priority}" (type: ${typeof priority}), setting to null`);
         normalizedPriority = null;
       }
     }
+    // If priority is undefined, null, or empty string, normalizedPriority stays null (correct)
 
     // Insert lead using service role to bypass RLS
     const { data, error } = await supabase

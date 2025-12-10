@@ -89,6 +89,11 @@ export default function LeadsPage() {
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [comingSoonFeature, setComingSoonFeature] = useState('');
 
+  // History modal state
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [leadHistory, setLeadHistory] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
   const [username, setUsername] = useState('');
@@ -287,6 +292,34 @@ export default function LeadsPage() {
     setEditingLead(null);
   }, []);
 
+  // Load lead history
+  const loadLeadHistory = useCallback(async (leadId: number) => {
+    try {
+      setLoadingHistory(true);
+      const response = await fetch(`/api/crm/leads/${leadId}/history`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error loading lead history:', errorData.error || `HTTP error! status: ${response.status}`);
+        setLeadHistory([]);
+        return;
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setLeadHistory(data.history || []);
+      } else {
+        setLeadHistory([]);
+      }
+    } catch (err: any) {
+      console.error('Error loading lead history:', err.message || err);
+      setLeadHistory([]);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
   // Handle form submit
   const handleSubmit = async (formData: LeadFormData) => {
     try {
@@ -309,8 +342,12 @@ export default function LeadsPage() {
         if (formData.status !== undefined) updatePayload.status = formData.status;
         // Always include priority if it's in formData (even if null) - API will normalize it
         if (formData.priority !== undefined) {
-          // Ensure we send the exact value or null, not empty string
-          updatePayload.priority = formData.priority || null;
+          // Ensure we send a valid priority value or null
+          if (formData.priority && ['High Priority', 'Medium Priority', 'Low Priority'].includes(formData.priority)) {
+            updatePayload.priority = formData.priority;
+          } else {
+            updatePayload.priority = null;
+          }
         }
         if (formData.assigned_employee !== undefined) updatePayload.assigned_employee = formData.assigned_employee;
         if (formData.accounts !== undefined) updatePayload.accounts = formData.accounts;
@@ -341,6 +378,15 @@ export default function LeadsPage() {
         setToast({ message: 'Lead updated successfully! Refreshing...', type: 'success' });
       } else {
         // Create new lead
+        // Normalize priority value - ensure it's either a valid priority or null
+        const normalizedFormData = {
+          ...formData,
+          priority: formData.priority && ['High Priority', 'Medium Priority', 'Low Priority'].includes(formData.priority)
+            ? formData.priority
+            : null,
+          created_by: username,
+        };
+        
         const response = await fetch('/api/crm/leads/create', {
           method: 'POST',
           headers: { 
@@ -348,10 +394,7 @@ export default function LeadsPage() {
             'Cache-Control': 'no-cache',
           },
           cache: 'no-store',
-          body: JSON.stringify({
-            ...formData,
-            created_by: username,
-          }),
+          body: JSON.stringify(normalizedFormData),
         });
 
         if (!response.ok) {
@@ -933,6 +976,17 @@ export default function LeadsPage() {
                               Edit
                             </button>
                             <button
+                              onClick={async () => {
+                                setSelectedLead(lead);
+                                setShowHistoryModal(true);
+                                await loadLeadHistory(lead.id);
+                              }}
+                                  className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-purple-500/80 hover:bg-purple-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px]"
+                                  style={{ WebkitTapHighlightColor: 'transparent' }}
+                            >
+                              History
+                            </button>
+                            <button
                               onClick={() => handleDeleteClick(lead)}
                                   disabled={isDeleting}
                                   className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px] disabled:opacity-50"
@@ -1075,6 +1129,21 @@ export default function LeadsPage() {
         isDeleting={isDeleting}
       />
 
+      {/* Lead History Modal */}
+      {showHistoryModal && selectedLead && (
+        <LeadHistoryModal
+          isOpen={showHistoryModal}
+          onClose={() => {
+            setShowHistoryModal(false);
+            setSelectedLead(null);
+            setLeadHistory([]);
+          }}
+          lead={selectedLead}
+          history={leadHistory}
+          loading={loadingHistory}
+        />
+      )}
+
       {/* Toast Notification */}
       {toast && (
         <Toast
@@ -1084,5 +1153,168 @@ export default function LeadsPage() {
         />
       )}
     </>
+  );
+}
+
+// Lead History Modal Component
+function LeadHistoryModal({
+  isOpen,
+  onClose,
+  lead,
+  history,
+  loading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  lead: Lead;
+  history?: any[];
+  loading?: boolean;
+}) {
+  if (!isOpen) return null;
+
+  const displayHistory = history || [];
+
+  const getStatusColor = (status: string | null) => {
+    if (!status) return 'text-slate-400';
+    switch (status) {
+      case 'New': return 'text-blue-400';
+      case 'In Progress': return 'text-yellow-400';
+      case 'Quotation Sent': return 'text-purple-400';
+      case 'Follow-up':
+      case 'Follow-Up': return 'text-orange-400';
+      case 'Closed Won':
+      case 'Closed': return 'text-green-400';
+      case 'Closed Lost':
+      case 'Lost': return 'text-red-400';
+      default: return 'text-slate-300';
+    }
+  };
+
+  const getPriorityColor = (priority: string | null) => {
+    if (!priority) return 'text-slate-400';
+    switch (priority) {
+      case 'High Priority': return 'text-red-400';
+      case 'Medium Priority': return 'text-yellow-400';
+      case 'Low Priority': return 'text-green-400';
+      default: return 'text-slate-300';
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl border border-slate-700 p-6 w-full max-w-lg shadow-md max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+              <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white">Lead History</h3>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors flex items-center justify-center">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        {/* Lead Info */}
+        <div className="bg-slate-800/50 rounded-xl p-4 mb-5 border border-slate-700/50">
+          <p className="text-sm text-slate-400 mb-1">Lead</p>
+          <p className="text-white font-medium">{lead.lead_name}</p>
+        </div>
+        
+        {loading ? (
+          <div className="text-center py-10">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-slate-800 flex items-center justify-center">
+              <svg className="w-7 h-7 text-slate-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </div>
+            <p className="text-slate-400">Loading history...</p>
+          </div>
+        ) : displayHistory.length === 0 ? (
+          <div className="text-center py-10">
+            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-slate-800 flex items-center justify-center">
+              <svg className="w-7 h-7 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <p className="text-slate-400">No history available</p>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+            {displayHistory.map((entry: any, idx: number) => {
+              const isCreated = entry.type === 'created';
+              const isStatusChange = entry.type === 'status_change';
+              const isPriorityChange = entry.type === 'priority_change';
+              
+              return (
+                <div key={`${entry.changed_at}-${entry.changed_by}-${idx}`} className="relative pl-6 pb-4 border-l-2 border-slate-700 last:border-transparent">
+                  {/* Timeline dot */}
+                  <div className={`absolute left-[-5px] top-0 w-2 h-2 rounded-full ${
+                    isCreated ? 'bg-green-500' : 
+                    isStatusChange ? 'bg-blue-500' : 
+                    isPriorityChange ? 'bg-purple-500' :
+                    'bg-slate-600'
+                  }`}></div>
+                  
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 text-sm flex-wrap">
+                        {isCreated ? (
+                          <span className="text-green-400 font-semibold">✨ {entry.action}</span>
+                        ) : isStatusChange && entry.metadata?.old_status && entry.metadata?.new_status ? (
+                          <>
+                            <span className={getStatusColor(entry.metadata.old_status)}>{entry.metadata.old_status || 'Unknown'}</span>
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                            <span className={`font-semibold ${getStatusColor(entry.metadata.new_status)}`}>{entry.metadata.new_status || 'Unknown'}</span>
+                          </>
+                        ) : isPriorityChange && entry.metadata?.old_priority !== undefined ? (
+                          <>
+                            <span className={getPriorityColor(entry.metadata.old_priority)}>{entry.metadata.old_priority || 'None'}</span>
+                            <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
+                            <span className={`font-semibold ${getPriorityColor(entry.metadata.new_priority)}`}>{entry.metadata.new_priority || 'None'}</span>
+                          </>
+                        ) : (
+                          <span className="text-slate-300 font-semibold">{entry.action}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-sm text-slate-300 mb-2">
+                      {entry.description}
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">by <span className="text-slate-300">{entry.changed_by}</span></span>
+                      <span className="text-slate-500">{entry.changed_at}</span>
+                    </div>
+                    {entry.metadata?.status_note && (
+                      <div className="mt-3 text-sm text-slate-300 bg-slate-900/50 rounded-lg p-3 border border-slate-700/50">
+                        <span className="text-slate-500 text-xs block mb-1">Note:</span>
+                        {entry.metadata.status_note}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

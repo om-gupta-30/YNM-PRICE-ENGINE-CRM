@@ -305,9 +305,7 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
       if (!formData.sub_accounts) {
         return 'Sub-Account is required';
       }
-      if (!formData.priority) {
-        return 'Priority is required';
-      }
+      // Priority is optional - no validation needed
       if (!formData.contact_id) {
         return 'Contact is required. Please create a contact in the sub-account first.';
       }
@@ -599,28 +597,34 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
               </select>
             </div>
 
-            {/* Priority - Required */}
+            {/* Priority - Optional */}
             <div>
               <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Priority * <span className="text-xs text-slate-400">(Required)</span>
+                Priority <span className="text-xs text-slate-400">(Optional)</span>
               </label>
               <select
                 value={formData.priority || ''}
                 onChange={(e) => {
                   // Ensure we send null for empty string, or the exact priority value
                   const value = e.target.value;
-                  handleInputChange('priority', value === '' ? null : value);
+                  // Only set if it's a valid priority value, otherwise null
+                  if (value === '' || value === null || value === 'null') {
+                    handleInputChange('priority', null);
+                  } else if (LEAD_PRIORITIES.includes(value as any)) {
+                    handleInputChange('priority', value as 'High Priority' | 'Medium Priority' | 'Low Priority');
+                  } else {
+                    handleInputChange('priority', null);
+                  }
                 }}
-                required
                 className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
               >
-                <option value="">Select Priority *</option>
+                <option value="">Select Priority (Optional)</option>
                 {LEAD_PRIORITIES.map(priority => (
                   <option key={priority} value={priority}>{priority}</option>
                 ))}
               </select>
-              {!formData.priority && (
-                <p className="text-xs text-slate-400 mt-1">Please select a priority</p>
+              {formData.priority && (
+                <p className="text-xs text-slate-400 mt-1">Selected: {formData.priority}</p>
               )}
             </div>
 

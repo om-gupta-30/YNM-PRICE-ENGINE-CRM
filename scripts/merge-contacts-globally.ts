@@ -1,0 +1,141 @@
+import { createClient } from '@supabase/supabase-js';
+import * as fs from 'fs';
+
+// Load environment variables
+const envPath = '.env.local';
+const envContent = fs.readFileSync(envPath, 'utf-8');
+const envVars: Record<string, string> = {};
+envContent.split('\n').forEach(line => {
+  const match = line.match(/^([^=]+)=(.*)$/);
+  if (match) {
+    const key = match[1].trim();
+    const value = match[2].trim().replace(/^["']|["']$/g, '');
+    envVars[key] = value;
+    process.env[key] = value;
+  }
+});
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+async function mergeContactsGlobally() {
+  console.log('\n🔧 Merging contacts globally (same name = one contact)...\n');
+  console.log('='.repeat(60));
+
+  // Get all contacts
+  const { data: contacts } = await supabase
+    .from('contacts')
+    .select('id, name, phone, sub_account_id, account_id, email, designation')
+    .order('id', { ascending: true });
+
+  if (!contacts) {
+    console.error('❌ Failed to fetch contacts');
+    return;
+  }
+
+  // Group by name (case-insensitive) - merge contacts with same name globally
+  const contactGroups = new Map<string, Array<typeof contacts[0]>>();
+
+  for (const contact of contacts) {
+    const key = contact.name.toLowerCase().trim();
+    if (!contactGroups.has(key)) {
+      contactGroups.set(key, []);
+    }
+    contactGroups.get(key)!.push(contact);
+  }
+
+  // Find duplicates (same name across different accounts/sub-accounts)
+  const duplicates: Array<{ name: string; contacts: typeof contacts }> = [];
+  contactGroups.forEach((group, name) => {
+    if (group.length > 1) {
+      duplicates.push({ name, contacts: group });
+    }
+  });
+
+  console.log(`Found ${duplicates.length} contact names with multiple records\n`);
+
+  let merged = 0;
+  let deleted = 0;
+  const keepContacts = new Set<number>();
+
+  // For each duplicate group, keep one and merge others
+  for (const dup of duplicates) {
+    // Keep the first contact (lowest ID)
+    const keepContact = dup.contacts[0];
+    keepContacts.add(keepContact.id);
+
+    // Collect all data from other contacts
+    const allPhones = new Set<string>();
+    if (keepContact.phone) {
+      keepContact.phone.split(' / ').forEach(p => {
+        const trimmed = p.trim();
+        if (trimmed) allPhones.add(trimmed);
+      });
+    }
+
+    let finalEmail = keepContact.email;
+    let finalDesignation = keepContact.designation;
+    const allSubAccountIds = new Set([keepContact.sub_account_id]);
+    const allAccountIds = new Set([keepContact.account_id]);
+
+    for (const mergeContact of dup.contacts.slice(1)) {
+      // Merge phones
+      if (mergeContact.phone) {
+        mergeContact.phone.split(' / ').forEach(p => {
+          const trimmed = p.trim();
+          if (trimmed) allPhones.add(trimmed);
+        });
+      }
+
+      // Use email/designation if keep contact doesn't have it
+      if (!finalEmail && mergeContact.email) {
+        finalEmail = mergeContact.email;
+      }
+      if (!finalDesignation && mergeContact.designation) {
+        finalDesignation = mergeContact.designation;
+      }
+
+      allSubAccountIds.add(mergeContact.sub_account_id);
+      allAccountIds.add(mergeContact.account_id);
+    }
+
+    // Update keep contact with merged data
+    const combinedPhone = allPhones.size > 0 ? Array.from(allPhones).join(' / ') : null;
+
+    // Use the first sub_account_id and account_id (or we could keep all, but for simplicity use first)
+    await supabase
+      .from('contacts')
+      .update({
+        phone: combinedPhone,
+        email: finalEmail || null,
+        designation: finalDesignation || null,
+      })
+      .eq('id', keepContact.id);
+
+    // Delete duplicate contacts
+    for (const mergeContact of dup.contacts.slice(1)) {
+      await supabase.from('contacts').delete().eq('id', mergeContact.id);
+      deleted++;
+    }
+
+    merged++;
+    console.log(`✅ Merged ${dup.contacts.length - 1} duplicates of "${keepContact.name}"`);
+  }
+
+  // Verify final count
+  const { data: finalContacts, count } = await supabase
+    .from('contacts')
+    .select('id', { count: 'exact' });
+
+  console.log(`\n✅ Merged ${merged} groups, deleted ${deleted} duplicate contacts`);
+  console.log(`✅ Final contact count: ${count} (target: 368)`);
+  console.log('='.repeat(60));
+  console.log('\n✨ Global merge complete!\n');
+}
+
+mergeContactsGlobally().catch((error) => {
+  console.error('\n❌ Fatal error:', error);
+  process.exit(1);
+});
+

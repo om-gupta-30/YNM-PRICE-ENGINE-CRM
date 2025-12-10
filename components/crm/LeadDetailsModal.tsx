@@ -24,9 +24,12 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
   const [setFollowUpOpen, setSetFollowUpOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
+  const [updatingPriority, setUpdatingPriority] = useState(false);
   const [employees, setEmployees] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [mounted, setMounted] = useState(false);
+
+  const LEAD_PRIORITIES = ['High Priority', 'Medium Priority', 'Low Priority'];
 
   const modalRef = React.useRef<HTMLDivElement>(null);
 
@@ -223,6 +226,61 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
     }
   };
 
+  const handlePriorityChange = async (newPriority: string) => {
+    // Normalize priority value
+    const normalizedPriority = newPriority === '' || newPriority === 'null' 
+      ? null 
+      : LEAD_PRIORITIES.includes(newPriority) 
+        ? newPriority 
+        : null;
+
+    if (normalizedPriority === lead.priority) return;
+
+    try {
+      setUpdatingPriority(true);
+      const username = typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin';
+
+      const response = await fetch('/api/crm/leads/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: lead.id,
+          priority: normalizedPriority,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update priority');
+      }
+
+      // Create activity
+      try {
+        await fetch('/api/crm/leads/activities', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lead_id: lead.id,
+            activity_type: 'priority_changed',
+            description: `Priority changed from ${lead.priority || 'None'} to ${normalizedPriority || 'None'}`,
+            created_by: username,
+          }),
+        });
+      } catch (activityError) {
+        console.error('Error creating activity:', activityError);
+      }
+
+      if (onLeadUpdate) onLeadUpdate();
+      setRefreshKey(prev => prev + 1);
+    } catch (error: any) {
+      console.error('Error updating priority:', error);
+      alert(error.message || 'Failed to update priority');
+    } finally {
+      setUpdatingPriority(false);
+    }
+  };
+
   const handleQuickAction = (action: string) => {
     if (action === 'note') {
       setAddNoteOpen(true);
@@ -371,21 +429,21 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
                 </select>
               </div>
 
-              {/* Priority */}
-              {lead.priority && (
-                <div>
-                  <label className="block text-sm font-semibold text-slate-400 mb-2">Priority</label>
-                  <div className="p-3">
-                    <span className={`inline-block px-4 py-2 rounded-lg text-sm font-semibold ${
-                      lead.priority === 'High Priority' ? 'bg-red-500/20 text-red-300' :
-                      lead.priority === 'Medium Priority' ? 'bg-yellow-500/20 text-yellow-300' :
-                      'bg-green-500/20 text-green-300'
-                    }`}>
-                      {lead.priority}
-                    </span>
-                  </div>
+              {/* Priority - Editable */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-400 mb-2">Priority</label>
+                <select
+                  value={lead.priority || ''}
+                  onChange={(e) => handlePriorityChange(e.target.value)}
+                  disabled={updatingPriority}
+                  className="w-full px-3 py-2 rounded-lg text-sm font-semibold border-2 bg-slate-700/50 text-white hover:bg-slate-600/50 border-slate-500 focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50"
+                >
+                  <option value="">No Priority</option>
+                  {LEAD_PRIORITIES.map(priority => (
+                    <option key={priority} value={priority}>{priority}</option>
+                  ))}
+                </select>
               </div>
-            )}
 
             {/* Linked Account */}
             {lead.account_name && (
