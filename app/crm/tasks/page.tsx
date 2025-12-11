@@ -1063,17 +1063,10 @@ function CreateTaskModal({
   const fetchAccounts = async () => {
     try {
       setLoadingAccounts(true);
+      // Always fetch all accounts - no filtering by employee
       const params = new URLSearchParams();
-      
-      // If admin has selected an employee, filter by that employee
-      // Otherwise, if not admin, filter by current user
-      // If admin but no employee selected, show all accounts
-      if (isAdmin && formData.assigned_to) {
-        params.append('employee', formData.assigned_to);
-        // Don't pass isAdmin=true when filtering by employee
-      } else if (!isAdmin && currentUser) {
-        params.append('employee', currentUser);
-      } else if (isAdmin && !formData.assigned_to) {
+      // Still pass isAdmin for any future admin-specific logic if needed
+      if (isAdmin) {
         params.append('isAdmin', 'true');
       }
       

@@ -284,10 +284,9 @@ export default function AccountsPage() {
         setLoading(true);
       }
 
+      // Always fetch all accounts - no filtering by employee
       const params = new URLSearchParams();
-      if (!effectiveIsAdmin && currentUsername) {
-        params.append('employee', currentUsername);
-      }
+      // Still pass isAdmin for any future admin-specific logic if needed
       if (effectiveIsAdmin) {
         params.append('isAdmin', 'true');
       }

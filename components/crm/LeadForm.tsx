@@ -169,11 +169,9 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const loadAccounts = async () => {
     try {
-      // Build query params based on user role
+      // Always fetch all accounts - no filtering by employee
       const params = new URLSearchParams();
-      if (!isAdmin && username) {
-        params.append('employee', username);
-      }
+      // Still pass isAdmin for any future admin-specific logic if needed
       if (isAdmin) {
         params.append('isAdmin', 'true');
       }

@@ -52,12 +52,10 @@ export async function GET(
 
       let query = supabase
         .from('accounts')
-        .select('account_name');
+        .select('account_name')
+        .eq('is_active', true); // Only show active accounts
 
-      // Filter by assigned employee if not admin
-      if (salesEmployee && !isAdmin) {
-        query = query.eq('assigned_employee', salesEmployee);
-      }
+      // Removed filter: All users can now see all accounts (not just assigned ones)
 
       const { data, error } = await query
         .order('created_at', { ascending: false })
