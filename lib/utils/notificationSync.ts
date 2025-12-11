@@ -37,30 +37,47 @@ export async function syncContactNotification(
     let accountName = '';
     let subAccountName = '';
     
+    console.log(`🔔 [CONTACT] Syncing notification for contact ${contactId} (${contactName})`);
+    console.log(`   Follow-up date: ${followUpDate}, Call status: ${callStatus}`);
+    console.log(`   Sub-account ID: ${subAccountId}, Account ID: ${accountId}`);
+    
     if (subAccountId) {
-      const { data: subAccount } = await supabase
+      const { data: subAccount, error: subAccountError } = await supabase
         .from('sub_accounts')
         .select('sub_account_name, account_id, accounts:account_id(account_name, assigned_employee)')
         .eq('id', subAccountId)
         .single();
       
+      if (subAccountError) {
+        console.error(`❌ [CONTACT] Error fetching sub-account ${subAccountId}:`, subAccountError);
+      }
+      
       if (subAccount) {
         subAccountName = subAccount.sub_account_name || '';
         accountName = (subAccount.accounts as any)?.account_name || '';
         assignedEmployee = (subAccount.accounts as any)?.assigned_employee || 'Admin';
+        console.log(`🔔 [CONTACT] Found sub-account "${subAccountName}", assigned employee: "${assignedEmployee}"`);
       }
     } else if (accountId) {
-      const { data: account } = await supabase
+      const { data: account, error: accountError } = await supabase
         .from('accounts')
         .select('account_name, assigned_employee')
         .eq('id', accountId)
         .single();
       
+      if (accountError) {
+        console.error(`❌ [CONTACT] Error fetching account ${accountId}:`, accountError);
+      }
+      
       if (account) {
         accountName = account.account_name || '';
         assignedEmployee = account.assigned_employee || 'Admin';
+        console.log(`🔔 [CONTACT] Found account "${accountName}", assigned employee: "${assignedEmployee}"`);
       }
     }
+    
+    // Normalize assigned employee to lowercase for consistent storage
+    const normalizedAssignedEmployee = assignedEmployee.toLowerCase();
     
     // Format notification message
     const locationInfo = accountName 
@@ -69,28 +86,53 @@ export async function syncContactNotification(
     const message = `Follow up with ${contactName}${locationInfo ? ` from ${locationInfo}` : ''}`;
     
     // Check if notification already exists for this contact and user
-    const { data: existingNotification, error: fetchError } = await supabase
+    // Use case-insensitive matching for user_id
+    const { data: existingNotifications, error: fetchError } = await supabase
       .from('notifications')
       .select('id, user_id')
       .eq('contact_id', contactId)
       .eq('notification_type', 'followup_due')
-      .single();
+      .ilike('user_id', normalizedAssignedEmployee); // Case-insensitive match
     
     if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('Error fetching existing notification:', fetchError);
+      console.error('❌ [CONTACT] Error fetching existing notification:', fetchError);
       return { success: false, error: fetchError.message };
     }
     
-    const notificationData = {
-      user_id: assignedEmployee,
+    const existingNotification = existingNotifications && existingNotifications.length > 0 
+      ? existingNotifications[0] 
+      : null;
+    
+    console.log(`🔔 [CONTACT] Found ${existingNotifications?.length || 0} existing notifications for contact ${contactId}`);
+    
+    // Check if assigned employee is admin - admins should not receive notifications
+    const isAssignedEmployeeAdmin = normalizedAssignedEmployee === 'admin';
+    
+    if (isAssignedEmployeeAdmin) {
+      console.log(`⚠️ [CONTACT] Skipping notification for admin user: ${assignedEmployee} (normalized: ${normalizedAssignedEmployee})`);
+      return { success: true }; // Don't create notifications for admins
+    }
+    
+    // Ensure metadata is stored as JSON string for consistency
+    const metadataObj = {
+      contact_name: contactName,
+      follow_up_date: followUpDate,
+    };
+    
+    const notificationData: any = {
+      user_id: normalizedAssignedEmployee, // Use normalized (lowercase) username for consistent matching
       notification_type: 'followup_due',
       title: `Follow up with ${contactName}`,
       message: message,
       contact_id: contactId,
       account_id: accountId || null,
+      sub_account_id: subAccountId || null,
       is_seen: false,
       is_completed: false,
+      metadata: JSON.stringify(metadataObj), // Store as JSON string for consistency
     };
+    
+    console.log(`🔔 [CONTACT] Notification data:`, JSON.stringify(notificationData, null, 2));
     
     if (existingNotification) {
       // Update existing notification (update user_id in case assignment changed)
@@ -105,24 +147,68 @@ export async function syncContactNotification(
         .eq('id', existingNotification.id);
       
       if (updateError) {
-        console.error('Error updating notification:', updateError);
+        console.error('❌ [CONTACT] Error updating notification:', updateError);
         return { success: false, error: updateError.message };
       }
+      console.log(`✅ [CONTACT] Updated follow-up notification for ${assignedEmployee}: ${message}`);
     } else {
-      // Create new notification
+      // Create new notification - try multiple approaches
+      let notificationCreated = false;
+      let lastError = null;
+      let createdNotificationId = null;
+      
+      // Try inserting notification
       const { data: newNotification, error: insertError } = await supabase
         .from('notifications')
         .insert(notificationData)
         .select()
         .single();
       
-      if (insertError) {
-        console.error('Error creating notification:', insertError);
-        return { success: false, error: insertError.message };
+      if (!insertError && newNotification) {
+        notificationCreated = true;
+        createdNotificationId = newNotification.id;
+        console.log(`✅ [CONTACT] Created follow-up notification for ${normalizedAssignedEmployee} (original: ${assignedEmployee}): ${message}`);
+        console.log(`   Notification ID: ${createdNotificationId}`);
+      } else {
+        lastError = insertError;
+        console.error('❌ [CONTACT] Error creating notification:', insertError);
+        console.error('   Error details:', JSON.stringify(insertError, null, 2));
+        
+        // Try without sub_account_id if that's the issue
+        if (insertError?.message?.includes('sub_account_id')) {
+          const notificationWithoutSubAccount = { ...notificationData };
+          delete notificationWithoutSubAccount.sub_account_id;
+          
+          const { data: retryNotification, error: retryError } = await supabase
+            .from('notifications')
+            .insert(notificationWithoutSubAccount)
+            .select()
+            .single();
+          
+          if (!retryError && retryNotification) {
+            notificationCreated = true;
+            createdNotificationId = retryNotification.id;
+            console.log(`✅ [CONTACT] Created follow-up notification (without sub_account_id) for ${normalizedAssignedEmployee} (original: ${assignedEmployee}): ${message}`);
+            console.log(`   Notification ID: ${createdNotificationId}`);
+          } else {
+            console.error('❌ [CONTACT] Retry also failed:', retryError);
+            console.error('   Retry error details:', JSON.stringify(retryError, null, 2));
+            lastError = retryError;
+          }
+        }
+      }
+      
+      if (!notificationCreated) {
+        console.error('❌ [CONTACT] CRITICAL: Failed to create notification after all attempts');
+        console.error('   Contact ID:', contactId);
+        console.error('   Contact name:', contactName);
+        console.error('   Assigned employee:', assignedEmployee, '(normalized:', normalizedAssignedEmployee, ')');
+        console.error('   Last error:', lastError);
+        return { success: false, error: lastError?.message || 'Failed to create notification' };
       }
 
       // Log activity for notification creation
-      if (newNotification) {
+      if (createdNotificationId) {
         try {
           await supabase.from('activities').insert({
             account_id: accountId || null,
@@ -131,7 +217,7 @@ export async function syncContactNotification(
             activity_type: 'followup',
             description: `Follow-up notification created: ${message}`,
             metadata: {
-              notification_id: newNotification.id,
+              notification_id: createdNotificationId,
               notification_type: 'followup_due',
               contact_name: contactName,
               follow_up_date: followUpDate,
@@ -139,7 +225,7 @@ export async function syncContactNotification(
             },
           });
         } catch (activityError) {
-          console.warn('Failed to log notification creation activity:', activityError);
+          console.warn('⚠️ [CONTACT] Failed to log notification creation activity:', activityError);
         }
       }
     }

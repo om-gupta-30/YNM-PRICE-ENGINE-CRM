@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useDebounce } from '@/hooks/useDebounce';
 import Toast from '@/components/ui/Toast';
@@ -15,7 +15,6 @@ const LeadsKanban = dynamic(() => import('@/components/crm/LeadsKanban'), { ssr:
 const ComingSoonModal = dynamic(() => import('@/components/modals/ComingSoonModal'), { ssr: false });
 
 import type { LeadFormData } from '@/components/crm/LeadForm';
-import { calculateLeadScore, getLeadScoreColor, getScoreBasedPriority } from '@/lib/utils/leadScore';
 
 export interface Lead {
   id: number;
@@ -44,6 +43,7 @@ type Priority = 'High Priority' | 'Medium Priority' | 'Low Priority' | null;
 
 export default function LeadsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -57,6 +57,43 @@ export default function LeadsPage() {
       }
     }
   }, [router]);
+
+  // Handle leadId query param to open lead details
+  useEffect(() => {
+    if (!searchParams) return;
+    const leadIdParam = searchParams.get('leadId');
+    if (leadIdParam && leads.length > 0) {
+      const leadId = parseInt(leadIdParam);
+      const lead = leads.find(l => l.id === leadId);
+      if (lead) {
+        setSelectedLead(lead);
+        setDetailsModalOpen(true);
+        // Remove query param from URL
+        router.replace('/crm/leads');
+      }
+    }
+  }, [searchParams, leads, router]);
+
+  // Listen for openLeadDetails custom event
+  useEffect(() => {
+    const handleOpenLeadDetails = (event: CustomEvent) => {
+      const { leadId } = event.detail;
+      if (leadId && leads.length > 0) {
+        const lead = leads.find(l => l.id === leadId);
+        if (lead) {
+          setSelectedLead(lead);
+          setDetailsModalOpen(true);
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('openLeadDetails', handleOpenLeadDetails as EventListener);
+      return () => {
+        window.removeEventListener('openLeadDetails', handleOpenLeadDetails as EventListener);
+      };
+    }
+  }, [leads]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -70,9 +107,10 @@ export default function LeadsPage() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterLeadSource, setFilterLeadSource] = useState<string>('');
   const [filterEmployee, setFilterEmployee] = useState<string>('');
+  const [specialFilter, setSpecialFilter] = useState<string>(''); // For "new_this_week", "follow_up_due_today"
   
   // Sorting state
-  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'score' | 'priority'>('newest');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'priority'>('newest');
   
   // Pagination for performance on large lists
   const [currentPage, setCurrentPage] = useState(1);
@@ -184,6 +222,20 @@ export default function LeadsPage() {
     return followUp.getTime() < today.getTime();
   };
 
+  // Handle dashboard filter changes
+  const handleDashboardFilter = useCallback((filterType: string, filterValue: string) => {
+    if (filterType === 'status') {
+      setFilterStatus(filterValue);
+      setSpecialFilter(''); // Clear special filter
+    } else if (filterType === 'new_this_week') {
+      setSpecialFilter('new_this_week');
+      setFilterStatus(''); // Clear status filter
+    } else if (filterType === 'follow_up_due_today') {
+      setSpecialFilter('follow_up_due_today');
+      setFilterStatus(''); // Clear status filter
+    }
+  }, []);
+
   // Filtered and sorted leads - use debounced search query
   const filteredLeads = useMemo(() => {
     let filtered = leads.filter(lead => {
@@ -199,9 +251,33 @@ export default function LeadsPage() {
         if (!matchesSearch) return false;
       }
 
+      // Special filters (new_this_week, follow_up_due_today)
+      if (specialFilter === 'new_this_week') {
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        const createdDate = new Date(lead.created_at);
+        if (createdDate < oneWeekAgo) return false;
+      } else if (specialFilter === 'follow_up_due_today') {
+        if (!lead.follow_up_date) return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const followUpDate = new Date(lead.follow_up_date);
+        followUpDate.setHours(0, 0, 0, 0);
+        if (followUpDate.getTime() !== today.getTime()) return false;
+      }
+
       // Status filter
-      if (filterStatus && lead.status !== filterStatus) {
-        return false;
+      if (filterStatus) {
+        // Handle status variations
+        if (filterStatus === 'Follow-Up') {
+          if (lead.status !== 'Follow-up' && lead.status !== 'Follow-Up') return false;
+        } else if (filterStatus === 'Closed Won') {
+          if (lead.status !== 'Closed Won' && lead.status !== 'Closed') return false;
+        } else if (filterStatus === 'Closed Lost') {
+          if (lead.status !== 'Closed Lost' && lead.status !== 'Lost') return false;
+        } else {
+          if (lead.status !== filterStatus) return false;
+        }
       }
 
       // Lead Source filter
@@ -224,10 +300,6 @@ export default function LeadsPage() {
           return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         case 'oldest':
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-        case 'score':
-          const scoreA = calculateLeadScore(a);
-          const scoreB = calculateLeadScore(b);
-          return scoreB - scoreA;
         case 'priority':
           const priorityOrder: Record<string, number> = {
             'High Priority': 3,
@@ -246,7 +318,7 @@ export default function LeadsPage() {
     });
 
     return filtered;
-  }, [leads, debouncedSearchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
+  }, [leads, debouncedSearchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy, specialFilter]);
   
   // Paginated leads for performance (only render visible items)
   const paginatedLeads = useMemo(() => {
@@ -260,7 +332,7 @@ export default function LeadsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy]);
+  }, [searchQuery, filterStatus, filterLeadSource, filterEmployee, sortBy, specialFilter]);
 
 
   // Handle open modal for create - memoized
@@ -364,7 +436,28 @@ export default function LeadsPage() {
           throw new Error(data.error || 'Failed to update lead');
         }
 
-        setToast({ message: 'Lead updated successfully! Refreshing...', type: 'success' });
+        // Optimistic update - update lead in list immediately
+        if (data.data && editingLead) {
+          const updatedLead: Lead = {
+            ...data.data,
+            accounts: data.data.account_id,
+            sub_accounts: data.data.sub_account_id,
+          };
+          setLeads(prevLeads => 
+            prevLeads.map(lead => 
+              lead.id === editingLead.id ? updatedLead : lead
+            )
+          );
+        }
+
+        handleCloseModal();
+        setToast({ message: 'Lead updated successfully', type: 'success' });
+        
+        // Refresh in background (non-blocking) to ensure sync
+        fetchLeads().catch(() => {
+          // Silently fail - we already updated optimistically
+        });
+        return;
       } else {
         // Create new lead
         // CRITICAL: Handle priority correctly - never send empty string or null
@@ -423,10 +516,14 @@ export default function LeadsPage() {
         return;
       }
 
-      // For updates, refresh immediately
-      await fetchLeads();
+      // For updates, refresh immediately (optimistic update already handled above)
       handleCloseModal();
       setToast({ message: 'Lead updated successfully', type: 'success' });
+      
+      // Refresh in background (non-blocking) to ensure sync
+      fetchLeads().catch(() => {
+        // Silently fail - we already updated optimistically
+      });
     } catch (error: any) {
       console.error('Error saving lead:', error);
       setToast({ message: error.message || 'Failed to save lead', type: 'error' });
@@ -464,16 +561,27 @@ export default function LeadsPage() {
     } catch (error: any) {
       console.error('Error updating lead status:', error);
       setToast({ message: error.message || 'Failed to update lead status', type: 'error' });
-      // Refresh leads to revert UI
-      await fetchLeads();
+      // Revert optimistic update on error
+      setLeads(prevLeads => 
+        prevLeads.map(lead => 
+          lead.id === leadId ? { ...lead, status: lead.status } : lead
+        )
+      );
+      // Refresh in background to get correct state
+      fetchLeads().catch(() => {});
     }
   }, [fetchLeads]);
 
-  // Handle delete click - memoized
+  // Handle delete click - memoized (only for admins)
   const handleDeleteClick = useCallback((lead: Lead) => {
+    // Double-check admin status before allowing delete
+    if (!isAdmin) {
+      setToast({ message: 'Only admins can delete leads', type: 'error' });
+      return;
+    }
     setLeadToDelete(lead);
     setDeleteConfirmOpen(true);
-  }, []);
+  }, [isAdmin]);
 
   // Handle delete confirm - memoized
   const handleDeleteConfirm = useCallback(async () => {
@@ -481,18 +589,22 @@ export default function LeadsPage() {
 
     const leadIdToDelete = leadToDelete.id;
     
+    setIsDeleting(true);
+    
     // Optimistic update - remove from list immediately
     setLeads(prev => prev.filter(lead => lead.id !== leadIdToDelete));
     setDeleteConfirmOpen(false);
     setLeadToDelete(null);
-    setIsDeleting(false);
     setToast({ message: 'Lead deleted successfully', type: 'success' });
 
     try {
       const response = await fetch('/api/crm/leads/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: leadIdToDelete }),
+        body: JSON.stringify({ 
+          id: leadIdToDelete,
+          isAdmin: isAdmin,
+        }),
       });
 
       const data = await response.json();
@@ -512,6 +624,8 @@ export default function LeadsPage() {
       // Revert on error
       await fetchLeads();
       setToast({ message: error.message || 'Failed to delete lead', type: 'error' });
+    } finally {
+      setIsDeleting(false);
     }
   }, [fetchLeads, leadToDelete]);
 
@@ -570,12 +684,12 @@ export default function LeadsPage() {
         throw new Error(data.error || 'Failed to update lead priority');
       }
 
-      // Refresh leads to ensure sync (non-blocking)
-      fetchLeads().catch(err => {
-        console.error('Error refreshing leads after priority update:', err);
-      });
-
       setToast({ message: 'Priority updated successfully', type: 'success' });
+      
+      // Refresh in background (non-blocking) to ensure sync
+      fetchLeads().catch(() => {
+        // Silently fail - we already updated optimistically
+      });
     } catch (error: any) {
       console.error('Error updating lead priority:', error);
       // Revert optimistic update on error
@@ -677,7 +791,7 @@ export default function LeadsPage() {
           </div>
 
           {/* Dashboard Widgets */}
-          <LeadsDashboard leads={leads} loading={loading} />
+          <LeadsDashboard leads={leads} loading={loading} onFilterChange={handleDashboardFilter} />
 
           {/* View Mode Toggle - Compact */}
           <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
@@ -795,24 +909,29 @@ export default function LeadsPage() {
                   <label className="block text-sm font-semibold text-slate-300 mb-2">Sort By</label>
                   <select
                     value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'score' | 'priority')}
+                    onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'priority')}
                     className="w-full px-4 py-3 text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold transition-all duration-200"
                   >
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>
-                    <option value="score">Score (High to Low)</option>
                     <option value="priority">Priority (High to Low)</option>
                   </select>
                 </div>
               </div>
 
               {/* Clear Filters */}
-              {(searchQuery || filterStatus || filterLeadSource || filterEmployee) && (
+              {(searchQuery || filterStatus || filterLeadSource || filterEmployee || specialFilter) && (
                 <div className="flex justify-between items-center pt-2 border-t border-white/10 flex-wrap gap-2">
                   <div className="flex items-center gap-2 text-sm text-slate-300 flex-wrap">
                     <span className="font-semibold">Active filters:</span>
                     {searchQuery && (
                       <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">Search: "{searchQuery}"</span>
+                    )}
+                    {specialFilter === 'new_this_week' && (
+                      <span className="px-2 py-1 bg-green-500/20 text-green-300 rounded text-xs">New This Week</span>
+                    )}
+                    {specialFilter === 'follow_up_due_today' && (
+                      <span className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs">Follow-Ups Due Today</span>
                     )}
                     {filterStatus && (
                       <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded text-xs">Status: {filterStatus}</span>
@@ -830,6 +949,7 @@ export default function LeadsPage() {
                       setFilterStatus('');
                       setFilterLeadSource('');
                       setFilterEmployee('');
+                      setSpecialFilter('');
                     }}
                     className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 flex items-center gap-2"
                   >
@@ -896,7 +1016,6 @@ export default function LeadsPage() {
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white hidden lg:table-cell">Email</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white hidden md:table-cell">Source</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Status</th>
-                        <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Score</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Priority</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white hidden lg:table-cell">Employee</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Follow-Up</th>
@@ -905,7 +1024,6 @@ export default function LeadsPage() {
                   </thead>
                   <tbody>
                       {paginatedLeads.map((lead) => {
-                        const score = calculateLeadScore(lead);
                         const priority = lead.priority || null;
                         return (
                       <tr 
@@ -937,21 +1055,6 @@ export default function LeadsPage() {
                             {lead.status || '-'}
                           </span>
                         </td>
-                            <td className="py-4 px-2 md:px-4">
-                              <div className="flex flex-col gap-1">
-                                <span className={`px-2 py-1 rounded text-xs font-bold ${getLeadScoreColor(score)}`}>
-                                  {score}
-                                </span>
-                                {(() => {
-                                  const scorePriority = getScoreBasedPriority(score);
-                                  return (
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${scorePriority.color}`}>
-                                      {scorePriority.label}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            </td>
                             <td className="py-4 px-2 md:px-4">
                               {priority ? (
                                 <span className={`px-2 py-1 rounded text-xs font-semibold border ${getPriorityColor(priority)}`}>
@@ -1006,14 +1109,16 @@ export default function LeadsPage() {
                             >
                               History
                             </button>
-                            <button
-                              onClick={() => handleDeleteClick(lead)}
-                                  disabled={isDeleting}
-                                  className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px] disabled:opacity-50"
-                                  style={{ WebkitTapHighlightColor: 'transparent' }}
-                            >
-                                  Del
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteClick(lead)}
+                                disabled={isDeleting}
+                                className="px-2 sm:px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 touch-manipulation min-h-[36px] sm:min-h-[40px] disabled:opacity-50"
+                                style={{ WebkitTapHighlightColor: 'transparent' }}
+                              >
+                                Del
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1129,7 +1234,14 @@ export default function LeadsPage() {
         lead={selectedLead}
         onEdit={handleEditLead}
         onQuickAction={handleQuickAction}
-        onLeadUpdate={fetchLeads}
+        onLeadUpdate={(updatedLead: Lead) => {
+          // Optimistic update - update lead in list immediately
+          setLeads(prevLeads => 
+            prevLeads.map(l => l.id === updatedLead.id ? updatedLead : l)
+          );
+          // Refresh in background (non-blocking)
+          fetchLeads().catch(() => {});
+        }}
       />
 
       {/* Coming Soon Modal */}

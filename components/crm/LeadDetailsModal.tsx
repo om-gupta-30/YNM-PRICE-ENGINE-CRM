@@ -4,10 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Lead } from '@/app/crm/leads/page';
 import LeadQuickActions from '@/components/crm/LeadQuickActions';
-import LeadActivityTimeline from '@/components/crm/LeadActivityTimeline';
 import AddNoteModal from '@/components/crm/AddNoteModal';
 import SetFollowUpModal from '@/components/crm/SetFollowUpModal';
-import { calculateLeadScore } from '@/lib/utils/leadScore';
 import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface LeadDetailsModalProps {
@@ -16,7 +14,7 @@ interface LeadDetailsModalProps {
   lead: Lead | null;
   onEdit: (lead: Lead) => void;
   onQuickAction?: (action: string, lead: Lead) => void;
-  onLeadUpdate?: () => void;
+  onLeadUpdate?: (updatedLead: Lead) => void;
 }
 
 export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuickAction, onLeadUpdate }: LeadDetailsModalProps) {
@@ -168,7 +166,9 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
         console.error('Error creating activity:', activityError);
       }
 
-      if (onLeadUpdate) onLeadUpdate();
+      // Optimistic update - update lead immediately
+      const updatedLead = { ...lead, status: newStatus };
+      if (onLeadUpdate) onLeadUpdate(updatedLead);
       setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       console.error('Error updating status:', error);
@@ -216,7 +216,9 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
         console.error('Error creating activity:', activityError);
       }
 
-      if (onLeadUpdate) onLeadUpdate();
+      // Optimistic update - update lead immediately
+      const updatedLead = { ...lead, assigned_employee: newEmployee };
+      if (onLeadUpdate) onLeadUpdate(updatedLead);
       setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       console.error('Error updating employee:', error);
@@ -271,7 +273,9 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
         console.error('Error creating activity:', activityError);
       }
 
-      if (onLeadUpdate) onLeadUpdate();
+      // Optimistic update - update lead immediately
+      const updatedLead = { ...lead, priority: normalizedPriority as 'High Priority' | 'Medium Priority' | 'Low Priority' | null };
+      if (onLeadUpdate) onLeadUpdate(updatedLead);
       setRefreshKey(prev => prev + 1);
     } catch (error: any) {
       console.error('Error updating priority:', error);
@@ -293,15 +297,36 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
 
   const handleNoteAdded = () => {
     setRefreshKey(prev => prev + 1);
-    if (onLeadUpdate) onLeadUpdate();
+    // Note added - no need to update lead, just refresh key for UI
+    if (onLeadUpdate && lead) {
+      onLeadUpdate(lead);
+    }
   };
 
-  const handleFollowUpSet = () => {
+  const handleFollowUpSet = async () => {
     setRefreshKey(prev => prev + 1);
-    if (onLeadUpdate) onLeadUpdate();
+    // Fetch updated lead to get new follow_up_date
+    if (lead) {
+      try {
+        const response = await fetch(`/api/crm/leads/list?id=${lead.id}`);
+        const data = await response.json();
+        if (data.success && data.leads && data.leads.length > 0) {
+          const updatedLead = data.leads[0];
+          if (onLeadUpdate) {
+            onLeadUpdate(updatedLead);
+          }
+        } else if (onLeadUpdate) {
+          // Fallback - just update with current lead
+          onLeadUpdate(lead);
+        }
+      } catch (error) {
+        // If fetch fails, just use current lead
+        if (onLeadUpdate) {
+          onLeadUpdate(lead);
+        }
+      }
+    }
   };
-
-  const leadScore = calculateLeadScore(lead);
 
   const modalContent = (
     <>
@@ -332,7 +357,7 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
 
         {/* Content */}
         <div className="space-y-6">
-            {/* Lead Name with Score and Follow-Up Badge */}
+            {/* Lead Name with Follow-Up Badge */}
           <div>
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <label className="block text-sm font-semibold text-slate-400">Lead Name</label>
@@ -348,14 +373,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
                       {isFollowUpOverdue(lead.follow_up_date) ? '⚠️ Overdue' : isFollowUpDueToday(lead.follow_up_date) ? '📅 Due Today' : `📅 ${formatDateOnly(lead.follow_up_date)}`}
                     </span>
                   )}
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    leadScore >= 80 ? 'bg-green-500/20 text-green-300' :
-                    leadScore >= 60 ? 'bg-blue-500/20 text-blue-300' :
-                    leadScore >= 40 ? 'bg-yellow-500/20 text-yellow-300' :
-                    'bg-red-500/20 text-red-300'
-                  }`}>
-                    Score: {leadScore}
-                  </span>
                 </div>
               </div>
             <p className="text-xl font-bold text-white bg-slate-800/50 rounded-lg p-3">{lead.lead_name}</p>
@@ -508,24 +525,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
             </div>
           )}
         </div>
-
-          {/* Activity Timeline Section */}
-          <div className="mt-8 border-t border-white/10 pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <span>📋</span>
-                <span>Activity Timeline</span>
-              </h3>
-              <button
-                onClick={() => setAddNoteOpen(true)}
-                className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-500/80 hover:bg-blue-500 rounded-lg transition-all duration-200 flex items-center gap-1.5"
-              >
-                <span>📝</span>
-                <span>Add Note</span>
-              </button>
-            </div>
-            <LeadActivityTimeline key={refreshKey} leadId={lead.id} />
-          </div>
 
           {/* Quick Actions */}
           {onQuickAction && (

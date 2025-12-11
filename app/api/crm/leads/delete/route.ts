@@ -2,16 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { logActivity } from '@/lib/utils/activityLogger';
 
-// POST - Delete lead
+// POST - Delete lead (Admin only)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { id } = body;
+    const { id, isAdmin } = body;
 
     if (!id) {
       return NextResponse.json(
         { error: 'Lead ID is required' },
         { status: 400 }
+      );
+    }
+
+    // Check if user is admin
+    if (!isAdmin || isAdmin !== true) {
+      return NextResponse.json(
+        { error: 'Only admins can delete leads' },
+        { status: 403 }
       );
     }
 

@@ -16,33 +16,50 @@ export async function GET(request: NextRequest) {
     }
 
     const isAdmin = username?.toLowerCase() === 'admin';
+    
+    // Normalize username to lowercase for consistent matching
+    const normalizedUsername = username.toLowerCase();
+    
+    console.log(`🔔 [FETCH] Username: "${username}" (normalized: "${normalizedUsername}"), Is admin: ${isAdmin}`);
 
     // Admin should not see notifications
     if (isAdmin) {
+      console.log(`🔔 [FETCH] Admin user - returning empty notifications`);
       return NextResponse.json({ success: true, notifications: [] });
     }
 
     // Fetch notifications from notifications table
     // Only show notifications for the logged-in employee
+    // Only show unseen notifications (is_seen = false)
+    // Select all columns except lead_id (which doesn't exist in the table)
+    // We'll get lead_id from metadata instead
+    // Use ilike for case-insensitive matching (PostgreSQL)
     let notificationsQuery = supabase
       .from('notifications')
-      .select('id, user_id, notification_type, title, message, contact_id, account_id, sub_account_id, is_seen, is_completed, is_snoozed, snooze_until, created_at')
+      .select('id, user_id, notification_type, title, message, contact_id, account_id, sub_account_id, is_seen, is_completed, is_snoozed, snooze_until, created_at, metadata')
       .eq('notification_type', 'followup_due')
       .eq('is_completed', false)
-      .eq('user_id', username) // Only show notifications for this specific employee
+      .eq('is_seen', false) // Only show unseen notifications
+      .ilike('user_id', username) // Case-insensitive matching for user_id
       .order('created_at', { ascending: false });
     
-    console.log(`Fetching notifications for user: ${username}, isAdmin: ${isAdmin}`);
+    console.log(`🔔 [FETCH] Query: notification_type='followup_due', is_completed=false, is_seen=false, user_id ILIKE '${username}'`);
 
     // Execute the query
     const { data: notificationsData, error: notificationsError } = await notificationsQuery;
 
     if (notificationsError) {
-      console.error('Error fetching notifications:', notificationsError);
-      return NextResponse.json({ error: notificationsError.message }, { status: 500 });
+      console.error('❌ [FETCH] Error fetching notifications:', notificationsError);
+      console.error('❌ [FETCH] Error details:', JSON.stringify(notificationsError, null, 2));
+      // Don't fail completely - return empty array so UI doesn't break
+      console.log('⚠️ [FETCH] Returning empty notifications array due to fetch error');
+      return NextResponse.json({ success: true, notifications: [] });
     }
 
-    console.log(`Found ${notificationsData?.length || 0} notifications before filtering`);
+    console.log(`✅ [FETCH] Found ${notificationsData?.length || 0} raw notifications from database for user: ${username}`);
+    if (notificationsData && notificationsData.length > 0) {
+      console.log(`📋 [FETCH] Sample notification user_ids:`, notificationsData.slice(0, 3).map((n: any) => n.user_id));
+    }
     
     if (!notificationsData || notificationsData.length === 0) {
       console.log('No notifications found in database');
@@ -64,10 +81,45 @@ export async function GET(request: NextRequest) {
     // Show all active notifications (already filtered by user_id if not admin)
     const filteredNotifications = activeNotifications;
 
-    // Get contact IDs to fetch contact details
+    // Get contact IDs and lead IDs to fetch details (only from metadata since lead_id column doesn't exist)
     const contactIds = filteredNotifications.map((notif: any) => notif.contact_id).filter(Boolean);
     
-    console.log(`Found ${contactIds.length} unique contact IDs`);
+    // Extract lead IDs from metadata (handle both object and string)
+    const leadIds: number[] = [];
+    filteredNotifications.forEach((notif: any) => {
+      let metadata = notif.metadata;
+      if (typeof metadata === 'string') {
+        try {
+          metadata = JSON.parse(metadata);
+          console.log(`✅ [FETCH] Parsed metadata string for notification ${notif.id}:`, metadata);
+        } catch (e) {
+          console.warn(`⚠️ [FETCH] Failed to parse metadata string for notification ${notif.id}:`, e);
+          console.warn(`   Raw metadata:`, notif.metadata);
+          metadata = {};
+        }
+      }
+      if (metadata?.lead_id) {
+        const leadId = typeof metadata.lead_id === 'number' 
+          ? metadata.lead_id 
+          : parseInt(metadata.lead_id);
+        if (!isNaN(leadId)) {
+          leadIds.push(leadId);
+          console.log(`📌 [FETCH] Found lead_id ${leadId} in notification ${notif.id}`);
+        } else {
+          console.warn(`⚠️ [FETCH] Invalid lead_id in notification ${notif.id}:`, metadata.lead_id);
+        }
+      } else {
+        // Log if notification doesn't have lead_id but might be a lead notification
+        if (notif.message?.includes('Lead:') || notif.title?.includes('Lead')) {
+          console.warn(`⚠️ [FETCH] Notification ${notif.id} mentions Lead but has no lead_id in metadata`);
+        }
+      }
+    });
+    const uniqueLeadIds = [...new Set(leadIds)];
+    
+    console.log(`📊 [FETCH] Found ${contactIds.length} unique contact IDs and ${uniqueLeadIds.length} unique lead IDs (from metadata)`);
+    console.log(`   Contact IDs: ${contactIds.join(', ') || 'none'}`);
+    console.log(`   Lead IDs: ${uniqueLeadIds.join(', ') || 'none'}`);
 
     // Fetch contacts with their sub-account and account info
     let contactsData: any[] = [];
@@ -92,6 +144,24 @@ export async function GET(request: NextRequest) {
     const validContacts = contactsData; // .filter((c: any) => c.call_status !== 'Connected');
     
     console.log(`${validContacts.length} valid contacts (not filtering by call_status)`);
+
+    // Fetch leads with follow-up dates
+    let leadsData: any[] = [];
+    if (uniqueLeadIds.length > 0) {
+      const { data, error: leadsError } = await supabase
+        .from('leads')
+        .select('id, lead_name, contact_person, phone, email, follow_up_date, account_id, sub_account_id, assigned_employee')
+        .in('id', uniqueLeadIds);
+
+      if (leadsError) {
+        console.error('Error fetching leads:', leadsError);
+        // Don't return error, just log it and continue with empty leads
+      } else {
+        leadsData = data || [];
+      }
+    }
+
+    console.log(`Fetched ${leadsData.length} leads`);
 
     // Get sub-account IDs
     const subAccountIds = [...new Set(validContacts.map((c: any) => c.sub_account_id).filter(Boolean))];
@@ -143,9 +213,135 @@ export async function GET(request: NextRequest) {
       accountMap.set(a.id, a.account_name);
     });
 
+    // Create lead map
+    const leadMap = new Map();
+    leadsData.forEach((l: any) => {
+      leadMap.set(l.id, l);
+    });
+    const validLeadIds = new Set(leadsData.map((l: any) => l.id));
+    
+    console.log(`Mapped ${leadsData.length} leads, validLeadIds: ${Array.from(validLeadIds).join(', ')}`);
+
     // Format the response to match expected structure
     const notifications = filteredNotifications
       .map((notif: any) => {
+        // Check for lead_id in metadata (column doesn't exist in table)
+        // Metadata might be a JSON string or an object
+        let leadId = null;
+        let metadataObj = notif.metadata;
+        
+        // If metadata is a string, parse it
+        if (typeof metadataObj === 'string') {
+          try {
+            metadataObj = JSON.parse(metadataObj);
+            console.log(`✅ [FETCH] Parsed metadata for notification ${notif.id}:`, metadataObj);
+          } catch (e) {
+            console.warn(`⚠️ [FETCH] Failed to parse metadata string for notification ${notif.id}:`, e);
+            console.warn(`   Raw metadata string:`, notif.metadata);
+            metadataObj = {};
+          }
+        }
+        
+        if (metadataObj?.lead_id) {
+          leadId = typeof metadataObj.lead_id === 'number' 
+            ? metadataObj.lead_id 
+            : parseInt(metadataObj.lead_id);
+        }
+        
+        // If notification has lead_id, use lead data
+        if (leadId && !isNaN(leadId)) {
+          const lead = leadMap.get(leadId);
+          
+          if (lead && validLeadIds.has(leadId)) {
+            // Lead found in database - use full lead data
+            const subAccount = lead.sub_account_id ? subAccountMap.get(lead.sub_account_id) : null;
+            const accountName = lead.account_id ? accountMap.get(lead.account_id) : null;
+            const subAccountName = subAccount?.sub_account_name || null;
+
+            return {
+              id: lead.id, // Use lead ID for compatibility
+              notificationId: notif.id,
+              subAccountId: lead.sub_account_id || notif.sub_account_id,
+              sub_account_id: lead.sub_account_id || notif.sub_account_id,
+              name: lead.lead_name,
+              designation: null,
+              email: lead.email || null,
+              phone: lead.phone || null,
+              callStatus: null,
+              notes: null,
+              followUpDate: lead.follow_up_date,
+              accountName: accountName || null,
+              subAccountName: subAccountName || null,
+              isSeen: notif.is_seen || false,
+              isCompleted: notif.is_completed || false,
+              created_at: formatTimestampIST(notif.created_at),
+              isLead: true, // Flag to indicate this is a lead notification
+            };
+          } else {
+            // Lead not found in database, but still show notification with metadata
+            console.warn(`⚠️ Lead ${leadId} from notification metadata not found in database, using metadata`);
+            const subAccount = metadataObj?.sub_account_id ? subAccountMap.get(metadataObj.sub_account_id) : null;
+            const accountName = metadataObj?.account_id ? accountMap.get(metadataObj.account_id) : null;
+            const subAccountName = subAccount?.sub_account_name || null;
+            
+            return {
+              id: leadId,
+              notificationId: notif.id,
+              subAccountId: metadataObj?.sub_account_id || null,
+              sub_account_id: metadataObj?.sub_account_id || null,
+              name: metadataObj?.lead_name || notif.title?.replace('Follow-Up: ', '') || 'Unknown Lead',
+              designation: null,
+              email: null,
+              phone: null,
+              callStatus: null,
+              notes: null,
+              followUpDate: metadataObj?.follow_up_date || null,
+              accountName: accountName || null,
+              subAccountName: subAccountName || null,
+              isSeen: notif.is_seen || false,
+              isCompleted: notif.is_completed || false,
+              created_at: formatTimestampIST(notif.created_at),
+              isLead: true,
+            };
+          }
+        }
+        
+        // Also check if notification message mentions a lead (fallback)
+        if (!leadId && notif.message && notif.message.includes('Lead:')) {
+          // Try to extract lead name from message and find matching lead
+          const leadNameMatch = notif.message.match(/Lead: ([^,]+)/);
+          if (leadNameMatch) {
+            const leadName = leadNameMatch[1].trim();
+            const matchingLead = leadsData.find((l: any) => l.lead_name === leadName);
+            if (matchingLead && validLeadIds.has(matchingLead.id)) {
+              const lead = matchingLead;
+              const subAccount = lead.sub_account_id ? subAccountMap.get(lead.sub_account_id) : null;
+              const accountName = lead.account_id ? accountMap.get(lead.account_id) : null;
+              const subAccountName = subAccount?.sub_account_name || null;
+              
+              return {
+                id: lead.id,
+                notificationId: notif.id,
+                subAccountId: lead.sub_account_id || notif.sub_account_id,
+                sub_account_id: lead.sub_account_id || notif.sub_account_id,
+                name: lead.lead_name,
+                designation: null,
+                email: lead.email || null,
+                phone: lead.phone || null,
+                callStatus: null,
+                notes: null,
+                followUpDate: lead.follow_up_date,
+                accountName: accountName || null,
+                subAccountName: subAccountName || null,
+                isSeen: notif.is_seen || false,
+                isCompleted: notif.is_completed || false,
+                created_at: formatTimestampIST(notif.created_at),
+                isLead: true,
+              };
+            }
+          }
+        }
+        
         // If notification has contact_id and contact exists, use contact data
         if (notif.contact_id && validContactIds.has(notif.contact_id)) {
           const contact = contactMap.get(notif.contact_id);
@@ -208,7 +404,14 @@ export async function GET(request: NextRequest) {
       })
       .filter(Boolean); // Remove null entries
 
-    console.log(`Returning ${notifications.length} formatted notifications`);
+    console.log(`✅ Returning ${notifications.length} formatted notifications for user: ${username}`);
+    if (notifications.length > 0) {
+      console.log(`   - Leads: ${notifications.filter((n: any) => n.isLead).length}`);
+      console.log(`   - Contacts: ${notifications.filter((n: any) => !n.isLead).length}`);
+      notifications.forEach((n: any, idx: number) => {
+        console.log(`   [${idx + 1}] ${n.isLead ? 'LEAD' : 'CONTACT'}: ${n.name} (ID: ${n.id}, NotifID: ${n.notificationId})`);
+      });
+    }
 
     return NextResponse.json({ success: true, notifications });
   } catch (error: any) {

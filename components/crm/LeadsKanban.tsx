@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback, memo } from 'react';
 import { Lead } from '@/app/crm/leads/page';
-import { calculateLeadScore, getLeadScoreColor } from '@/lib/utils/leadScore';
 
 interface LeadsKanbanProps {
   leads: Lead[];
@@ -117,8 +116,25 @@ function LeadsKanban({ leads, onStatusChange, onLeadClick, onPriorityChange }: L
               {/* Column Cards */}
               <div className="space-y-2 md:space-y-3 min-h-[200px]">
                 {columnLeads.map((lead) => {
-                  const score = calculateLeadScore(lead);
                   const priority = lead.priority || null;
+                  
+                  // Format created date safely
+                  let formattedCreatedDate = 'N/A';
+                  if (lead.created_at) {
+                    try {
+                      const createdDate = new Date(lead.created_at);
+                      if (!isNaN(createdDate.getTime())) {
+                        formattedCreatedDate = createdDate.toLocaleDateString('en-IN', { 
+                          day: '2-digit', 
+                          month: 'short', 
+                          year: 'numeric' 
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Error formatting created date:', error);
+                    }
+                  }
+                  
                   return (
                     <div
                       key={lead.id}
@@ -169,14 +185,8 @@ function LeadsKanban({ leads, onStatusChange, onLeadClick, onPriorityChange }: L
                         )}
                       </div>
 
-                      {/* Lead Score and Priority */}
-                      <div className="flex items-center justify-between mb-2 gap-2">
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs text-slate-400">Score:</span>
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${getLeadScoreColor(score)}`}>
-                          {score}
-                        </span>
-                        </div>
+                      {/* Priority */}
+                      <div className="flex items-center justify-end mb-2 gap-2">
                         {priority ? (
                           <span className={`px-1.5 py-0.5 rounded text-xs font-semibold border ${getPriorityColor(priority)}`}>
                             {priority === 'High Priority' ? 'High' : priority === 'Medium Priority' ? 'Med' : 'Low'}
@@ -188,10 +198,10 @@ function LeadsKanban({ leads, onStatusChange, onLeadClick, onPriorityChange }: L
                         )}
                       </div>
 
-                      {/* Lead Source & Date */}
+                      {/* Lead Source & Created Date */}
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-400 truncate">{lead.lead_source || 'No source'}</span>
-                        <span className="text-slate-400 ml-2">{formatDate(lead.created_at)}</span>
+                        <span className="text-slate-400 ml-2">Created On: {formattedCreatedDate}</span>
                       </div>
                     </div>
                   );

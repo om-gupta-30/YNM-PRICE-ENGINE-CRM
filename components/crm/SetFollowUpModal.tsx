@@ -59,6 +59,11 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
         throw new Error(data.error || 'Failed to set follow-up');
       }
 
+      // Trigger notification refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshNotifications'));
+      }
+
       onFollowUpSet();
       onClose();
     } catch (error: any) {
@@ -142,16 +147,6 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
           </div>
 
           <div className="flex gap-4 pt-4">
-            {currentFollowUpDate && (
-              <button
-                type="button"
-                onClick={handleRemove}
-                disabled={submitting}
-                className="px-4 py-3 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Remove
-              </button>
-            )}
             <button
               type="button"
               onClick={onClose}
@@ -164,7 +159,7 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
               disabled={submitting}
               className="flex-1 px-6 py-3 text-sm font-semibold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {submitting ? 'Saving...' : 'Set Follow-Up'}
+              {submitting ? 'Saving...' : currentFollowUpDate ? 'Update Follow-Up' : 'Set Follow-Up'}
             </button>
           </div>
         </form>

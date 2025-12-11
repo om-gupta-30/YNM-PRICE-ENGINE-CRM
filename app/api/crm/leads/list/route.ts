@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeUsername = searchParams.get('employee');
     const isAdmin = searchParams.get('isAdmin') === 'true';
+    const leadId = searchParams.get('id'); // Support single lead fetch
 
     const supabase = createSupabaseServerClient();
 
@@ -35,9 +36,17 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false });
 
-    // Filter by assigned_employee if not admin
-    if (!isAdmin && employeeUsername) {
-      query = query.eq('assigned_employee', employeeUsername);
+    // Filter by lead ID if provided
+    if (leadId) {
+      const id = parseInt(leadId);
+      if (!isNaN(id)) {
+        query = query.eq('id', id);
+      }
+    } else {
+      // Filter by assigned_employee if not admin (only when fetching all leads)
+      if (!isAdmin && employeeUsername) {
+        query = query.eq('assigned_employee', employeeUsername);
+      }
     }
 
     // Fetch leads
@@ -97,8 +106,8 @@ export async function GET(request: NextRequest) {
       account_name: lead.account_id ? accountMap.get(lead.account_id) || null : null,
       sub_account_name: lead.sub_account_id ? subAccountMap.get(lead.sub_account_id) || null : null,
       created_by: lead.created_by || null,
-      created_at: formatTimestampIST(lead.created_at),
-      updated_at: formatTimestampIST(lead.updated_at),
+      created_at: lead.created_at || null, // Keep raw ISO date string for component formatting
+      updated_at: lead.updated_at || null, // Keep raw ISO date string for component formatting
     }));
 
     return NextResponse.json({ success: true, leads: formattedLeads });

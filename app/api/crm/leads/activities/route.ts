@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
+import { logActivity } from '@/lib/utils/activityLogger';
 
 // GET - Fetch activities for a lead
 export async function GET(request: NextRequest) {
@@ -49,9 +50,9 @@ export async function POST(request: NextRequest) {
       created_by,
     } = body;
 
-    if (!lead_id || !activity_type || !description || !created_by) {
+    if (!lead_id || !activity_type || !description) {
       return NextResponse.json(
-        { error: 'Lead ID, activity type, description, and created_by are required' },
+        { error: 'Lead ID, activity type, and description are required' },
         { status: 400 }
       );
     }
@@ -66,14 +67,31 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseServerClient();
 
+    // Get employee_id from created_by (username)
+    // If created_by is not provided, we can't create the activity
+    if (!created_by) {
+      return NextResponse.json(
+        { error: 'created_by (username) is required to identify the employee' },
+        { status: 400 }
+      );
+    }
+
+    // Get lead data to fetch account_id for activity logging
+    const { data: leadData } = await supabase
+      .from('leads')
+      .select('id, account_id, sub_account_id')
+      .eq('id', parseInt(lead_id))
+      .single();
+
+    // Insert into lead_activities table
     const { data, error } = await supabase
       .from('lead_activities')
       .insert({
         lead_id: parseInt(lead_id),
+        employee_id: created_by.trim(),
         activity_type,
         description: description.trim(),
         metadata: metadata || {},
-        created_by: created_by.trim(),
       })
       .select()
       .single();
@@ -81,6 +99,27 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating lead activity:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Also log to main activities table for history
+    if (leadData) {
+      try {
+        await logActivity({
+          account_id: leadData.account_id || null,
+          sub_account_id: leadData.sub_account_id || null,
+          lead_id: parseInt(lead_id),
+          employee_id: created_by.trim(),
+          activity_type: activity_type === 'note' ? 'note' : activity_type === 'follow_up_set' ? 'followup' : 'edit',
+          description: description.trim(),
+          metadata: {
+            ...(metadata || {}),
+            activity_type: activity_type,
+          },
+        });
+      } catch (activityError) {
+        console.warn('Failed to log activity to activities table (non-critical):', activityError);
+        // Don't fail the request if activity logging fails
+      }
     }
 
     return NextResponse.json({ success: true, activity: data });

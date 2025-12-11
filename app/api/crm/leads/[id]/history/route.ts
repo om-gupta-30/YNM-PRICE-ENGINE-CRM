@@ -33,8 +33,8 @@ export async function GET(
       );
     }
 
-    // Fetch lead details and activities in parallel for better performance
-    const [leadResult, activitiesResult] = await Promise.all([
+    // Fetch lead details, activities, and lead_activities in parallel for better performance
+    const [leadResult, activitiesResult, leadActivitiesResult] = await Promise.all([
       supabase
         .from('leads')
         .select('id, lead_name, created_by, created_at, status, priority, account_id, sub_account_id')
@@ -44,11 +44,17 @@ export async function GET(
         .from('activities')
         .select('id, employee_id, activity_type, description, metadata, created_at')
         .eq('lead_id', leadId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('lead_activities')
+        .select('id, employee_id, activity_type, description, metadata, created_at')
+        .eq('lead_id', leadId)
         .order('created_at', { ascending: true })
     ]);
 
     const { data: lead, error: leadError } = leadResult;
     const { data: allActivities, error: activitiesError } = activitiesResult;
+    const { data: leadActivities, error: leadActivitiesError } = leadActivitiesResult;
 
     if (leadError || !lead) {
       return NextResponse.json(
@@ -76,9 +82,44 @@ export async function GET(
       },
     });
 
-    // Add activities (status changes, edits, notes, etc.)
+    // Combine activities from both tables
+    const combinedActivities: any[] = [];
+    
+    // Add activities from main activities table
     if (allActivities && !activitiesError) {
       allActivities.forEach((activity: any) => {
+        combinedActivities.push({
+          ...activity,
+          source: 'activities',
+        });
+      });
+    }
+    
+    // Add activities from lead_activities table (if not already in activities table)
+    if (leadActivities && !leadActivitiesError) {
+      leadActivities.forEach((leadActivity: any) => {
+        // Check if this activity already exists in activities table (by description and timestamp)
+        const exists = allActivities?.some((act: any) => 
+          act.description === leadActivity.description &&
+          Math.abs(new Date(act.created_at).getTime() - new Date(leadActivity.created_at).getTime()) < 1000 // Within 1 second
+        );
+        
+        if (!exists) {
+          combinedActivities.push({
+            ...leadActivity,
+            source: 'lead_activities',
+          });
+        }
+      });
+    }
+    
+    // Sort combined activities by created_at
+    combinedActivities.sort((a, b) => {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+    
+    // Process combined activities
+    combinedActivities.forEach((activity: any) => {
         const metadata = activity.metadata || {};
 
         // Status change
@@ -123,7 +164,7 @@ export async function GET(
             metadata: metadata,
           });
         }
-        // Notes
+        // Notes (from both activities and lead_activities tables)
         else if (activity.activity_type === 'note') {
           history.push({
             type: 'note',
@@ -131,18 +172,25 @@ export async function GET(
             description: activity.description || 'A note was added',
             changed_by: activity.employee_id || 'System',
             changed_at: activity.created_at,
-            metadata: metadata,
+            metadata: {
+              ...metadata,
+              note_text: activity.description, // Include note text in metadata
+            },
           });
         }
         // Follow-up set
-        else if (activity.activity_type === 'follow_up_set' || metadata.changes?.some((c: string) => c.includes('Follow-up'))) {
+        else if (activity.activity_type === 'follow_up_set' || activity.activity_type === 'followup' || metadata.changes?.some((c: string) => c.includes('Follow-up')) || metadata.follow_up_date) {
+          const followUpDate = metadata.follow_up_date || (activity.description?.match(/(\d{1,2}\/\d{1,2}\/\d{4})|(\d{1,2}-\w{3}-\d{4})/)?.[0]);
           history.push({
             type: 'follow_up',
             action: 'Follow-up set',
-            description: activity.description || 'A follow-up date was set',
+            description: activity.description || (followUpDate ? `Follow-up scheduled for ${followUpDate}` : 'A follow-up date was set'),
             changed_by: activity.employee_id || 'System',
             changed_at: activity.created_at,
-            metadata: metadata,
+            metadata: {
+              ...metadata,
+              follow_up_date: followUpDate || metadata.follow_up_date,
+            },
           });
         }
         // Other edits
@@ -157,7 +205,6 @@ export async function GET(
           });
         }
       });
-    }
 
     // Sort by timestamp (newest first - reverse chronological)
     history.sort((a, b) => {
