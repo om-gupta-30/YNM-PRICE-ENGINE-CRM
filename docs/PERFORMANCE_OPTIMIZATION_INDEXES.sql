@@ -1,114 +1,149 @@
--- Performance Optimization Indexes for Free Tier
--- Run this SQL in your Supabase SQL Editor to improve query performance
--- This is especially important for free tier where resources are limited
+-- ============================================================
+-- PERFORMANCE OPTIMIZATION: Database Index Suggestions
+-- ============================================================
+-- 
+-- These indexes should be run manually in Supabase SQL Editor
+-- to dramatically improve query speed for the CRM.
+-- 
+-- IMPORTANT: These are safe, additive indexes that will NOT
+-- break any existing functionality. They only improve query
+-- performance.
+-- 
+-- Run these one at a time or all together in Supabase SQL Editor.
+-- ============================================================
 
--- ============================================
--- CRITICAL INDEXES FOR EDIT/ASSIGNMENT OPERATIONS
--- ============================================
+-- Index for notifications queries (most common filter pattern)
+-- Improves: /api/notifications/follow-ups route
+CREATE INDEX IF NOT EXISTS notif_user_seen_idx 
+ON notifications(user_id, is_seen);
 
--- Accounts table indexes
-CREATE INDEX IF NOT EXISTS idx_accounts_assigned_employee ON accounts(assigned_employee) WHERE assigned_employee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_accounts_assigned_to ON accounts(assigned_to) WHERE assigned_to IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_accounts_is_active ON accounts(is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_accounts_created_at ON accounts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_accounts_last_activity_at ON accounts(last_activity_at DESC) WHERE last_activity_at IS NOT NULL;
+-- Index for leads follow-up date queries
+-- Improves: Lead follow-up filtering and sorting
+CREATE INDEX IF NOT EXISTS leads_follow_idx 
+ON leads(follow_up_date);
 
--- Composite index for common queries
-CREATE INDEX IF NOT EXISTS idx_accounts_employee_active ON accounts(assigned_employee, is_active) WHERE is_active = true AND assigned_employee IS NOT NULL;
+-- Index for contacts follow-up date queries
+-- Improves: Contact follow-up filtering and sorting
+CREATE INDEX IF NOT EXISTS contacts_follow_idx 
+ON contacts(follow_up_date);
 
--- Tasks table indexes
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_employee ON tasks(assigned_employee) WHERE assigned_employee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_assigned_to ON tasks(assigned_to) WHERE assigned_to IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date) WHERE due_date IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_account_id ON tasks(account_id) WHERE account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+-- Index for leads assigned employee queries
+-- Improves: /api/crm/leads/list route filtering
+-- Note: Leads table may use assigned_employee OR assigned_to - check both
+DO $$
+BEGIN
+  -- Check if assigned_employee column exists
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'leads' AND column_name = 'assigned_employee'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS leads_assigned_employee_idx 
+    ON leads(assigned_employee);
+  END IF;
+  
+  -- Check if assigned_to column exists (some leads queries use this)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'leads' AND column_name = 'assigned_to'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS leads_assigned_to_idx 
+    ON leads(assigned_to);
+  END IF;
+END $$;
 
--- Composite indexes for common task queries
-CREATE INDEX IF NOT EXISTS idx_tasks_employee_status ON tasks(assigned_employee, status) WHERE assigned_employee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_tasks_employee_due_date ON tasks(assigned_employee, due_date) WHERE assigned_employee IS NOT NULL AND due_date IS NOT NULL;
+-- Index for contacts assigned employee queries
+-- Improves: Contact filtering by employee
+-- Note: Contacts table may not have assigned_employee column
+DO $$
+BEGIN
+  -- Check if assigned_employee column exists
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'contacts' AND column_name = 'assigned_employee'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS contacts_assigned_employee_idx 
+    ON contacts(assigned_employee);
+  END IF;
+  
+  -- Check if assigned_to column exists (some contacts queries may use this)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'contacts' AND column_name = 'assigned_to'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS contacts_assigned_to_idx 
+    ON contacts(assigned_to);
+  END IF;
+END $$;
 
--- Leads table indexes
-CREATE INDEX IF NOT EXISTS idx_leads_assigned_employee ON leads(assigned_employee) WHERE assigned_employee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_leads_assigned_to ON leads(assigned_to) WHERE assigned_to IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
-CREATE INDEX IF NOT EXISTS idx_leads_account_id ON leads(account_id) WHERE account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at DESC);
+-- Index for accounts assigned employee queries
+-- Improves: /api/accounts route filtering
+-- Note: Accounts table uses assigned_employee
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'accounts' AND column_name = 'assigned_employee'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS accounts_assigned_employee_idx 
+    ON accounts(assigned_employee);
+  END IF;
+END $$;
 
--- Sub-accounts table indexes
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_account_id ON sub_accounts(account_id) WHERE account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_assigned_employee ON sub_accounts(assigned_employee) WHERE assigned_employee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_is_active ON sub_accounts(is_active) WHERE is_active = true;
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_name ON sub_accounts(sub_account_name);
-CREATE INDEX IF NOT EXISTS idx_sub_accounts_account_active ON sub_accounts(account_id, is_active) WHERE is_active = true;
+-- Index for accounts active status queries
+-- Improves: Account filtering by is_active
+CREATE INDEX IF NOT EXISTS accounts_active_idx 
+ON accounts(is_active);
 
--- Contacts table indexes
--- Note: Contacts table uses 'created_by' column, not 'assigned_to' or 'assigned_employee_id'
-CREATE INDEX IF NOT EXISTS idx_contacts_created_by ON contacts(created_by) WHERE created_by IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contacts_account_id ON contacts(account_id) WHERE account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contacts_sub_account_id ON contacts(sub_account_id) WHERE sub_account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contacts_created_at ON contacts(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_contacts_call_status ON contacts(call_status) WHERE call_status IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_contacts_follow_up_date ON contacts(follow_up_date) WHERE follow_up_date IS NOT NULL;
+-- Index for sub_accounts active status queries
+-- Improves: Sub-account filtering by is_active
+CREATE INDEX IF NOT EXISTS sub_accounts_active_idx 
+ON sub_accounts(is_active);
 
--- Activities table indexes (for activity logging)
-CREATE INDEX IF NOT EXISTS idx_activities_account_id ON activities(account_id) WHERE account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_activities_employee_id ON activities(employee_id);
-CREATE INDEX IF NOT EXISTS idx_activities_created_at ON activities(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_activities_activity_type ON activities(activity_type);
-CREATE INDEX IF NOT EXISTS idx_activities_employee_created ON activities(employee_id, created_at DESC);
+-- Index for sub_accounts account_id queries (foreign key)
+-- Improves: Sub-account lookups by account
+CREATE INDEX IF NOT EXISTS sub_accounts_account_idx 
+ON sub_accounts(account_id);
 
--- Notifications table indexes
-CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id) WHERE user_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_notifications_related_id ON notifications(related_id, related_type) WHERE related_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_notifications_is_completed ON notifications(is_completed) WHERE is_completed = false;
-CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+-- Index for notifications type and completion status
+-- Improves: Notification filtering by type and completion
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'notifications' AND column_name = 'notification_type'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS notif_type_completed_idx 
+    ON notifications(notification_type, is_completed);
+  END IF;
+END $$;
 
--- Quotes tables indexes
-CREATE INDEX IF NOT EXISTS idx_quotes_mbcb_sub_account_id ON quotes_mbcb(sub_account_id) WHERE sub_account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_mbcb_created_by ON quotes_mbcb(created_by) WHERE created_by IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_mbcb_created_at ON quotes_mbcb(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_quotes_mbcb_status ON quotes_mbcb(status);
+-- Index for tasks assigned_to queries (tasks use assigned_to, not assigned_employee)
+-- Improves: Task filtering by employee
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'tasks' AND column_name = 'assigned_to'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS tasks_assigned_to_idx 
+    ON tasks(assigned_to);
+  END IF;
+  
+  -- Also check for assigned_employee in tasks (some code may use both)
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'tasks' AND column_name = 'assigned_employee'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS tasks_assigned_employee_idx 
+    ON tasks(assigned_employee);
+  END IF;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_quotes_signages_sub_account_id ON quotes_signages(sub_account_id) WHERE sub_account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_signages_created_by ON quotes_signages(created_by) WHERE created_by IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_signages_created_at ON quotes_signages(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_quotes_signages_status ON quotes_signages(status);
-
-CREATE INDEX IF NOT EXISTS idx_quotes_paint_sub_account_id ON quotes_paint(sub_account_id) WHERE sub_account_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_paint_created_by ON quotes_paint(created_by) WHERE created_by IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_quotes_paint_created_at ON quotes_paint(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_quotes_paint_status ON quotes_paint(status);
-
--- States and Cities indexes (for lookup performance)
-CREATE INDEX IF NOT EXISTS idx_states_state_name ON states(state_name);
-CREATE INDEX IF NOT EXISTS idx_cities_city_name ON cities(city_name);
-CREATE INDEX IF NOT EXISTS idx_cities_state_id ON cities(state_id) WHERE state_id IS NOT NULL;
-
--- ============================================
--- ANALYZE TABLES FOR QUERY OPTIMIZER
--- ============================================
--- Run ANALYZE to update table statistics for better query planning
-
-ANALYZE accounts;
-ANALYZE tasks;
-ANALYZE leads;
-ANALYZE sub_accounts;
-ANALYZE contacts;
-ANALYZE activities;
-ANALYZE notifications;
-ANALYZE quotes_mbcb;
-ANALYZE quotes_signages;
-ANALYZE quotes_paint;
-
--- ============================================
--- VERIFICATION QUERIES
--- ============================================
--- Run these to verify indexes were created:
-
--- SELECT tablename, indexname, indexdef 
--- FROM pg_indexes 
--- WHERE schemaname = 'public' 
--- AND tablename IN ('accounts', 'tasks', 'leads', 'sub_accounts', 'contacts', 'activities', 'notifications')
--- ORDER BY tablename, indexname;
-
+-- ============================================================
+-- Notes:
+-- - All indexes use IF NOT EXISTS to prevent errors if already present
+-- - These indexes will speed up the most common query patterns
+-- - Indexes are automatically maintained by PostgreSQL
+-- - They may slightly slow down INSERT/UPDATE operations but
+--   dramatically speed up SELECT queries
+-- ============================================================

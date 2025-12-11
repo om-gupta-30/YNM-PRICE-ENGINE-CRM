@@ -4,6 +4,10 @@ import { formatTimestampIST, getCurrentISTTime } from '@/lib/utils/dateFormatter
 import { logEditActivity, logCreateActivity } from '@/lib/utils/activityLogger';
 import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
+// PERFORMANCE OPTIMIZATION: Edge runtime for read-only GET API
+// This route only reads from Supabase and doesn't use Node-specific APIs
+export const runtime = "edge";
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -43,39 +47,35 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch state and city names for each sub-account
-    const formattedSubAccounts = await Promise.all(
-      (subAccounts || []).map(async (sub: any) => {
-        let stateName = null;
-        let cityName = null;
+    // PERFORMANCE OPTIMIZATION: Batch state and city lookups instead of individual queries
+    const stateIds = [...new Set((subAccounts || []).map((sub: any) => sub.state_id).filter(Boolean))];
+    const cityIds = [...new Set((subAccounts || []).map((sub: any) => sub.city_id).filter(Boolean))];
 
-        // Fetch state name if state_id exists
-        if (sub.state_id) {
-          try {
-            const { data: stateData } = await supabase
-              .from('states')
-              .select('state_name')
-              .eq('id', sub.state_id)
-              .single();
-            stateName = stateData?.state_name || null;
-          } catch (err) {
-            console.error(`Error fetching state for sub-account ${sub.id}:`, err);
-          }
-        }
+    // Fetch all states and cities in parallel
+    const [statesResult, citiesResult] = await Promise.all([
+      stateIds.length > 0
+        ? supabase.from('states').select('id, state_name').in('id', stateIds)
+        : Promise.resolve({ data: [], error: null }),
+      cityIds.length > 0
+        ? supabase.from('cities').select('id, city_name').in('id', cityIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
-        // Fetch city name if city_id exists
-        if (sub.city_id) {
-          try {
-            const { data: cityData } = await supabase
-              .from('cities')
-              .select('city_name')
-              .eq('id', sub.city_id)
-              .single();
-            cityName = cityData?.city_name || null;
-          } catch (err) {
-            console.error(`Error fetching city for sub-account ${sub.id}:`, err);
-          }
-        }
+    // Create lookup maps
+    const stateMap = new Map();
+    (statesResult.data || []).forEach((state: any) => {
+      stateMap.set(state.id, state.state_name);
+    });
+
+    const cityMap = new Map();
+    (citiesResult.data || []).forEach((city: any) => {
+      cityMap.set(city.id, city.city_name);
+    });
+
+    // Fetch state and city names for each sub-account (using cached lookups)
+    const formattedSubAccounts = (subAccounts || []).map((sub: any) => {
+        const stateName = sub.state_id ? (stateMap.get(sub.state_id) || null) : null;
+        const cityName = sub.city_id ? (cityMap.get(sub.city_id) || null) : null;
 
         const accountName = sub.accounts?.account_name || null;
 
@@ -100,8 +100,7 @@ export async function GET(request: NextRequest) {
           createdAt: formatTimestampIST(sub.created_at),
           updatedAt: formatTimestampIST(sub.updated_at),
         };
-      })
-    );
+    });
 
     return NextResponse.json({ success: true, subAccounts: formattedSubAccounts });
   } catch (error: any) {

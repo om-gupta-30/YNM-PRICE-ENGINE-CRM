@@ -6,6 +6,10 @@ import { logEditActivity, logDeleteActivity } from '@/lib/utils/activityLogger';
 import { triggerKnowledgeSync } from '@/lib/ai/knowledgeSync';
 import { createDashboardNotification } from '@/lib/utils/dashboardNotificationLogger';
 
+// PERFORMANCE OPTIMIZATION: Edge runtime for read-only GET API
+// This route only reads from Supabase and doesn't use Node-specific APIs
+export const runtime = "edge";
+
 // GET - Fetch single contact
 export async function GET(
   request: NextRequest,

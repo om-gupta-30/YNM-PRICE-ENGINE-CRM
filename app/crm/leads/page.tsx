@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { useDebounce } from '@/hooks/useDebounce';
 import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
+import { getCachedData, setCachedData } from '@/lib/utils/crmCache';
 
 // Dynamic imports for better performance - load heavy components only when needed
 const LeadForm = dynamic(() => import('@/components/crm/LeadForm'), { ssr: false });
@@ -145,9 +146,22 @@ export default function LeadsPage() {
   }, []);
 
   // Fetch leads from API - memoized with useCallback
+  // PERFORMANCE OPTIMIZATION: Check cache first for instant page switching
   const fetchLeads = useCallback(async () => {
     try {
-      setLoading(true);
+      // Check cache first
+      const cacheKey = `leads_${isAdmin ? 'admin' : username}`;
+      const cachedLeads = getCachedData<Lead[]>(cacheKey);
+      
+      if (cachedLeads) {
+        setLeads(cachedLeads);
+        setLoading(false);
+        // Still fetch in background to refresh data
+        // (but don't show loading state)
+      } else {
+        setLoading(true);
+      }
+
       const params = new URLSearchParams();
       if (!isAdmin && username) {
         params.append('employee', username);
@@ -168,6 +182,8 @@ export default function LeadsPage() {
       
       if (data.success && data.leads) {
         setLeads(data.leads);
+        // PERFORMANCE OPTIMIZATION: Cache the results
+        setCachedData(cacheKey, data.leads);
       } else {
         throw new Error(data.error || 'Failed to fetch leads');
       }

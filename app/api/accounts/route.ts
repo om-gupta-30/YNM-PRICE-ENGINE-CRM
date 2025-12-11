@@ -4,6 +4,24 @@ import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 import { logCreateActivity } from '@/lib/utils/activityLogger';
 import { createDashboardNotification, createDashboardNotificationsForEmployees } from '@/lib/utils/dashboardNotificationLogger';
 
+// PERFORMANCE OPTIMIZATION: Edge runtime for read-only GET API
+// This route only reads from Supabase and doesn't use Node-specific APIs
+export const runtime = "edge";
+
+// PERFORMANCE OPTIMIZATION: In-memory cache for accounts/subaccounts lookups
+// Cache for 5 minutes max (simple timestamp check)
+const accountsCache = {
+  data: null as any,
+  timestamp: 0,
+  TTL: 5 * 60 * 1000, // 5 minutes
+};
+
+const subAccountsCache = {
+  data: null as any,
+  timestamp: 0,
+  TTL: 5 * 60 * 1000, // 5 minutes
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);

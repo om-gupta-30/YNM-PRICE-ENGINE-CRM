@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import ContactForm from '@/components/crm/ContactForm';
 import { formatDateIST, formatTimestampIST } from '@/lib/utils/dateFormatters';
+import { getCachedSubAccounts, setCachedSubAccounts } from '@/lib/utils/crmCache';
 
 interface Contact {
   id: number;
@@ -58,16 +59,30 @@ export default function SubAccountContactsPage() {
   };
 
   // Fetch contacts for sub-account
+  // PERFORMANCE OPTIMIZATION: Check cache first for instant page switching
   const fetchContacts = async () => {
     if (!subAccountId) return;
     
     try {
-      setLoading(true);
+      // Check cache first (contacts are stored per sub-account)
+      const cachedContacts = getCachedSubAccounts(subAccountId);
+      
+      if (cachedContacts) {
+        setContacts(cachedContacts);
+        setLoading(false);
+        // Still fetch in background to refresh data
+        // (but don't show loading state)
+      } else {
+        setLoading(true);
+      }
+
       const response = await fetch(`/api/subaccounts/${subAccountId}/contacts`);
       const data = await response.json();
       
       if (data.success) {
         setContacts(data.contacts || []);
+        // PERFORMANCE OPTIMIZATION: Cache the results
+        setCachedSubAccounts(subAccountId, data.contacts || []);
       } else {
         throw new Error(data.error || 'Failed to fetch contacts');
       }

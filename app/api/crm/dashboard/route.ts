@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 
+// PERFORMANCE OPTIMIZATION: Edge runtime for read-only GET API
+// This route only reads from Supabase and doesn't use Node-specific APIs
+export const runtime = "edge";
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -35,12 +39,15 @@ export async function GET(request: NextRequest) {
         supabase.from('quotes_paint').select('id, final_total_cost, status, created_by'),
       ]);
 
-      if (accountsError) console.error('Error fetching accounts:', accountsError);
-      if (leadsError) console.error('Error fetching leads:', leadsError);
-      if (tasksError) console.error('Error fetching tasks:', tasksError);
-      if (quotesMbcbError) console.error('Error fetching quotes_mbcb:', quotesMbcbError);
-      if (quotesSignagesError) console.error('Error fetching quotes_signages:', quotesSignagesError);
-      if (quotesPaintError) console.error('Error fetching quotes_paint:', quotesPaintError);
+      // PERFORMANCE OPTIMIZATION: Reduce console logging in production
+      if (process.env.NODE_ENV !== 'production') {
+        if (accountsError) console.error('Error fetching accounts:', accountsError);
+        if (leadsError) console.error('Error fetching leads:', leadsError);
+        if (tasksError) console.error('Error fetching tasks:', tasksError);
+        if (quotesMbcbError) console.error('Error fetching quotes_mbcb:', quotesMbcbError);
+        if (quotesSignagesError) console.error('Error fetching quotes_signages:', quotesSignagesError);
+        if (quotesPaintError) console.error('Error fetching quotes_paint:', quotesPaintError);
+      }
 
       const allQuotes = [
         ...(quotesMbcb || []),
@@ -138,12 +145,15 @@ export async function GET(request: NextRequest) {
         supabase.from('quotes_paint').select('id, final_total_cost').eq('created_by', employeeUsername),
       ]);
 
-      if (accountsError) console.error('Error fetching accounts:', accountsError);
-      if (leadsError) console.error('Error fetching leads:', leadsError);
-      if (tasksError) console.error('Error fetching tasks:', tasksError);
-      if (quotesMbcbError) console.error('Error fetching quotes_mbcb:', quotesMbcbError);
-      if (quotesSignagesError) console.error('Error fetching quotes_signages:', quotesSignagesError);
-      if (quotesPaintError) console.error('Error fetching quotes_paint:', quotesPaintError);
+      // PERFORMANCE OPTIMIZATION: Reduce console logging in production
+      if (process.env.NODE_ENV !== 'production') {
+        if (accountsError) console.error('Error fetching accounts:', accountsError);
+        if (leadsError) console.error('Error fetching leads:', leadsError);
+        if (tasksError) console.error('Error fetching tasks:', tasksError);
+        if (quotesMbcbError) console.error('Error fetching quotes_mbcb:', quotesMbcbError);
+        if (quotesSignagesError) console.error('Error fetching quotes_signages:', quotesSignagesError);
+        if (quotesPaintError) console.error('Error fetching quotes_paint:', quotesPaintError);
+      }
 
       const allQuotes = [
         ...(quotesMbcb || []),

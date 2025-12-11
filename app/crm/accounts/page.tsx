@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
+import { getCachedData, setCachedData } from '@/lib/utils/crmCache';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -256,23 +257,39 @@ export default function AccountsPage() {
   };
 
   // Fetch accounts from API
+  // PERFORMANCE OPTIMIZATION: Check cache first for instant page switching
   const fetchAccounts = async () => {
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
       // Get current values from localStorage to avoid stale closure
+      let effectiveIsAdmin = false;
+      let currentUsername = '';
       if (typeof window !== 'undefined') {
         const currentIsAdmin = localStorage.getItem('isAdmin') === 'true';
         const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
-        const currentUsername = localStorage.getItem('username') || '';
+        currentUsername = localStorage.getItem('username') || '';
         // Data analysts should see all accounts like admins, but with restrictions
-        const effectiveIsAdmin = currentIsAdmin || currentIsDataAnalyst;
-        if (!effectiveIsAdmin && currentUsername) {
-          params.append('employee', currentUsername);
-        }
-        if (effectiveIsAdmin) {
-          params.append('isAdmin', 'true');
-        }
+        effectiveIsAdmin = currentIsAdmin || currentIsDataAnalyst;
+      }
+
+      // Check cache first
+      const cacheKey = `accounts_${effectiveIsAdmin ? 'admin' : currentUsername}`;
+      const cachedAccounts = getCachedData<Account[]>(cacheKey);
+      
+      if (cachedAccounts) {
+        setAccounts(cachedAccounts);
+        setLoading(false);
+        // Still fetch in background to refresh data
+        // (but don't show loading state)
+      } else {
+        setLoading(true);
+      }
+
+      const params = new URLSearchParams();
+      if (!effectiveIsAdmin && currentUsername) {
+        params.append('employee', currentUsername);
+      }
+      if (effectiveIsAdmin) {
+        params.append('isAdmin', 'true');
       }
       
       const response = await fetch(`/api/accounts?${params}`);
@@ -280,6 +297,8 @@ export default function AccountsPage() {
       
       if (data.success) {
         setAccounts(data.accounts || []);
+        // PERFORMANCE OPTIMIZATION: Cache the results
+        setCachedData(cacheKey, data.accounts || []);
       } else {
         throw new Error(data.error || 'Failed to fetch accounts');
       }

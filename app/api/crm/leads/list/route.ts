@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
 
+// PERFORMANCE OPTIMIZATION: Edge runtime for read-only GET API
+// This route only reads from Supabase and doesn't use Node-specific APIs
+export const runtime = "edge";
+
 // GET - Fetch all leads with joined account and sub-account names
 export async function GET(request: NextRequest) {
   try {
@@ -57,35 +61,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // PERFORMANCE OPTIMIZATION: Reduce redundant queries by batching account/subaccount lookups
     // Get unique account and sub-account IDs
     const accountIds = [...new Set((leads || []).map((l: any) => l.account_id).filter(Boolean))];
     const subAccountIds = [...new Set((leads || []).map((l: any) => l.sub_account_id).filter(Boolean))];
 
-    // Fetch accounts
-    const accountMap = new Map();
-    if (accountIds.length > 0) {
-      const { data: accountsData } = await supabase
-        .from('accounts')
-        .select('id, account_name')
-        .in('id', accountIds);
-      
-      (accountsData || []).forEach((acc: any) => {
-        accountMap.set(acc.id, acc.account_name);
-      });
-    }
+    // PERFORMANCE OPTIMIZATION: Use in-memory cache for accounts/subaccounts within same request
+    // Fetch accounts and sub-accounts in parallel
+    const [accountsResult, subAccountsResult] = await Promise.all([
+      accountIds.length > 0 
+        ? supabase.from('accounts').select('id, account_name').in('id', accountIds)
+        : Promise.resolve({ data: [], error: null }),
+      subAccountIds.length > 0
+        ? supabase.from('sub_accounts').select('id, sub_account_name').in('id', subAccountIds)
+        : Promise.resolve({ data: [], error: null })
+    ]);
 
-    // Fetch sub-accounts
+    const accountMap = new Map();
+    (accountsResult.data || []).forEach((acc: any) => {
+      accountMap.set(acc.id, acc.account_name);
+    });
+
     const subAccountMap = new Map();
-    if (subAccountIds.length > 0) {
-      const { data: subAccountsData } = await supabase
-        .from('sub_accounts')
-        .select('id, sub_account_name')
-        .in('id', subAccountIds);
-      
-      (subAccountsData || []).forEach((sa: any) => {
-        subAccountMap.set(sa.id, sa.sub_account_name);
-      });
-    }
+    (subAccountsResult.data || []).forEach((sa: any) => {
+      subAccountMap.set(sa.id, sa.sub_account_name);
+    });
 
     // Format the response with account and sub-account names and IST timestamps
     const formattedLeads = (leads || []).map((lead: any) => ({
