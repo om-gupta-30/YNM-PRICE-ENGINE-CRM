@@ -11,8 +11,7 @@ const nextConfig = {
     optimizeCss: true, // Optimize CSS
   },
   
-  // Enable SWC minification for faster builds
-  swcMinify: true,
+  // SWC minification is enabled by default in Next.js 16+
   
   // Optimize images
   images: {
