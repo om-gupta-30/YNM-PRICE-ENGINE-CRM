@@ -840,12 +840,28 @@ export default function WBeamPage() {
   };
 
   // Helper function to flatten reasoning object to string
-  const flattenReasoning = (reasoning: string | { competitorAnalysis?: string; historicalComparison?: string; demandAssessment?: string; marginConsideration?: string } | undefined): string => {
+  const flattenReasoning = (reasoning: string | { 
+    priceSelection?: string; 
+    marginCheck?: string; 
+    recommendation?: string;
+    // Backward compatibility with old structure
+    competitorAnalysis?: string; 
+    historicalComparison?: string; 
+    demandAssessment?: string; 
+    marginConsideration?: string;
+  } | undefined): string => {
     if (!reasoning) return '';
     if (typeof reasoning === 'string') return reasoning;
     
-    // Flatten object to string
+    // Flatten object to string - handle both new and old structures
     const parts: string[] = [];
+    
+    // New structure
+    if (reasoning.priceSelection) parts.push(`Price Selection: ${reasoning.priceSelection}`);
+    if (reasoning.marginCheck) parts.push(`Margin Check: ${reasoning.marginCheck}`);
+    if (reasoning.recommendation) parts.push(`Recommendation: ${reasoning.recommendation}`);
+    
+    // Old structure (backward compatibility)
     if (reasoning.competitorAnalysis) parts.push(`Competitor Analysis: ${reasoning.competitorAnalysis}`);
     if (reasoning.historicalComparison) parts.push(`Historical Comparison: ${reasoning.historicalComparison}`);
     if (reasoning.demandAssessment) parts.push(`Demand Assessment: ${reasoning.demandAssessment}`);

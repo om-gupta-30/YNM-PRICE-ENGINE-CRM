@@ -192,33 +192,96 @@ export default function AIPricingModal({
                   <p className="text-white leading-relaxed">{result.reasoning}</p>
                 ) : (
                   <div className="space-y-4">
-                    {result.reasoning.competitorAnalysis && (
+                    {result.reasoning.priceSelection && (
                       <div>
-                        <p className="text-slate-300 font-semibold mb-1">Competitor Analysis:</p>
-                        <p className="text-white leading-relaxed">{result.reasoning.competitorAnalysis}</p>
+                        <p className="text-slate-300 font-semibold mb-1">Price Selection:</p>
+                        <p className="text-white leading-relaxed">{result.reasoning.priceSelection}</p>
                       </div>
                     )}
-                    {result.reasoning.historicalComparison && (
+                    {result.reasoning.marginCheck && (
                       <div>
-                        <p className="text-slate-300 font-semibold mb-1">Historical Comparison:</p>
-                        <p className="text-white leading-relaxed">{result.reasoning.historicalComparison}</p>
+                        <p className="text-slate-300 font-semibold mb-1">Margin Check:</p>
+                        <p className="text-white leading-relaxed">{result.reasoning.marginCheck}</p>
                       </div>
                     )}
-                    {result.reasoning.demandAssessment && (
+                    {result.reasoning.recommendation && (
                       <div>
-                        <p className="text-slate-300 font-semibold mb-1">Demand Assessment:</p>
-                        <p className="text-white leading-relaxed">{result.reasoning.demandAssessment}</p>
+                        <p className="text-slate-300 font-semibold mb-1">Recommendation:</p>
+                        <p className="text-white leading-relaxed">{result.reasoning.recommendation}</p>
                       </div>
                     )}
-                    {result.reasoning.marginConsideration && (
-                      <div>
-                        <p className="text-slate-300 font-semibold mb-1">Margin Consideration:</p>
-                        <p className="text-white leading-relaxed">{result.reasoning.marginConsideration}</p>
-                      </div>
-                    )}
+                    {/* Backward compatibility with old structure */}
+                    {(() => {
+                      const oldReasoning = result.reasoning as any;
+                      return (
+                        <>
+                          {oldReasoning?.competitorAnalysis && (
+                            <div>
+                              <p className="text-slate-300 font-semibold mb-1">Competitor Analysis:</p>
+                              <p className="text-white leading-relaxed">{oldReasoning.competitorAnalysis}</p>
+                            </div>
+                          )}
+                          {oldReasoning?.historicalComparison && (
+                            <div>
+                              <p className="text-slate-300 font-semibold mb-1">Historical Comparison:</p>
+                              <p className="text-white leading-relaxed">{oldReasoning.historicalComparison}</p>
+                            </div>
+                          )}
+                          {oldReasoning?.demandAssessment && (
+                            <div>
+                              <p className="text-slate-300 font-semibold mb-1">Demand Assessment:</p>
+                              <p className="text-white leading-relaxed">{oldReasoning.demandAssessment}</p>
+                            </div>
+                          )}
+                          {oldReasoning?.marginConsideration && (
+                            <div>
+                              <p className="text-slate-300 font-semibold mb-1">Margin Consideration:</p>
+                              <p className="text-white leading-relaxed">{oldReasoning.marginConsideration}</p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
+
+              {/* Can Proceed Status */}
+              {'canProceed' in result && (
+                <div className={`${result.canProceed ? 'bg-green-500/20 border-green-500/50' : 'bg-red-500/20 border-red-500/50'} border rounded-lg p-4`}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">{result.canProceed ? '✅' : '❌'}</span>
+                    <div>
+                      <p className="text-white font-semibold">
+                        {result.canProceed ? 'Deal Can Proceed' : 'Deal Cannot Proceed'}
+                      </p>
+                      <p className="text-slate-300 text-sm mt-1">
+                        {result.canProceed 
+                          ? `Margin of ${result.calculatedMargin?.toFixed(2) || 0}% meets the 1% minimum requirement`
+                          : `Margin of ${result.calculatedMargin?.toFixed(2) || 0}% is below the 1% minimum requirement`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Warnings */}
+              {result.warnings && result.warnings.length > 0 && (
+                <div className="bg-red-500/20 border border-red-500/50 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-red-300 mb-2 flex items-center gap-2">
+                    ⚠️ Warnings
+                  </h4>
+                  <ul className="space-y-2">
+                    {result.warnings.map((warning, idx) => (
+                      <li key={idx} className="flex items-start gap-3 text-red-200">
+                        <span className="text-red-400 mt-1 flex-shrink-0">⚠</span>
+                        <span className="leading-relaxed">{warning}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Suggestions */}
               {result.suggestions && result.suggestions.length > 0 && (

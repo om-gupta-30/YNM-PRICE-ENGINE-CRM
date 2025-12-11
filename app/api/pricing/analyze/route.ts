@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
       clientDemandPricePerUnit,
       quantity,
       productSpecs,
-      userRole, // Optional: user role (ADMIN, EMPLOYEE, DATA_ANALYST) for role-based pricing adjustments
     } = body;
 
     // Validation
@@ -46,7 +45,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Build input for AI service
-    // Role mapping: ADMIN → admin, EMPLOYEE → employee, DATA_ANALYST → data_analyst (bypasses pricing logic)
     const input: PricingAnalysisInput = {
       productType,
       ourPricePerUnit,
@@ -54,7 +52,6 @@ export async function POST(request: NextRequest) {
       clientDemandPricePerUnit: clientDemandPricePerUnit || null,
       quantity: quantity || undefined, // Optional
       productSpecs: productSpecs || {},
-      userRole: userRole || undefined, // Pass user role if provided (ADMIN/EMPLOYEE/DATA_ANALYST)
     };
 
     console.log('[API /api/pricing/analyze] Processing request:', {

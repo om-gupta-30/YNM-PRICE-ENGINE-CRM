@@ -1,20 +1,14 @@
 /**
- * AI Pricing Analysis Service
+ * Simplified AI Pricing Analysis Service
  * 
- * Uses Gemini AI to analyze pricing context and provide intelligent recommendations.
- * Uses SAME Gemini client as CRM AI module (utils/ai.ts)
+ * Simple rule-based pricing logic:
+ * 1. Compare quotation price vs competitor price, choose the lower one
+ * 2. Check if client demand price gives at least 1% margin above the chosen quotation price
+ * 3. If yes, proceed; if no, reject
+ * 4. AI provides suggestions based on this logic
  */
 
 import { runGemini } from '@/utils/ai';
-import { loadBusinessKnowledge } from '@/lib/ai/knowledgeLoader';
-import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
-
-// Confirm pricing engine uses same client as CRM
-console.log('[AI] Pricing engine now using same Gemini client as CRM');
-import { analyzePricingPerformance, formatLearningStatsForPrompt, type PricingLearningStats } from './pricingLearningEngine';
-import { findSimilarPastPrice } from './pricingMemory';
-import { getWinningPatterns } from './pricingOutcomeMemory';
-import { adjustPriceForRole, roleBasedInsightMessage } from '@/lib/ai/pricingRoleBehavior';
 
 // ============================================
 // TYPE DEFINITIONS
@@ -22,638 +16,26 @@ import { adjustPriceForRole, roleBasedInsightMessage } from '@/lib/ai/pricingRol
 
 export interface PricingAnalysisInput {
   productType: 'mbcb' | 'signages' | 'paint';
-  ourPricePerUnit: number; // Current quoted price to client
-  competitorPricePerUnit?: number | null; // Cost price (price we buy from competitor) - this is our cost
-  clientDemandPricePerUnit?: number | null; // What client wants to pay
+  ourPricePerUnit: number; // Our quotation price
+  competitorPricePerUnit?: number | null; // Competitor price
+  clientDemandPricePerUnit?: number | null; // Client demand price
   quantity?: number; // Optional: quantity for analysis
-  costPerUnit?: number | null; // Optional: cost per unit for margin calculation (same as competitorPricePerUnit)
-  productSpecs?: Record<string, any>; // Optional: thickness, size, coating, etc.
-  includeLearningContext?: boolean; // Whether to include historical learning data (default: true)
-  quotationId?: number; // Optional: quotation ID for loading business knowledge context
-  subAccountId?: number; // Optional: Sub-account ID for client-specific negotiation patterns
-  userRole?: string; // Optional: User role (admin, employee, etc.) for role-based pricing adjustments
+  productSpecs?: Record<string, any>; // Optional: product specifications
 }
 
 export interface PricingAnalysisOutput {
-  winProbability: number; // 0-100 - Win probability at current quoted price (ourPricePerUnit)
-  guaranteedWinPrice: number; // Price that would guarantee 100% win probability (must be >= competitor price)
+  winProbability: number; // 0-100 - Win probability based on margin check
+  guaranteedWinPrice: number; // Price that would guarantee acceptance (chosen price + 1% minimum)
   reasoning: string | {
-    competitorAnalysis?: string; // Detailed competitor analysis
-    historicalComparison?: string; // What past data shows
-    demandAssessment?: string; // Market demand impact
-    marginConsideration?: string; // Profit margin analysis
+    priceSelection?: string; // Which price was chosen (quotation vs competitor)
+    marginCheck?: string; // Margin analysis against client demand
+    recommendation?: string; // Whether to proceed or reject
   };
-  suggestions: string[];
-  historicalInsight?: string; // Interpretation of historical patterns
-  negotiationNotes?: string[]; // Negotiation guidance and talking points
-  warnings?: string[]; // Warnings about pricing risks or concerns
-  competitivePosition?: 'ABOVE_MARKET' | 'AT_MARKET' | 'BELOW_MARKET'; // Price positioning relative to competitors
-  pricingStrategy?: string; // Market positioning strategy recommendation
-  negotiationLeverage?: string[]; // Competitive advantages to highlight in negotiation
-  confidenceFactors?: {
-    dataQuality?: 'high' | 'medium' | 'low'; // Quality of input data
-    historicalRelevance?: 'high' | 'medium' | 'low'; // Relevance of historical data
-    competitorDataReliability?: 'high' | 'medium' | 'low'; // Reliability of competitor data
-  };
-  learningInsights?: {
-    aiAccuracy: number; // AI accuracy percentage
-    overrideAccuracy: number; // Human override accuracy percentage
-    recentWins: string[]; // What made recent wins successful
-    recentLosses: string[]; // Why recent losses occurred
-    priceSensitivity: string; // Price sensitivity patterns
-    productInsights: string[]; // Product-specific insights
-    trendAnalysis: string; // Are we getting better or worse?
-  };
-  marginAnalysis?: {
-    suggestedMargin: number; // Margin % for recommended price
-    minimumAcceptableMargin: number; // Minimum margin threshold
-    optimalMargin: number; // Optimal margin based on historical data
-    marketAverageMargin: number; // Average margin in market
-    marginVsMarket: number; // Difference from market average
-  };
-  marginWarnings?: string[]; // Warnings if margin is too low
-  marginTrends?: {
-    byQuantity: string; // How margins change with quantity
-    byClientType: string; // How margins change by client type
-    bySeason: string; // How margins change by season
-    overallTrend: string; // Overall margin trend
-  };
-  negotiationStrategy?: {
-    openingPrice: number; // Suggested opening price (can be higher than recommended)
-    walkAwayPrice: number; // Minimum acceptable price
-    concessionPlan: {
-      firstConcession: number; // First price drop amount
-      secondConcession: number; // Second price drop amount (if needed)
-      finalConcession: number; // Final price drop amount
-      strategy: string; // Concession strategy description
-    };
-    valueAddSuggestions: string[]; // Non-price negotiation levers
-    alternativeOffers: string[]; // Alternative offers (volume discount, payment terms, etc.)
-    psychologicalInsights: string; // Client negotiation behavior insights
-    clientPatterns: string; // Client-specific negotiation patterns
-  };
-  openingPrice?: number; // Alias for negotiationStrategy.openingPrice
-  walkAwayPrice?: number; // Alias for negotiationStrategy.walkAwayPrice
-  concessionPlan?: {
-    firstConcession: number;
-    secondConcession: number;
-    finalConcession: number;
-    strategy: string;
-  };
-}
-
-// ============================================
-// SYSTEM PROMPT BUILDER
-// ============================================
-
-function buildSystemPrompt(): string {
-  return `You are a senior pricing strategist for a trading company specializing in road safety infrastructure products.
-
-BUSINESS CONTEXT:
-- Business Model: We BUY products from competitors and SELL to clients (trading/reselling)
-- Competitor Price = Our Cost: The competitor price is the price we pay to buy the product (our cost)
-- Base Price Selection Logic:
-  * If our quotation price > competitor price → use competitor price as base
-  * If our quotation price < competitor price → use our quotation price as base
-- Product-Specific Profit Margins:
-  * MBCB (Metal Beam Crash Barriers): 2-3% profit margin
-  * Signages: 15-20% profit margin
-  * Paint: 15-20% profit margin (default)
-- Market Positioning: Quality-focused provider with strong service reputation
-- Negotiation Flow: We quote a price → Client tells us what they want → We negotiate until consensus → Close deal
-
-PRICING CONSTRAINTS:
-1. Base Price Selection: 
-   - If our quotation > competitor → use competitor price as base
-   - If our quotation < competitor → use our quotation price as base
-2. Profit Margin Requirements:
-   - MBCB: Must maintain 2-3% margin above base price
-   - Signages: Must maintain 15-20% margin above base price
-   - Paint: Must maintain 15-20% margin above base price
-3. Win Probability: Calculate based on current quoted price vs client demand and market conditions
-4. Guaranteed Win Price: Suggest a price that ensures 100% win probability while maintaining product-specific margin requirements. Price should be as close as possible to client demand price while respecting minimum margin.
-
-YOUR ANALYSIS PROCESS - THINK STEP-BY-STEP:
-1. CURRENT PRICE ANALYSIS:
-   - Analyze the CURRENT QUOTED PRICE (ourPricePerUnit) that we've already quoted to the client
-   - Calculate win probability (0-100) at this current quoted price
-   - Compare current price vs competitor price (our cost) - ensure we're above cost
-   - Compare current price vs client demand price (if provided)
-   - Assess margin at current price: (current price - competitor price) / competitor price * 100
-
-2. COMPETITOR PRICE (COST) ANALYSIS:
-   - Competitor price = Our cost (we buy from competitor)
-   - Calculate margin: (our price - competitor price) / competitor price * 100
-   - Ensure our quoted price is ALWAYS above competitor price (minimum 15% margin)
-   - Reference historical win/loss patterns at similar margins
-   - Rate confidence in competitor data (high/medium/low)
-
-3. CLIENT DEMAND ASSESSMENT:
-   - Evaluate client demand price vs our current quoted price
-   - Assess negotiation room: How much can we negotiate down while maintaining margin?
-   - Consider price sensitivity based on historical patterns
-   - Factor in urgency, client type, and relationship
-
-4. HISTORICAL COMPARISON:
-   - Find similar past quotations (same product type, similar specs)
-   - Analyze outcomes: win/loss rate at similar price points
-   - Identify patterns: what prices led to wins vs losses
-   - Rate relevance of historical data (high/medium/low)
-
-5. GUARANTEED WIN PRICE CALCULATION:
-   - First determine base price: If our quotation > competitor → use competitor, else use our quotation
-   - Apply product-specific margin: MBCB (2-3%), Signages (15-20%), Paint (15-20%)
-   - Calculate minimum price: base price × (1 + minimum margin)
-   - Calculate maximum price: base price × (1 + maximum margin)
-   - If client demand is provided: Suggest price closest to client demand within margin range
-   - If no client demand: Use optimal price (middle of margin range)
-   - Ensure price maintains minimum margin requirement for product type
-
-OUTPUT FORMAT - Return JSON strictly in this structure:
-{
-  "winProbability": number (0-100) - Win probability at CURRENT QUOTED PRICE (ourPricePerUnit),
-  "guaranteedWinPrice": number - Price that would guarantee 100% win probability (MUST maintain product-specific margin: MBCB 2-3%, Signages 15-20%),
-  "reasoning": {
-    "competitorAnalysis": "Detailed analysis of competitor price positioning, market comparison, competitive advantages, and win/loss history. Include specific percentages and data points.",
-    "historicalComparison": "What past similar quotations show - win/loss patterns, price gaps, margin performance. Reference specific examples if available.",
-    "demandAssessment": "Market demand evaluation - client budget constraints, price sensitivity, quantity impact, urgency factors.",
-    "marginConsideration": "Profit margin analysis - calculated margin, comparison to targets, sustainability assessment, risk evaluation."
-  },
-  "suggestions": ["actionable tip 1", "actionable tip 2", "actionable tip 3"],
-  "warnings": ["risk 1", "risk 2"],
-  "confidenceFactors": {
-    "dataQuality": "high" | "medium" | "low",
-    "historicalRelevance": "high" | "medium" | "low",
-    "competitorDataReliability": "high" | "medium" | "low"
-  },
-  "historicalInsight": "Summary interpretation of historical patterns",
-  "negotiationNotes": ["talking point 1", "talking point 2"],
-  "competitivePosition": "ABOVE_MARKET" | "AT_MARKET" | "BELOW_MARKET",
-  "pricingStrategy": "Market positioning strategy recommendation",
-  "negotiationLeverage": ["advantage 1", "advantage 2"]
-}
-
-EXAMPLE SCENARIOS:
-
-Example 1 - MBCB Competitive Win Scenario:
-Input: Our quoted price ₹500, Competitor (cost) ₹480, Client demand ₹470, Quantity 1000, Product: MBCB
-Expected Output:
-{
-  "winProbability": 75,
-  "guaranteedWinPrice": 489.60,
-  "reasoning": {
-    "competitorAnalysis": "Our quotation ₹500 > competitor ₹480, so base price = competitor ₹480. For MBCB, we need 2-3% margin. Minimum price = ₹480 × 1.02 = ₹489.60. Competitor data reliability: high (verified quote).",
-    "historicalComparison": "Last 5 similar quotes: 3 wins at ₹485-495 range (avg margin 2.5%), 2 losses at ₹510+ (too high). Pattern: Sweet spot is ₹489-495 for this quantity. Historical relevance: high (same product, similar quantity).",
-    "demandAssessment": "Client demand ₹470 is below our minimum price ₹489.60 (with 2% margin). At current price ₹500, win probability is 75%. To guarantee win, suggest ₹489.60 (minimum with 2% margin) or negotiate up to ₹494.40 (3% margin).",
-    "marginConsideration": "Base price: ₹480 (competitor, since our quotation > competitor). At guaranteed win price ₹489.60: Margin = 2% (meets MBCB minimum). Maximum margin price: ₹494.40 (3%)."
-  },
-  "confidenceFactors": {
-    "dataQuality": "high",
-    "historicalRelevance": "high",
-    "competitorDataReliability": "high"
-  }
-}
-
-Example 2 - Signages Premium Positioning Scenario:
-Input: Our quoted price ₹600, Competitor (cost) ₹550, Client demand ₹580, Quantity 500, Product: Signages
-Expected Output:
-{
-  "winProbability": 65,
-  "guaranteedWinPrice": 580,
-  "reasoning": {
-    "competitorAnalysis": "Our quotation ₹600 > competitor ₹550, so base price = competitor ₹550. For Signages, we need 15-20% margin. Minimum price = ₹550 × 1.15 = ₹632.50. However, client demand ₹580 is below minimum. Competitor data reliability: medium (estimated quote).",
-    "historicalComparison": "Similar premium quotes: 2 wins at ₹630-650 (clients valued quality), 3 losses at ₹600+ (too high). Pattern: Premium acceptable up to ₹650. Historical relevance: medium (similar specs, different quantity).",
-    "demandAssessment": "Client demand ₹580 is below our minimum price ₹632.50 (with 15% margin). At current price ₹600, win probability is 65%. To guarantee win while maintaining margin, suggest ₹632.50 (minimum with 15% margin). If client insists on ₹580, explain margin requirement.",
-    "marginConsideration": "Base price: ₹550 (competitor, since our quotation > competitor). At guaranteed win price ₹632.50: Margin = 15% (meets Signages minimum). Maximum margin price: ₹660 (20%). Client demand ₹580 is below minimum - cannot accept without losing margin."
-  },
-  "confidenceFactors": {
-    "dataQuality": "high",
-    "historicalRelevance": "medium",
-    "competitorDataReliability": "medium"
-  }
-}
-
-Example 3 - Market Entry / Low Data Scenario:
-Input: Our quoted price ₹400, Competitor (cost) ₹350, Client demand ₹380, Quantity 200
-Expected Output:
-{
-  "winProbability": 70,
-  "guaranteedWinPrice": 402.50,
-  "reasoning": {
-    "competitorAnalysis": "We are 14.3% above competitor/cost (₹400 vs ₹350). Margin = 14.29% which is just below minimum 15%. We must maintain at least 15% margin above cost. Competitor data reliability: high (verified cost).",
-    "historicalComparison": "Limited historical data for this product/quantity combination. Available data shows 65% win rate at ₹390-400 range. Historical relevance: low (insufficient similar quotes).",
-    "demandAssessment": "Client demand ₹380 is 5% below our quoted price ₹400. At current price, win probability is 70%. Client wants ₹380 but we can't go below cost ₹350. Minimum price with 15% margin = ₹402.50.",
-    "marginConsideration": "At current price ₹400: Margin = 14.29% (just below minimum 15%). At guaranteed win price ₹402.50: Margin = 15% (meets minimum requirement). This ensures profitability while maximizing win probability."
-  },
-  "confidenceFactors": {
-    "dataQuality": "medium",
-    "historicalRelevance": "low",
-    "competitorDataReliability": "low"
-  }
-}
-
-CRITICAL REQUIREMENTS:
-- Calculate win probability (0-100) at the CURRENT QUOTED PRICE (ourPricePerUnit)
-- Calculate guaranteedWinPrice that ensures 100% win probability using new business logic:
-  1. Determine base price: If our quotation > competitor → use competitor, else use our quotation
-  2. Apply product-specific margin: MBCB (2-3%), Signages (15-20%), Paint (15-20%)
-  3. Suggest price closest to client demand while maintaining minimum margin
-- guaranteedWinPrice MUST maintain product-specific minimum margin:
-  * MBCB: >= base price × 1.02 (2% minimum)
-  * Signages: >= base price × 1.15 (15% minimum)
-  * Paint: >= base price × 1.15 (15% minimum)
-- NEVER suggest a price below the minimum margin requirement
-- Always provide step-by-step reasoning in the reasoning object
-- Include specific percentages, numbers, and data points in your analysis
-- Rate confidence for each factor (dataQuality, historicalRelevance, competitorDataReliability)
-- Always explain what specific data influenced your recommendation
-- If historical data is missing, state clearly and use analytical reasoning
-- Provide actionable suggestions for negotiation strategy
-- Focus on: What's the win probability at current price? What price should we close at for 100% win while maintaining margin?`;
-}
-
-// ============================================
-// USER PROMPT BUILDER
-// ============================================
-
-async function buildUserPrompt(
-  input: PricingAnalysisInput, 
-  learningContext?: string,
-  learningContextObj?: {
-    historySummary: string | null;
-    winPatterns: string[];
-    lossPatterns: string[];
-    similarQuotes: any[];
-  },
-  previousPricingContext?: string,
-  winningInsights?: string,
-  detailedLearningContext?: string
-): Promise<string> {
-  const {
-    productType,
-    ourPricePerUnit,
-    competitorPricePerUnit,
-    clientDemandPricePerUnit,
-    quantity,
-    productSpecs,
-  } = input;
-
-  // Format product type
-  const productName = productType === 'mbcb' 
-    ? 'Metal Beam Crash Barrier (MBCB)'
-    : productType === 'signages'
-    ? 'Road Signages'
-    : 'Thermoplastic Paint';
-
-  // Build pricing context with detailed competitor analysis
-  let pricingContext = `Product: ${productName}
-Our Current Quoted Price: ₹${ourPricePerUnit.toFixed(2)} per unit${quantity ? `\nQuantity: ${quantity} units` : ''}`;
-
-  // Detailed competitor price analysis (competitor price = our cost)
-  if (competitorPricePerUnit && competitorPricePerUnit > 0) {
-    const priceDifference = ourPricePerUnit - competitorPricePerUnit;
-    const priceDifferencePercent = (priceDifference / competitorPricePerUnit) * 100;
-    const margin = (priceDifference / competitorPricePerUnit) * 100;
-    
-    pricingContext += `\n\nCost Analysis (Competitor Price = Our Cost):
-Competitor Price (Our Cost): ₹${competitorPricePerUnit.toFixed(2)} per unit
-Our Quoted Price: ₹${ourPricePerUnit.toFixed(2)} per unit
-Margin: ${margin.toFixed(2)}% ${margin >= 15 ? '(✓ Meets minimum 15%)' : '(⚠️ Below minimum 15%)'}
-Price Above Cost: ₹${priceDifference.toFixed(2)} (${priceDifferencePercent.toFixed(1)}% above cost)`;
-    
-    if (ourPricePerUnit < competitorPricePerUnit) {
-      pricingContext += `\n⚠️ WARNING: Our quoted price is BELOW our cost! This is not allowed. We must quote above competitor price.`;
-    }
-  } else {
-    pricingContext += `\n\nCompetitor Price (Our Cost): Not provided`;
-  }
-
-  if (clientDemandPricePerUnit && clientDemandPricePerUnit > 0) {
-    pricingContext += `\nClient Demand Price: ₹${clientDemandPricePerUnit.toFixed(2)} per unit`;
-    
-    // Calculate positioning relative to client demand
-    if (competitorPricePerUnit && competitorPricePerUnit > 0) {
-      const ourVsClient = ((ourPricePerUnit - clientDemandPricePerUnit) / clientDemandPricePerUnit) * 100;
-      const competitorVsClient = ((competitorPricePerUnit - clientDemandPricePerUnit) / clientDemandPricePerUnit) * 100;
-      
-      pricingContext += `\nPrice vs Client Demand:
-- Our price: ${ourVsClient > 0 ? '+' : ''}${ourVsClient.toFixed(1)}% ${ourVsClient > 0 ? 'above' : 'below'} client demand
-- Competitor price: ${competitorVsClient > 0 ? '+' : ''}${competitorVsClient.toFixed(1)}% ${competitorVsClient > 0 ? 'above' : 'below'} client demand`;
-    }
-  }
-
-  // Add product specs if available
-  if (productSpecs && Object.keys(productSpecs).length > 0) {
-    pricingContext += `\n\nProduct Specifications:`;
-    Object.entries(productSpecs).forEach(([key, value]) => {
-      pricingContext += `\n- ${key}: ${value}`;
-    });
-  }
-
-  // Add learning context from historical data
-  if (learningContext) {
-    pricingContext += `\n\n${learningContext}`;
-  }
-
-  // Add structured learning context for reasoning
-  if (learningContextObj) {
-    pricingContext += `\n\nRelevant history:\n${JSON.stringify(learningContextObj, null, 2)}`;
-  }
-
-  // Add previous pricing context if available
-  if (previousPricingContext) {
-    pricingContext += `\n\n${previousPricingContext}`;
-  }
-
-  // Add winning insights if available
-  if (winningInsights) {
-    pricingContext += `\n\n${winningInsights}`;
-  }
-
-  // Add detailed "What We Learned" section
-  if (detailedLearningContext) {
-    pricingContext += `\n\n${detailedLearningContext}`;
-  }
-
-  // Add competitor win/loss history section
-  let competitorHistorySection = '';
-  if (competitorPricePerUnit && competitorPricePerUnit > 0) {
-    competitorHistorySection = `\n\nCompetitor Win/Loss History:
-When competitor price was around ₹${competitorPricePerUnit.toFixed(2)}:
-- Analyze historical outcomes where competitor prices were similar
-- Identify patterns: Did we win more when above/below/at competitor price?
-- Note any competitive advantages that led to wins`;
-  }
-
-  pricingContext += competitorHistorySection;
-
-  pricingContext += `\n\nAnalyze the pricing situation and provide:
-1. Win probability (0-100) at the CURRENT QUOTED PRICE (₹${ourPricePerUnit.toFixed(2)})
-2. A guaranteed win price (price that would ensure 100% win probability) using NEW BUSINESS LOGIC:
-   - Step 1: Determine base price: If our quotation > competitor → use competitor, else use our quotation
-   - Step 2: Apply product-specific margin:
-     * MBCB: 2-3% margin above base price
-     * Signages: 15-20% margin above base price
-     * Paint: 15-20% margin above base price
-   - Step 3: Suggest price closest to client demand while maintaining minimum margin
-   - MUST maintain product-specific minimum margin (MBCB: 2%, Signages: 15%, Paint: 15%)
-3. Clear reasoning for your analysis
-4. 2-3 actionable suggestions for negotiation strategy
-5. Margin analysis at current price and guaranteed win price
-
-CRITICAL CONSTRAINTS:
-- Base price selection: If our quotation > competitor → use competitor, else use our quotation
-- Product-specific margins:
-  * MBCB: Minimum 2%, Maximum 3%
-  * Signages: Minimum 15%, Maximum 20%
-  * Paint: Minimum 15%, Maximum 20%
-- Guaranteed win price must maintain product-specific minimum margin
-- If client demand is below our minimum price (base + minimum margin), explain the situation
-
-Consider:
-- Current quoted price vs competitor price (determines base price)
-- Base price vs client demand (negotiation room)
-- Margin at current price (must meet product-specific minimum)
-- Historical win/loss patterns at similar price points
-- How much can we negotiate down while maintaining minimum margin?
-- What price should we close at for 100% guaranteed win while maintaining margin?`;
-
-  return pricingContext;
-}
-
-// ============================================
-// MARGIN ANALYSIS FUNCTIONS
-// ============================================
-
-/**
- * Calculate margin percentage
- */
-function calculateMargin(price: number, cost: number): number {
-  if (!cost || cost <= 0) return 0;
-  return ((price - cost) / cost) * 100;
-}
-
-/**
- * Fetch historical margin data for analysis
- */
-async function fetchHistoricalMargins(
-  productType: 'mbcb' | 'signages' | 'paint',
-  lookbackDays: number = 90
-): Promise<{
-  margins: number[];
-  averageMargin: number;
-  optimalMargin: number;
-  minimumMargin: number;
-  marketAverageMargin: number;
-  marginsByQuantity: Record<string, number[]>;
-  marginsByMonth: Record<string, number[]>;
-}> {
-  try {
-    const supabase = createSupabaseServerClient();
-    const tableName = productType === 'mbcb' 
-      ? 'quotes_mbcb' 
-      : productType === 'signages' 
-      ? 'quotes_signages' 
-      : 'quotes_paint';
-    
-    const priceField = productType === 'mbcb' ? 'total_cost_per_rm' : 'cost_per_piece';
-    
-    const lookbackDate = new Date();
-    lookbackDate.setDate(lookbackDate.getDate() - lookbackDays);
-    
-    const { data: quotes } = await supabase
-      .from(tableName)
-      .select(`${priceField}, quantity_rm, quantity, created_at, outcome_status, competitor_price_per_unit, ai_suggested_price_per_unit`)
-      .not(priceField, 'is', null)
-      .gte('created_at', lookbackDate.toISOString())
-      .order('created_at', { ascending: false })
-      .limit(200);
-    
-    if (!quotes || quotes.length === 0) {
-      return {
-        margins: [],
-        averageMargin: 0,
-        optimalMargin: 0,
-        minimumMargin: 15,
-        marketAverageMargin: 0,
-        marginsByQuantity: {},
-        marginsByMonth: {},
-      };
-    }
-    
-    const margins: number[] = [];
-    const marginsByQuantity: Record<string, number[]> = {};
-    const marginsByMonth: Record<string, number[]> = {};
-    
-    quotes.forEach(quote => {
-      const price = priceField === 'total_cost_per_rm' 
-        ? (quote as any).total_cost_per_rm 
-        : (quote as any).cost_per_piece;
-      const aiPrice = quote.ai_suggested_price_per_unit;
-      
-      if (price && aiPrice && aiPrice > 0) {
-        const estimatedCost = aiPrice / 1.2;
-        const margin = calculateMargin(price, estimatedCost);
-        if (margin > 0 && margin < 200) {
-          margins.push(margin);
-          
-          const quantity = quote.quantity_rm || quote.quantity || 0;
-          let qtyRange = 'small';
-          if (quantity >= 1000) qtyRange = 'large';
-          else if (quantity >= 500) qtyRange = 'medium';
-          
-          if (!marginsByQuantity[qtyRange]) {
-            marginsByQuantity[qtyRange] = [];
-          }
-          marginsByQuantity[qtyRange].push(margin);
-          
-          const month = new Date(quote.created_at).toISOString().substring(0, 7);
-          if (!marginsByMonth[month]) {
-            marginsByMonth[month] = [];
-          }
-          marginsByMonth[month].push(margin);
-        }
-      }
-    });
-    
-    const averageMargin = margins.length > 0
-      ? margins.reduce((sum, m) => sum + m, 0) / margins.length
-      : 0;
-    
-    const sortedMargins = [...margins].sort((a, b) => b - a);
-    const topQuartile = Math.ceil(sortedMargins.length * 0.25);
-    const optimalMargin = topQuartile > 0
-      ? sortedMargins.slice(0, topQuartile).reduce((sum, m) => sum + m, 0) / topQuartile
-      : averageMargin;
-    
-    const minimumMargin = sortedMargins.length > 0
-      ? sortedMargins[Math.floor(sortedMargins.length * 0.9)]
-      : 15;
-    
-    const quotesWithCompetitor = quotes.filter(q => {
-      const price = priceField === 'total_cost_per_rm' 
-        ? (q as any).total_cost_per_rm 
-        : (q as any).cost_per_piece;
-      return q.competitor_price_per_unit && price && q.ai_suggested_price_per_unit;
-    });
-    let marketAverageMargin = 0;
-    if (quotesWithCompetitor.length > 0) {
-      const marketMargins = quotesWithCompetitor.map(q => {
-        const competitorPrice = q.competitor_price_per_unit;
-        const aiPrice = q.ai_suggested_price_per_unit;
-        if (competitorPrice && aiPrice && aiPrice > 0) {
-          const estimatedCost = aiPrice / 1.2;
-          return calculateMargin(competitorPrice, estimatedCost);
-        }
-        return null;
-      }).filter((m): m is number => m !== null && m > 0);
-      
-      marketAverageMargin = marketMargins.length > 0
-        ? marketMargins.reduce((sum, m) => sum + m, 0) / marketMargins.length
-        : averageMargin;
-    } else {
-      marketAverageMargin = averageMargin;
-    }
-    
-    return {
-      margins,
-      averageMargin,
-      optimalMargin,
-      minimumMargin,
-      marketAverageMargin,
-      marginsByQuantity,
-      marginsByMonth,
-    };
-  } catch (error: any) {
-    console.error('[AI Pricing] Error fetching historical margins:', error.message);
-    return {
-      margins: [],
-      averageMargin: 0,
-      optimalMargin: 0,
-      minimumMargin: 15,
-      marketAverageMargin: 0,
-      marginsByQuantity: {},
-      marginsByMonth: {},
-    };
-  }
-}
-
-/**
- * Analyze margin trends
- */
-function analyzeMarginTrends(
-  marginsByQuantity: Record<string, number[]>,
-  marginsByMonth: Record<string, number[]>
-): {
-  byQuantity: string;
-  byClientType: string;
-  bySeason: string;
-  overallTrend: string;
-} {
-  let byQuantity = 'No quantity trend data available';
-  if (Object.keys(marginsByQuantity).length > 0) {
-    const trends: string[] = [];
-    Object.entries(marginsByQuantity).forEach(([range, margins]) => {
-      if (margins.length > 0) {
-        const avg = margins.reduce((sum, m) => sum + m, 0) / margins.length;
-        trends.push(`${range} orders (${margins.length} quotes): ${avg.toFixed(1)}% avg margin`);
-      }
-    });
-    if (trends.length > 0) {
-      byQuantity = trends.join('; ');
-    }
-  }
-  
-  let bySeason = 'No seasonal trend data available';
-  if (Object.keys(marginsByMonth).length >= 2) {
-    const months = Object.keys(marginsByMonth).sort();
-    const recentMonths = months.slice(-3);
-    const olderMonths = months.slice(0, -3);
-    
-    if (recentMonths.length > 0 && olderMonths.length > 0) {
-      const recentAvg = recentMonths.reduce((sum, month) => {
-        const margins = marginsByMonth[month];
-        return sum + (margins.reduce((s, m) => s + m, 0) / margins.length);
-      }, 0) / recentMonths.length;
-      
-      const olderAvg = olderMonths.reduce((sum, month) => {
-        const margins = marginsByMonth[month];
-        return sum + (margins.reduce((s, m) => s + m, 0) / margins.length);
-      }, 0) / olderMonths.length;
-      
-      const change = recentAvg - olderAvg;
-      bySeason = `Margins ${change > 0 ? 'increased' : 'decreased'} by ${Math.abs(change).toFixed(1)}% in recent months (${recentAvg.toFixed(1)}% vs ${olderAvg.toFixed(1)}%)`;
-    }
-  }
-  
-  let overallTrend = 'Insufficient data for trend analysis';
-  if (Object.keys(marginsByMonth).length >= 3) {
-    const months = Object.keys(marginsByMonth).sort();
-    const firstHalf = months.slice(0, Math.floor(months.length / 2));
-    const secondHalf = months.slice(Math.floor(months.length / 2));
-    
-    if (firstHalf.length > 0 && secondHalf.length > 0) {
-      const firstAvg = firstHalf.reduce((sum, month) => {
-        const margins = marginsByMonth[month];
-        return sum + (margins.reduce((s, m) => s + m, 0) / margins.length);
-      }, 0) / firstHalf.length;
-      
-      const secondAvg = secondHalf.reduce((sum, month) => {
-        const margins = marginsByMonth[month];
-        return sum + (margins.reduce((s, m) => s + m, 0) / margins.length);
-      }, 0) / secondHalf.length;
-      
-      const change = secondAvg - firstAvg;
-      overallTrend = `Overall margin trend: ${change > 0 ? 'improving' : 'declining'} (${change > 0 ? '+' : ''}${change.toFixed(1)}% change)`;
-    }
-  }
-  
-  return {
-    byQuantity,
-    byClientType: 'Client type analysis requires additional data',
-    bySeason,
-    overallTrend,
-  };
+  suggestions: string[]; // AI suggestions based on the logic
+  warnings?: string[]; // Warnings if margin is insufficient
+  canProceed: boolean; // Whether we can proceed with the deal (margin >= 1%)
+  calculatedMargin: number; // Calculated margin percentage
+  chosenBasePrice: number; // The price we chose (lower of quotation or competitor)
 }
 
 // ============================================
@@ -661,90 +43,201 @@ function analyzeMarginTrends(
 // ============================================
 
 /**
- * Calculate suggested price based on business rules:
- * 1. If our quotation price > competitor price → use competitor price
- * 2. If our quotation price < competitor price → use our quotation price
- * 3. Apply profit margins: MBCB (2-3%), Signages (15-20%)
- * 4. Suggest price closer to client demand while maintaining margin
- * 
- * @param ourQuotationPrice - Our calculated quotation price
- * @param competitorPrice - Competitor price (if available)
- * @param clientDemandPrice - Client demand price (if available)
- * @param productType - Product type (mbcb, signages, paint)
- * @returns Suggested price that ensures win while maintaining profit margin
+ * Calculate the chosen base price (lower of quotation or competitor price)
  */
-function calculateSuggestedPrice(
-  ourQuotationPrice: number,
-  competitorPrice: number | null | undefined,
-  clientDemandPrice: number | null | undefined,
-  productType: 'mbcb' | 'signages' | 'paint'
+function calculateChosenPrice(
+  quotationPrice: number,
+  competitorPrice: number | null | undefined
 ): number {
-  // Step 1: Determine base price
-  let basePrice: number;
+  if (!competitorPrice || competitorPrice <= 0) {
+    return quotationPrice;
+  }
   
-  if (competitorPrice && competitorPrice > 0) {
-    // If our quotation > competitor → use competitor price
-    // If our quotation < competitor → use our quotation price
-    if (ourQuotationPrice > competitorPrice) {
-      basePrice = competitorPrice;
+  // Choose the lower price
+  return Math.min(quotationPrice, competitorPrice);
+}
+
+/**
+ * Calculate margin percentage
+ */
+function calculateMargin(clientDemandPrice: number, basePrice: number): number {
+  if (basePrice <= 0) return 0;
+  return ((clientDemandPrice - basePrice) / basePrice) * 100;
+}
+
+/**
+ * Check if we can proceed (margin >= 1%)
+ */
+function canProceedWithDeal(
+  clientDemandPrice: number | null | undefined,
+  chosenPrice: number
+): { canProceed: boolean; margin: number } {
+  if (!clientDemandPrice || clientDemandPrice <= 0) {
+    return { canProceed: false, margin: 0 };
+  }
+  
+  const margin = calculateMargin(clientDemandPrice, chosenPrice);
+  return {
+    canProceed: margin >= 1.0, // Minimum 1% margin required
+    margin,
+  };
+}
+
+/**
+ * Calculate guaranteed win price (chosen price + 1% minimum)
+ */
+function calculateGuaranteedWinPrice(chosenPrice: number): number {
+  return chosenPrice * 1.01; // 1% minimum margin
+}
+
+// ============================================
+// SYSTEM PROMPT BUILDER
+// ============================================
+
+function buildSystemPrompt(): string {
+  return `You are a pricing assistant for a trading company. Your job is to analyze pricing decisions based on simple, clear rules.
+
+PRICING LOGIC RULES:
+1. PRICE SELECTION:
+   - Compare quotation price vs competitor price
+   - Choose the LOWER price as the base price
+   - Example: If quotation is ₹100 and competitor is ₹110, choose ₹100
+   - Example: If quotation is ₹110 and competitor is ₹100, choose ₹100
+
+2. MARGIN CHECK:
+   - Client demand price must be at least 1% above the chosen base price
+   - Formula: Margin = ((Client Demand Price - Chosen Price) / Chosen Price) × 100
+   - Minimum required margin: 1%
+   - If margin >= 1%: We can proceed with the deal
+   - If margin < 1%: We cannot proceed (insufficient margin)
+
+3. EXAMPLES:
+   Example 1:
+   - Quotation price: ₹100
+   - Competitor price: ₹110
+   - Chosen price: ₹100 (lower of the two)
+   - Client demand: ₹102
+   - Margin: ((102 - 100) / 100) × 100 = 2%
+   - Result: ✅ Can proceed (2% >= 1%)
+
+   Example 2:
+   - Quotation price: ₹100
+   - Competitor price: ₹110
+   - Chosen price: ₹100 (lower of the two)
+   - Client demand: ₹101.5
+   - Margin: ((101.5 - 100) / 100) × 100 = 1.5%
+   - Result: ✅ Can proceed (1.5% >= 1%)
+
+   Example 3:
+   - Quotation price: ₹100
+   - Competitor price: ₹110
+   - Chosen price: ₹100 (lower of the two)
+   - Client demand: ₹100.5
+   - Margin: ((100.5 - 100) / 100) × 100 = 0.5%
+   - Result: ❌ Cannot proceed (0.5% < 1%)
+
+YOUR TASK:
+1. Analyze which price was chosen (quotation or competitor, whichever is lower)
+2. Calculate the margin if client demand price is provided
+3. Determine if we can proceed (margin >= 1%)
+4. Provide clear, actionable suggestions based on the analysis
+5. Give warnings if margin is insufficient
+
+OUTPUT FORMAT - Return JSON strictly in this structure:
+{
+  "reasoning": {
+    "priceSelection": "Explanation of which price was chosen and why",
+    "marginCheck": "Detailed margin calculation and analysis",
+    "recommendation": "Clear recommendation: proceed or reject, with explanation"
+  },
+  "suggestions": [
+    "Suggestion 1 based on the analysis",
+    "Suggestion 2 based on the analysis",
+    "Suggestion 3 based on the analysis"
+  ],
+  "warnings": ["Warning 1 if any", "Warning 2 if any"]
+}
+
+IMPORTANT:
+- Be clear and direct in your analysis
+- Focus on the simple logic: choose lower price, check 1% margin
+- Provide practical suggestions for negotiation or next steps
+- If margin is insufficient, suggest what price would be acceptable
+- Keep suggestions actionable and relevant to the pricing decision`;
+}
+
+// ============================================
+// USER PROMPT BUILDER
+// ============================================
+
+async function buildUserPrompt(input: PricingAnalysisInput): Promise<string> {
+  const {
+    productType,
+    ourPricePerUnit,
+    competitorPricePerUnit,
+    clientDemandPricePerUnit,
+    quantity,
+  } = input;
+
+  // Calculate chosen price
+  const chosenPrice = calculateChosenPrice(ourPricePerUnit, competitorPricePerUnit);
+  
+  // Check margin
+  const marginCheck = canProceedWithDeal(clientDemandPricePerUnit, chosenPrice);
+  
+  // Format product type
+  const productName = productType === 'mbcb' 
+    ? 'Metal Beam Crash Barrier (MBCB)'
+    : productType === 'signages'
+    ? 'Road Signages'
+    : 'Thermoplastic Paint';
+
+  let prompt = `PRICING ANALYSIS REQUEST
+
+Product Type: ${productName}
+${quantity ? `Quantity: ${quantity} units` : ''}
+
+PRICING INFORMATION:
+- Our Quotation Price: ₹${ourPricePerUnit.toFixed(2)} per unit`;
+
+  if (competitorPricePerUnit && competitorPricePerUnit > 0) {
+    prompt += `\n- Competitor Price: ₹${competitorPricePerUnit.toFixed(2)} per unit`;
+    prompt += `\n- Chosen Base Price: ₹${chosenPrice.toFixed(2)} per unit (${chosenPrice === ourPricePerUnit ? 'quotation price' : 'competitor price'} - lower of the two)`;
+  } else {
+    prompt += `\n- Competitor Price: Not provided`;
+    prompt += `\n- Chosen Base Price: ₹${chosenPrice.toFixed(2)} per unit (quotation price, no competitor data)`;
+  }
+
+  if (clientDemandPricePerUnit && clientDemandPricePerUnit > 0) {
+    prompt += `\n- Client Demand Price: ₹${clientDemandPricePerUnit.toFixed(2)} per unit`;
+    prompt += `\n- Calculated Margin: ${marginCheck.margin.toFixed(2)}%`;
+    prompt += `\n- Minimum Required Margin: 1%`;
+    
+    if (marginCheck.canProceed) {
+      prompt += `\n- Status: ✅ CAN PROCEED (margin ${marginCheck.margin.toFixed(2)}% >= 1%)`;
     } else {
-      basePrice = ourQuotationPrice;
+      prompt += `\n- Status: ❌ CANNOT PROCEED (margin ${marginCheck.margin.toFixed(2)}% < 1%)`;
+      const minimumAcceptablePrice = chosenPrice * 1.01;
+      prompt += `\n- Minimum Acceptable Price: ₹${minimumAcceptablePrice.toFixed(2)} per unit (to achieve 1% margin)`;
     }
   } else {
-    // No competitor price available, use our quotation price
-    basePrice = ourQuotationPrice;
+    prompt += `\n- Client Demand Price: Not provided`;
+    prompt += `\n- Status: ⚠️ Cannot determine if we can proceed (client demand price required)`;
   }
-  
-  // Step 2: Determine profit margin requirements
-  let minMargin: number;
-  let maxMargin: number;
-  
-  if (productType === 'mbcb') {
-    minMargin = 0.02; // 2%
-    maxMargin = 0.03; // 3%
-  } else if (productType === 'signages') {
-    minMargin = 0.15; // 15%
-    maxMargin = 0.20; // 20%
-  } else {
-    // Paint - use default margins (can be adjusted later)
-    minMargin = 0.15; // 15%
-    maxMargin = 0.20; // 20%
-  }
-  
-  // Step 3: Calculate minimum acceptable price (base price + minimum margin)
-  const minimumPrice = basePrice * (1 + minMargin);
-  const maximumPrice = basePrice * (1 + maxMargin);
-  
-  // Step 4: Suggest price closer to client demand while maintaining margin
-  let suggestedPrice: number;
-  
-  if (clientDemandPrice && clientDemandPrice > 0) {
-    // Try to get as close to client demand as possible
-    // But ensure we maintain minimum margin
-    if (clientDemandPrice >= minimumPrice) {
-      // Client demand is acceptable - use it if within max margin, otherwise cap at max margin
-      if (clientDemandPrice <= maximumPrice) {
-        suggestedPrice = clientDemandPrice;
-      } else {
-        // Client demand is too high (above our max margin) - use max margin price
-        suggestedPrice = maximumPrice;
-      }
-    } else {
-      // Client demand is below our minimum - use minimum price
-      suggestedPrice = minimumPrice;
-    }
-  } else {
-    // No client demand - use optimal price (middle of margin range)
-    const optimalMargin = (minMargin + maxMargin) / 2;
-    suggestedPrice = basePrice * (1 + optimalMargin);
-  }
-  
-  // Ensure suggested price is never below minimum
-  if (suggestedPrice < minimumPrice) {
-    suggestedPrice = minimumPrice;
-  }
-  
-  return suggestedPrice;
+
+  prompt += `\n\nAnalyze this pricing situation and provide:
+1. Clear explanation of which price was chosen and why
+2. Detailed margin calculation and analysis (if client demand is provided)
+3. Clear recommendation: Can we proceed with this deal?
+4. 2-3 actionable suggestions based on the analysis
+5. Any warnings if margin is insufficient
+
+Remember:
+- Chosen price is the LOWER of quotation price and competitor price
+- Client demand must be at least 1% above chosen price to proceed
+- Be clear and direct in your recommendations`;
+
+  return prompt;
 }
 
 // ============================================
@@ -752,803 +245,140 @@ function calculateSuggestedPrice(
 // ============================================
 
 /**
- * Analyze pricing context using Gemini AI and return recommendations
- * 
- * @param input - Pricing context including our price, competitor price, client demand, etc.
- * @returns AI-generated pricing recommendations with win probability
- * 
- * @throws Error if AI service fails (caller should handle gracefully)
+ * Analyze pricing context using simplified rule-based logic with AI suggestions
  */
 export async function analyzePricingWithAI(
   input: PricingAnalysisInput
 ): Promise<PricingAnalysisOutput> {
-  console.log(`[AI] Pricing AI: Starting analysis`);
-  console.log('[AI Pricing] Starting analysis for', input.productType);
-  console.log(`[AI] Pricing AI: Input`, {
+  console.log('[AI Pricing] Starting simplified pricing analysis', {
     productType: input.productType,
-    quantity: input.quantity,
-    hasCompetitorPrice: !!input.competitorPricePerUnit,
-    hasClientDemand: !!input.clientDemandPricePerUnit,
-    userRole: input.userRole || 'not provided',
-    quotationId: input.quotationId || 'not provided',
+    ourPrice: input.ourPricePerUnit,
+    competitorPrice: input.competitorPricePerUnit,
+    clientDemand: input.clientDemandPricePerUnit,
   });
 
-    // Validate input
+  // Validate input
   if (!input.ourPricePerUnit || input.ourPricePerUnit <= 0) {
-    throw new Error('Invalid our price per unit');
+    throw new Error('Invalid quotation price per unit');
   }
 
-  // Quantity is now optional - no validation needed
-
   try {
-    // Fetch learning context if enabled (default: true)
-    let learningStats: Awaited<ReturnType<typeof analyzePricingPerformance>> | null = null;
-    let learningContext: string | undefined;
-    let detailedLearningContext: string | undefined;
-    if (input.includeLearningContext !== false) {
-      try {
-        learningStats = await analyzePricingPerformance(input.productType, 90);
-        learningContext = formatLearningStatsForPrompt(learningStats);
-        // detailedLearningContext = await buildDetailedLearningContext(learningStats, input.productType);
-        // Note: buildDetailedLearningContext function not implemented, using learningContext instead
-        detailedLearningContext = learningContext;
-        console.log('[AI Pricing] Including learning context:', learningContext);
-        console.log('[AI Pricing] Including detailed learning context');
-      } catch (error) {
-        console.warn('[AI Pricing] Failed to fetch learning context, continuing without it:', error);
-        // Continue without learning context if it fails
+    // Step 1: Calculate chosen price (lower of quotation or competitor)
+    const chosenPrice = calculateChosenPrice(
+      input.ourPricePerUnit,
+      input.competitorPricePerUnit
+    );
+
+    // Step 2: Check margin if client demand is provided
+    const marginCheck = canProceedWithDeal(
+      input.clientDemandPricePerUnit,
+      chosenPrice
+    );
+
+    // Step 3: Calculate guaranteed win price (chosen price + 1%)
+    const guaranteedWinPrice = calculateGuaranteedWinPrice(chosenPrice);
+
+    // Step 4: Calculate win probability based on margin
+    let winProbability = 50; // Default neutral
+    if (input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0) {
+      if (marginCheck.canProceed) {
+        // If margin is good, high win probability
+        // Scale based on margin: 1% = 80%, higher margins = higher probability
+        winProbability = Math.min(100, 80 + (marginCheck.margin - 1) * 2);
+      } else {
+        // If margin is insufficient, low win probability
+        winProbability = Math.max(0, 30 - (1 - marginCheck.margin) * 20);
       }
     }
-    
-    // Build learning context object for reasoning
-    const learningContextObj = learningStats ? {
-      historySummary: learningStats.total_quotes_analyzed > 0
-        ? `Analyzed ${learningStats.total_quotes_analyzed} recent quotations. AI accuracy: ${learningStats.ai_accuracy.toFixed(1)}%, Override accuracy: ${learningStats.override_accuracy.toFixed(1)}%.`
-        : null,
-      winPatterns: learningStats.recent_win_factors || [],
-      lossPatterns: [], // Not directly available in PricingLearningStats, will be empty
-      similarQuotes: [], // Not directly available, will be empty
-    } : {
-      historySummary: null,
-      winPatterns: [],
-      lossPatterns: [],
-      similarQuotes: [],
+
+    // Step 5: Build prompts and call AI for suggestions
+    const systemPrompt = buildSystemPrompt();
+    const userPrompt = await buildUserPrompt(input);
+
+    console.log('[AI Pricing] Calling AI for suggestions...');
+    const aiResponse = await runGemini<{
+      reasoning?: {
+        priceSelection?: string;
+        marginCheck?: string;
+        recommendation?: string;
+      };
+      suggestions?: string[];
+      warnings?: string[];
+    }>(
+      systemPrompt,
+      userPrompt
+    );
+
+    // Parse AI response
+    const reasoning = aiResponse.reasoning || {
+      priceSelection: `Chose ₹${chosenPrice.toFixed(2)} (${chosenPrice === input.ourPricePerUnit ? 'quotation price' : 'competitor price'} - lower of the two)`,
+      marginCheck: input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0
+        ? `Margin: ${marginCheck.margin.toFixed(2)}% (${marginCheck.canProceed ? 'meets' : 'below'} 1% minimum)`
+        : 'Client demand price not provided',
+      recommendation: marginCheck.canProceed
+        ? '✅ Can proceed with deal - margin requirement met'
+        : '❌ Cannot proceed - insufficient margin (minimum 1% required)',
     };
 
-    // Find similar past pricing decisions
-    console.log(`[AI] Pricing AI: Fetching pricingMemory (findSimilarPastPrice)`);
-    let previousPricing: Awaited<ReturnType<typeof findSimilarPastPrice>> | null = null;
-    try {
-      if (input.quantity !== undefined && input.quantity !== null) {
-        previousPricing = await findSimilarPastPrice({
-          productType: input.productType,
-          specs: input.productSpecs,
-          quantity: input.quantity,
-        });
-        if (previousPricing) {
-          console.log('[AI Pricing] Found similar past price:', previousPricing.lastPrice);
-          console.log(`[AI] Pricing AI: pricingMemory returned: ₹${previousPricing.lastPrice} from ${previousPricing.createdAt}`);
-        } else {
-          console.log(`[AI] Pricing AI: pricingMemory returned: no similar past price found`);
-        }
-      } else {
-        console.log(`[AI] Pricing AI: Skipping pricingMemory - quantity not provided`);
-      }
-    } catch (error) {
-      console.warn('[AI Pricing] Failed to fetch similar past price, continuing without it:', error);
-      console.warn(`[AI] Pricing AI: pricingMemory error (non-critical)`);
-      // Continue without previous pricing if it fails
-    }
-
-    // Get winning patterns for this product type
-    console.log(`[AI] Pricing AI: Fetching pricingOutcomeMemory (getWinningPatterns)`);
-    let winPatterns: Awaited<ReturnType<typeof getWinningPatterns>> | null = null;
-    try {
-      winPatterns = await getWinningPatterns(input.productType);
-      if (winPatterns) {
-        console.log('[AI Pricing] Found winning patterns:', winPatterns);
-        console.log(`[AI] Pricing AI: pricingOutcomeMemory returned: ${winPatterns.count} wins, avg ₹${winPatterns.averageWinningPrice}`);
-      } else {
-        console.log(`[AI] Pricing AI: pricingOutcomeMemory returned: no winning patterns found`);
-      }
-    } catch (error) {
-      console.warn('[AI Pricing] Failed to fetch winning patterns, continuing without it:', error);
-      console.warn(`[AI] Pricing AI: pricingOutcomeMemory error (non-critical)`);
-      // Continue without winning patterns if it fails
-    }
-
-    // Format previous pricing context
-    const previousPricingContext = previousPricing
-      ? `Previous Pricing Context:
-Last similar sale price: ₹${previousPricing.lastPrice.toFixed(2)} per unit
-Date: ${new Date(previousPricing.createdAt).toLocaleDateString()}
-Quantity: ${previousPricing.quantity}
-${previousPricing.outcome ? `Outcome: ${previousPricing.outcome}` : ''}`
-      : 'No historical match found.';
-
-    // Format winning insights
-    const winningInsights = winPatterns
-      ? `Winning Insights:
-In the last ${winPatterns.count} wins:
-- Avg winning price was: ₹${winPatterns.averageWinningPrice.toFixed(2)} per unit
-- Best recorded margin: ${(winPatterns.bestMargin * 100).toFixed(1)}%`
-      : 'No win/loss learning available yet.';
-
-    // Load business knowledge context
-    console.log(`[AI] Pricing AI: Loading business knowledge`);
-    let knowledge;
-    try {
-      knowledge = await loadBusinessKnowledge({
-        quotationId: input.quotationId,
-        productType: input.productType,
-      });
-      console.log('[AI Pricing] Loaded business knowledge context');
-      console.log(`[AI] Pricing AI: Knowledge loaded successfully`);
-    } catch (error) {
-      console.warn('[AI Pricing] Failed to load business knowledge, continuing without it:', error);
-      console.warn(`[AI] Pricing AI: Knowledge load failed (non-critical)`);
-      // Continue without knowledge context if loading fails
-      knowledge = undefined;
-    }
-
-    // Build base context for enhanced prompt
-    const baseContext = await buildUserPrompt(
-      input, 
-      learningContext, 
-      learningContextObj, 
-      previousPricingContext, 
-      winningInsights,
-      detailedLearningContext
-    );
-
-    // Fetch competitor win/loss history if competitor price is available
-    let competitorHistory: any = null;
-    if (input.competitorPricePerUnit && input.competitorPricePerUnit > 0) {
-      try {
-        const supabase = createSupabaseServerClient();
-        const tableName = input.productType === 'mbcb' ? 'quotes_mbcb' 
-          : input.productType === 'signages' ? 'quotes_signages' 
-          : 'quotes_paint';
-        
-        // Find quotations with similar competitor prices (±10% range)
-        const priceRange = input.competitorPricePerUnit * 0.1;
-        const minPrice = input.competitorPricePerUnit - priceRange;
-        const maxPrice = input.competitorPricePerUnit + priceRange;
-        
-        const { data: similarQuotes } = await supabase
-          .from(tableName)
-          .select('id, competitor_price_per_unit, ai_suggested_price_per_unit, outcome_status, outcome_notes, created_at')
-          .not('competitor_price_per_unit', 'is', null)
-          .gte('competitor_price_per_unit', minPrice)
-          .lte('competitor_price_per_unit', maxPrice)
-          .in('outcome_status', ['won', 'lost'])
-          .order('created_at', { ascending: false })
-          .limit(20);
-        
-        if (similarQuotes && similarQuotes.length > 0) {
-          const wins = similarQuotes.filter(q => q.outcome_status === 'won');
-          const losses = similarQuotes.filter(q => q.outcome_status === 'lost');
-          const winRate = (wins.length / similarQuotes.length) * 100;
-          
-          competitorHistory = {
-            totalQuotes: similarQuotes.length,
-            wins: wins.length,
-            losses: losses.length,
-            winRate: winRate.toFixed(1),
-            averageCompetitorPrice: similarQuotes.reduce((sum, q) => sum + (q.competitor_price_per_unit || 0), 0) / similarQuotes.length,
-            averageOurPrice: similarQuotes
-              .filter(q => q.ai_suggested_price_per_unit)
-              .reduce((sum, q) => sum + (q.ai_suggested_price_per_unit || 0), 0) / 
-              similarQuotes.filter(q => q.ai_suggested_price_per_unit).length,
-          };
-          
-          console.log('[AI Pricing] Found competitor history:', competitorHistory);
-        }
-      } catch (error: any) {
-        console.warn('[AI Pricing] Failed to fetch competitor history:', error.message);
-      }
-    }
-
-    // Build enhanced prompt with step-by-step reasoning instructions
-    const enhancedPrompt = `
-PRICING ANALYSIS REQUEST
-
-Follow the step-by-step reasoning process outlined in the system prompt:
-1. Competitor Analysis - Compare prices, assess positioning, evaluate competitive advantages
-2. Historical Comparison - Reference similar past quotations and outcomes
-3. Demand Assessment - Evaluate client budget, price sensitivity, market demand
-4. Margin Consideration - Calculate margins, compare to targets, assess sustainability
-
-${competitorHistory ? `\nCompetitor Win/Loss History:
-Total similar quotes: ${competitorHistory.totalQuotes}
-Wins: ${competitorHistory.wins}, Losses: ${competitorHistory.losses}
-Win Rate: ${competitorHistory.winRate}%
-Average competitor price in history: ₹${competitorHistory.averageCompetitorPrice.toFixed(2)}
-Average our price in wins: ₹${competitorHistory.averageOurPrice ? competitorHistory.averageOurPrice.toFixed(2) : 'N/A'}` : ''}
-
-CRITICAL: Provide detailed reasoning in the structured format with specific data points, percentages, and confidence scores.
-
-Deliver output strictly in JSON format as specified in the system prompt:
-{
-  "winProbability": number (0-100) - Win probability at CURRENT QUOTED PRICE,
-  "guaranteedWinPrice": number - Price for 100% win probability (MUST be >= competitor price + 15%),
-  "reasoning": {
-    "competitorAnalysis": "Detailed analysis with specific percentages and data points",
-    "historicalComparison": "What past data shows with specific examples",
-    "demandAssessment": "Market demand impact analysis",
-    "marginConsideration": "Profit margin analysis with calculations"
-  },
-  "suggestions": ["actionable tip 1", "actionable tip 2", "actionable tip 3"],
-  "warnings": ["risk 1", "risk 2"],
-  "confidenceFactors": {
-    "dataQuality": "high" | "medium" | "low",
-    "historicalRelevance": "high" | "medium" | "low",
-    "competitorDataReliability": "high" | "medium" | "low"
-  },
-  "historicalInsight": "Summary interpretation",
-  "negotiationNotes": ["talking point 1", "talking point 2"],
-  "competitivePosition": "ABOVE_MARKET" | "AT_MARKET" | "BELOW_MARKET",
-  "pricingStrategy": "Market positioning strategy",
-  "negotiationLeverage": ["advantage 1", "advantage 2"]
-}
-
-Context data provided:
-${baseContext}
-`;
-
-    // Build system prompt
-    const systemPrompt = buildSystemPrompt();
-
-    // Call Gemini AI with business knowledge context (reuses existing client from utils/ai.ts)
-    console.log(`[AI] Pricing AI: Calling runGemini with knowledge context`);
-    const response = await runGemini<PricingAnalysisOutput>(
-      systemPrompt,
-      enhancedPrompt,
-      knowledge
-    );
-    console.log(`[AI] Pricing AI: runGemini completed`);
-
-    // Get cost (competitor price is our cost) - use let since we may reassign it later
-    let costPerUnit = input.competitorPricePerUnit || input.costPerUnit || null;
-    
-    // Check if user is Data Analyst (bypasses pricing role adjustments)
-    const normalizedRole = input.userRole?.toLowerCase().replace(/_/g, '') || '';
-    const isDataAnalyst = normalizedRole === 'dataanalyst' || normalizedRole === 'analyst';
-    console.log(`[AI] Pricing AI: Role detected: ${input.userRole || 'none'} (normalized: ${normalizedRole}, isDataAnalyst: ${isDataAnalyst})`);
-    
-    const winProbability = typeof response.winProbability === 'number'
-      ? Math.max(0, Math.min(100, response.winProbability))
-      : 50; // Fallback to neutral probability
-
-    // Calculate suggested price using new business logic
-    // This ensures we follow the rules:
-    // 1. If our quotation > competitor → use competitor price
-    // 2. If our quotation < competitor → use our quotation price
-    // 3. Apply profit margins: MBCB (2-3%), Signages (15-20%)
-    // 4. Suggest price closer to client demand while maintaining margin
-    let guaranteedWinPrice: number;
-    
-    // Use the new pricing logic function
-    guaranteedWinPrice = calculateSuggestedPrice(
-      input.ourPricePerUnit,
-      input.competitorPricePerUnit,
-      input.clientDemandPricePerUnit,
-      input.productType
-    );
-    
-    // If AI provided a guaranteedWinPrice, we can consider it but our business logic takes precedence
-    // However, we can use AI's suggestion as a reference if it's reasonable
-    if (typeof response.guaranteedWinPrice === 'number' && response.guaranteedWinPrice > 0) {
-      // Check if AI's suggestion is within acceptable range (within 10% of our calculated price)
-      const aiPrice = response.guaranteedWinPrice;
-      const priceDifference = Math.abs(aiPrice - guaranteedWinPrice) / guaranteedWinPrice;
-      
-      if (priceDifference <= 0.10) {
-        // AI suggestion is close to our calculated price - can use it if it's better (closer to client demand)
-        if (input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0) {
-          const ourDistanceToDemand = Math.abs(guaranteedWinPrice - input.clientDemandPricePerUnit);
-          const aiDistanceToDemand = Math.abs(aiPrice - input.clientDemandPricePerUnit);
-          
-          // Use AI price if it's closer to client demand and still maintains margin
-          if (aiDistanceToDemand < ourDistanceToDemand) {
-            // Verify AI price maintains minimum margin
-            const basePrice = (input.competitorPricePerUnit && input.competitorPricePerUnit > 0 && input.ourPricePerUnit > input.competitorPricePerUnit)
-              ? input.competitorPricePerUnit
-              : input.ourPricePerUnit;
-            
-            const minMargin = input.productType === 'mbcb' ? 0.02 : 0.15;
-            const minimumPrice = basePrice * (1 + minMargin);
-            
-            if (aiPrice >= minimumPrice) {
-              guaranteedWinPrice = aiPrice;
-              console.log(`[AI Pricing] Using AI suggested price ${aiPrice} as it's closer to client demand`);
-            }
-          }
-        }
-      }
-    }
-    
-    // Final validation: Ensure guaranteed win price maintains minimum margin
-    if (input.competitorPricePerUnit && input.competitorPricePerUnit > 0) {
-      const basePrice = (input.ourPricePerUnit > input.competitorPricePerUnit)
-        ? input.competitorPricePerUnit
-        : input.ourPricePerUnit;
-      
-      const minMargin = input.productType === 'mbcb' ? 0.02 : 0.15;
-      const minimumPrice = basePrice * (1 + minMargin);
-      
-      if (guaranteedWinPrice < minimumPrice) {
-        console.log(`[AI Pricing] Guaranteed win price ${guaranteedWinPrice} is below minimum (${minimumPrice}), adjusting...`);
-        guaranteedWinPrice = minimumPrice;
-      }
-    }
-
-    // Parse and validate new fields
-    const negotiationNotes = Array.isArray(response.negotiationNotes) && response.negotiationNotes.length > 0
-      ? response.negotiationNotes.filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+    const suggestions = Array.isArray(aiResponse.suggestions) && aiResponse.suggestions.length > 0
+      ? aiResponse.suggestions.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
       : [];
 
-    const warnings = Array.isArray(response.warnings) && response.warnings.length > 0
-      ? response.warnings.filter((w): w is string => typeof w === 'string' && w.trim().length > 0)
-      : [];
-
-    // Parse reasoning - handle both string (legacy) and object (new) formats
-    let reasoning: string | PricingAnalysisOutput['reasoning'];
-    if (typeof response.reasoning === 'object' && response.reasoning !== null) {
-      // New structured format
-      const reasoningObj = response.reasoning as {
-        competitorAnalysis?: string;
-        historicalComparison?: string;
-        demandAssessment?: string;
-        marginConsideration?: string;
-      };
-      reasoning = {
-        competitorAnalysis: typeof reasoningObj.competitorAnalysis === 'string' 
-          ? reasoningObj.competitorAnalysis.trim() 
-          : undefined,
-        historicalComparison: typeof reasoningObj.historicalComparison === 'string'
-          ? reasoningObj.historicalComparison.trim()
-          : undefined,
-        demandAssessment: typeof reasoningObj.demandAssessment === 'string'
-          ? reasoningObj.demandAssessment.trim()
-          : undefined,
-        marginConsideration: typeof reasoningObj.marginConsideration === 'string'
-          ? reasoningObj.marginConsideration.trim()
-          : undefined,
-      };
-    } else {
-      // Legacy string format - convert to object for consistency
-      const reasoningStr = typeof response.reasoning === 'string' && response.reasoning.trim()
-      ? response.reasoning.trim()
-      : 'AI analysis completed';
-      reasoning = reasoningStr;
-    }
-
-    // Parse confidence factors
-    const confidenceFactors: PricingAnalysisOutput['confidenceFactors'] | undefined = 
-      response.confidenceFactors && typeof response.confidenceFactors === 'object'
-        ? {
-            dataQuality: ['high', 'medium', 'low'].includes(response.confidenceFactors.dataQuality || '')
-              ? response.confidenceFactors.dataQuality as 'high' | 'medium' | 'low'
-              : undefined,
-            historicalRelevance: ['high', 'medium', 'low'].includes(response.confidenceFactors.historicalRelevance || '')
-              ? response.confidenceFactors.historicalRelevance as 'high' | 'medium' | 'low'
-              : undefined,
-            competitorDataReliability: ['high', 'medium', 'low'].includes(response.confidenceFactors.competitorDataReliability || '')
-              ? response.confidenceFactors.competitorDataReliability as 'high' | 'medium' | 'low'
-              : undefined,
-          }
-        : undefined;
-
-    let suggestions = Array.isArray(response.suggestions) && response.suggestions.length > 0
-      ? response.suggestions.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
-      : ['Review pricing strategy', 'Consider market conditions'];
-
-    // Append role-based insight message if available (only Admin and Employee)
-    // Data Analyst should never receive pricing insight messages
-    if (!isDataAnalyst) {
-      const roleInsight = roleBasedInsightMessage(input.userRole);
-      if (roleInsight && suggestions) {
-        suggestions.push(roleInsight);
-        console.log(`[AI Pricing] Added role-based insight for ${input.userRole}`);
-      }
-    } else {
-      console.log(`[AI Pricing] Data Analyst role detected - skipping pricing insight messages`);
-    }
-
-    const historicalInsight = typeof response.historicalInsight === 'string' && response.historicalInsight.trim()
-      ? response.historicalInsight.trim()
-      : 'No relevant historical learning identified';
-
-    // Parse new competitive analysis fields
-    const competitivePosition = response.competitivePosition && 
-      ['ABOVE_MARKET', 'AT_MARKET', 'BELOW_MARKET'].includes(response.competitivePosition)
-      ? response.competitivePosition
-      : (input.competitorPricePerUnit && input.competitorPricePerUnit > 0
-          ? (input.ourPricePerUnit > input.competitorPricePerUnit * 1.05 
-              ? 'ABOVE_MARKET' 
-              : input.ourPricePerUnit < input.competitorPricePerUnit * 0.95 
-              ? 'BELOW_MARKET' 
-              : 'AT_MARKET')
-          : undefined);
-
-    const pricingStrategy = typeof response.pricingStrategy === 'string' && response.pricingStrategy.trim()
-      ? response.pricingStrategy.trim()
-      : (competitivePosition === 'ABOVE_MARKET' 
-          ? 'Premium positioning - emphasize quality and value'
-          : competitivePosition === 'BELOW_MARKET'
-          ? 'Competitive positioning - leverage price advantage'
-          : 'Market-aligned positioning - focus on service and reliability');
-
-    const negotiationLeverage = Array.isArray(response.negotiationLeverage) && response.negotiationLeverage.length > 0
-      ? response.negotiationLeverage.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
-      : (competitivePosition === 'BELOW_MARKET'
-          ? ['Price advantage over competitors', 'Better value proposition']
-          : competitivePosition === 'ABOVE_MARKET'
-          ? ['Superior quality and specifications', 'Enhanced service and support']
-          : ['Competitive pricing', 'Reliable delivery and service']);
-
-    // Quality calibration: Check if reasoning is poor or missing
-    const isPoorReasoning = typeof reasoning === 'string'
-      ? (!reasoning || reasoning.length < 30 || reasoning === 'AI analysis completed' || /^(ok|done|complete|finished|analyzed)/i.test(reasoning.trim()))
-      : (!reasoning || (!reasoning.competitorAnalysis && !reasoning.historicalComparison && !reasoning.demandAssessment && !reasoning.marginConsideration));
-
-    // Apply fallback logic if AI fails or gives poor reasoning
-    const finalReasoning: string | PricingAnalysisOutput['reasoning'] = isPoorReasoning
-      ? 'Suggested based on pricing history and competitive benchmark.'
-      : reasoning;
-
-    const finalNegotiationNotes = negotiationNotes.length > 0
-      ? negotiationNotes
-      : ['Consider offering phased discount based on order size.'];
-
-    const finalWarnings = warnings.length > 0 ? warnings : [];
-
-    // Build learning insights for response
-    let learningInsights: PricingAnalysisOutput['learningInsights'] | undefined;
-    if (learningStats) {
-      // Fetch recent wins and losses for insights
-      const supabase = createSupabaseServerClient();
-      const tableName = input.productType === 'mbcb' 
-        ? 'quotes_mbcb' 
-        : input.productType === 'signages' 
-        ? 'quotes_signages' 
-        : 'quotes_paint';
-      
-      const lookbackDate = new Date();
-      lookbackDate.setDate(lookbackDate.getDate() - 90);
-      
-      const { data: recentQuotes } = await supabase
-        .from(tableName)
-        .select('outcome_status, outcome_notes, competitor_price_per_unit, client_demand_price_per_unit')
-        .in('outcome_status', ['won', 'lost'])
-        .not('closed_at', 'is', null)
-        .gte('closed_at', lookbackDate.toISOString())
-        .order('closed_at', { ascending: false })
-        .limit(20);
-      
-      const wins = recentQuotes?.filter(q => q.outcome_status === 'won') || [];
-      const losses = recentQuotes?.filter(q => q.outcome_status === 'lost') || [];
-      
-      // Analyze price sensitivity
-      let priceSensitivity = 'No clear pattern identified';
-      if (wins.length > 0 && losses.length > 0) {
-        const winsWithClientDemand = wins.filter(w => w.client_demand_price_per_unit);
-        const lossesWithClientDemand = losses.filter(l => l.client_demand_price_per_unit);
-        
-        if (winsWithClientDemand.length > 0 && lossesWithClientDemand.length > 0) {
-          const avgWinVsDemand = winsWithClientDemand.reduce((sum, w) => {
-            // This would need actual price data, simplified for now
-            return sum;
-          }, 0);
-          priceSensitivity = 'Client shows moderate price sensitivity - competitive pricing important';
-        }
-      }
-      
-      // Trend analysis
-      let trendAnalysis = 'Insufficient data for trend analysis';
-      if (recentQuotes && recentQuotes.length >= 10) {
-        const midpoint = Math.floor(recentQuotes.length / 2);
-        const recentHalf = recentQuotes.slice(0, midpoint);
-        const olderHalf = recentQuotes.slice(midpoint);
-        
-        const recentWinRate = (recentHalf.filter(q => q.outcome_status === 'won').length / recentHalf.length) * 100;
-        const olderWinRate = (olderHalf.filter(q => q.outcome_status === 'won').length / olderHalf.length) * 100;
-        
-        const trend = recentWinRate - olderWinRate;
-        if (Math.abs(trend) > 5) {
-          trendAnalysis = `Win rate ${trend > 0 ? 'improving' : 'declining'} (${recentWinRate.toFixed(1)}% recent vs ${olderWinRate.toFixed(1)}% earlier)`;
-        } else {
-          trendAnalysis = `Win rate stable (${recentWinRate.toFixed(1)}% recent vs ${olderWinRate.toFixed(1)}% earlier)`;
-        }
-      }
-      
-      learningInsights = {
-        aiAccuracy: learningStats.ai_accuracy,
-        overrideAccuracy: learningStats.override_accuracy,
-        recentWins: wins.slice(0, 5).map(w => w.outcome_notes || 'Won deal').filter((n, i, arr) => arr.indexOf(n) === i),
-        recentLosses: losses.slice(0, 5).map(l => l.outcome_notes || 'Lost deal').filter((n, i, arr) => arr.indexOf(n) === i),
-        priceSensitivity,
-        productInsights: learningStats.recent_win_factors.slice(0, 5),
-        trendAnalysis,
-      };
-    }
-
-    // ============================================
-    // MARGIN ANALYSIS
-    // ============================================
-    
-    let marginAnalysis: PricingAnalysisOutput['marginAnalysis'] | undefined;
-    let marginWarnings: string[] = [];
-    let marginTrends: PricingAnalysisOutput['marginTrends'] | undefined;
-    
-    // Try to get from quotation if not provided (costPerUnit already declared above)
-    if (!costPerUnit && input.quotationId) {
-      try {
-        const supabase = createSupabaseServerClient();
-        const tableName = input.productType === 'mbcb' 
-          ? 'quotes_mbcb' 
-          : input.productType === 'signages' 
-          ? 'quotes_signages' 
-          : 'quotes_paint';
-        
-        const costField = input.productType === 'mbcb' ? 'total_cost_per_rm' : 'cost_per_piece';
-        const { data: quote } = await supabase
-          .from(tableName)
-          .select(costField)
-          .eq('id', input.quotationId)
-          .single();
-        
-        if (quote) {
-          const cost = costField === 'total_cost_per_rm' 
-            ? (quote as any).total_cost_per_rm 
-            : (quote as any).cost_per_piece;
-          if (cost) {
-            costPerUnit = cost;
-          }
-        }
-      } catch (error) {
-        console.warn('[AI Pricing] Could not fetch cost from quotation:', error);
-      }
-    }
-    
-    if (costPerUnit && costPerUnit > 0) {
-      try {
-        // Calculate margin at current quoted price
-        const currentMargin = calculateMargin(input.ourPricePerUnit, costPerUnit);
-        // Calculate margin at guaranteed win price
-        const guaranteedWinMargin = calculateMargin(guaranteedWinPrice, costPerUnit);
-        
-        // Fetch historical margin data
-        const historicalMargins = await fetchHistoricalMargins(input.productType, 90);
-        
-        // Calculate margin analysis
-        marginAnalysis = {
-          suggestedMargin: currentMargin, // Margin at current quoted price
-          minimumAcceptableMargin: historicalMargins.minimumMargin || 15,
-          optimalMargin: historicalMargins.optimalMargin || 25,
-          marketAverageMargin: historicalMargins.marketAverageMargin || historicalMargins.averageMargin,
-          marginVsMarket: currentMargin - (historicalMargins.marketAverageMargin || historicalMargins.averageMargin),
-        };
-        
-        // Generate margin warnings
-        if (currentMargin < marginAnalysis.minimumAcceptableMargin) {
-          marginWarnings.push(`⚠️ Margin at current price (${currentMargin.toFixed(1)}%) is below minimum acceptable (${marginAnalysis.minimumAcceptableMargin.toFixed(1)}%)`);
-        }
-        
-        if (guaranteedWinMargin < marginAnalysis.minimumAcceptableMargin) {
-          marginWarnings.push(`⚠️ Margin at guaranteed win price (${guaranteedWinMargin.toFixed(1)}%) is below minimum acceptable (${marginAnalysis.minimumAcceptableMargin.toFixed(1)}%)`);
-        }
-        
-        if (currentMargin < marginAnalysis.optimalMargin - 5) {
-          marginWarnings.push(`⚠️ Current margin is ${(marginAnalysis.optimalMargin - currentMargin).toFixed(1)}% below optimal margin (${marginAnalysis.optimalMargin.toFixed(1)}%)`);
-        }
-        
-        // Analyze margin trends
-        marginTrends = analyzeMarginTrends(
-          historicalMargins.marginsByQuantity,
-          historicalMargins.marginsByMonth
+    // Add default suggestions if AI didn't provide enough
+    if (suggestions.length === 0) {
+      if (marginCheck.canProceed) {
+        suggestions.push(
+          `✅ Deal can proceed - client demand price (₹${input.clientDemandPricePerUnit?.toFixed(2)}) provides ${marginCheck.margin.toFixed(2)}% margin above chosen price (₹${chosenPrice.toFixed(2)})`,
+          `Consider finalizing the deal at client demand price of ₹${input.clientDemandPricePerUnit?.toFixed(2)} per unit`,
+          `Monitor the deal to ensure terms are met as agreed`
         );
-        
-        // Add margin insights to negotiation notes
-        if (currentMargin >= marginAnalysis.optimalMargin) {
-          finalNegotiationNotes.push(`Strong margin position at current price (${currentMargin.toFixed(1)}%) - room for negotiation if needed`);
-        } else if (currentMargin >= marginAnalysis.minimumAcceptableMargin) {
-          finalNegotiationNotes.push(`Margin at current price: ${currentMargin.toFixed(1)}% - maintain price discipline`);
-        } else {
-          finalNegotiationNotes.push(`Low margin at current price (${currentMargin.toFixed(1)}%) - consider value-add services to justify price`);
-        }
-        
-        if (marginAnalysis.marginVsMarket > 5) {
-          finalNegotiationNotes.push(`Margin ${marginAnalysis.marginVsMarket.toFixed(1)}% above market - highlight premium value proposition`);
-        }
-        
-        console.log('[AI Pricing] Margin analysis complete:', {
-          currentMargin: currentMargin.toFixed(1) + '%',
-          guaranteedWinMargin: guaranteedWinMargin.toFixed(1) + '%',
-          minimumMargin: marginAnalysis.minimumAcceptableMargin.toFixed(1) + '%',
-          optimalMargin: marginAnalysis.optimalMargin.toFixed(1) + '%',
-          warningsCount: marginWarnings.length,
-        });
-      } catch (error: any) {
-        console.warn('[AI Pricing] Error in margin analysis:', error.message);
-        // Continue without margin analysis if it fails
-      }
-    } else {
-      console.log('[AI Pricing] No cost data available for margin analysis');
-    }
-
-    // ============================================
-    // NEGOTIATION STRATEGY
-    // ============================================
-    
-    let negotiationStrategy: PricingAnalysisOutput['negotiationStrategy'] | undefined;
-    let openingPrice: number | undefined;
-    let walkAwayPrice: number | undefined;
-    let concessionPlan: PricingAnalysisOutput['concessionPlan'] | undefined;
-    
-    try {
-      // Analyze client-specific negotiation patterns
-      // NOTE: analyzeClientNegotiationPatterns function not implemented
-      // TODO: Implement this function or remove this feature
-      type ClientPatterns = {
-        averageNegotiationPercent: number;
-        valueAddPreferences: string[];
-        patterns: string;
-        negotiationFrequency: number;
-      };
-      const clientPatterns: ClientPatterns | null = null; // await analyzeClientNegotiationPatterns(
-        // input.productType,
-        // input.subAccountId,
-        // 180
-      // );
-      
-      // Calculate average negotiation percent from client patterns
-      const avgNegPercent = (clientPatterns as ClientPatterns | null)?.averageNegotiationPercent ?? 0;
-      
-      // Calculate opening price (current quoted price is our opening)
-      openingPrice = input.ourPricePerUnit;
-      
-      // Calculate walk-away price (minimum acceptable based on margin = guaranteed win price)
-      const minimumMargin = marginAnalysis?.minimumAcceptableMargin || 15;
-      if (costPerUnit && costPerUnit > 0) {
-        walkAwayPrice = Math.max(guaranteedWinPrice, costPerUnit * (1 + minimumMargin / 100));
       } else {
-        // Fallback: use guaranteed win price
-        walkAwayPrice = guaranteedWinPrice;
-      }
-      
-      // Build concession plan
-      const totalNegotiationRoom = openingPrice - walkAwayPrice;
-      const firstConcession = totalNegotiationRoom * 0.3; // 30% of room
-      const secondConcession = totalNegotiationRoom * 0.4; // 40% of room
-      const finalConcession = totalNegotiationRoom * 0.3; // 30% of room
-      
-      let concessionStrategy = '';
-      if (avgNegPercent > 0) {
-        const openingPricePercent = Math.min(15, Math.max(5, avgNegPercent + 3));
-        concessionStrategy = `Client typically negotiates ${avgNegPercent.toFixed(1)}% down. Start with ${openingPricePercent.toFixed(1)}% buffer. `;
-        concessionStrategy += `First concession: ₹${firstConcession.toFixed(2)} (${((firstConcession / openingPrice) * 100).toFixed(1)}%). `;
-        concessionStrategy += `Second concession: ₹${secondConcession.toFixed(2)} (${((secondConcession / openingPrice) * 100).toFixed(1)}%). `;
-        concessionStrategy += `Final position: ₹${walkAwayPrice.toFixed(2)} (walk-away price).`;
-      } else {
-        concessionStrategy = `Standard concession strategy: Start at ₹${openingPrice.toFixed(2)}, first drop to ₹${(openingPrice - firstConcession).toFixed(2)}, second drop to ₹${(openingPrice - firstConcession - secondConcession).toFixed(2)}, final position at ₹${walkAwayPrice.toFixed(2)}.`;
-      }
-      
-      // Value-add suggestions
-      const valueAddSuggestions: string[] = [];
-      const valueAddPrefs = (clientPatterns as ClientPatterns | null)?.valueAddPreferences ?? [];
-      if (valueAddPrefs.length > 0) {
-        valueAddSuggestions.push(...valueAddPrefs);
-      } else {
-        valueAddSuggestions.push(
-          'Extended warranty coverage',
-          'Priority technical support',
-          'Flexible payment terms (30/60/90 days)',
-          'Free installation support',
-          'Bulk delivery scheduling'
+        const minimumPrice = chosenPrice * 1.01;
+        suggestions.push(
+          `❌ Deal cannot proceed - client demand price (₹${input.clientDemandPricePerUnit?.toFixed(2)}) only provides ${marginCheck.margin.toFixed(2)}% margin, below 1% minimum`,
+          `Suggest negotiating client demand price to at least ₹${minimumPrice.toFixed(2)} per unit to meet 1% margin requirement`,
+          `If client cannot meet minimum price, consider walking away from the deal`
         );
       }
-      
-      // Alternative offers
-      const alternativeOffers: string[] = [];
-      if (input.quantity && input.quantity >= 1000) {
-        alternativeOffers.push(`Volume discount: Offer ${((input.quantity / 1000) * 2).toFixed(0)}% discount for orders above 1000 units`);
+    }
+
+    const warnings: string[] = [];
+    if (input.clientDemandPricePerUnit && input.clientDemandPricePerUnit > 0) {
+      if (!marginCheck.canProceed) {
+        warnings.push(
+          `⚠️ Insufficient margin: Client demand price provides only ${marginCheck.margin.toFixed(2)}% margin, below 1% minimum requirement`
+        );
+        const minimumPrice = chosenPrice * 1.01;
+        warnings.push(
+          `⚠️ Minimum acceptable price: ₹${minimumPrice.toFixed(2)} per unit (to achieve 1% margin)`
+        );
       }
-      if (input.quantity && input.quantity >= 500) {
-        alternativeOffers.push('Extended payment terms: 60-90 days for large orders');
-      }
-      alternativeOffers.push('Phased delivery: Split order into multiple shipments to ease cash flow');
-      alternativeOffers.push('Bundled services: Include installation/maintenance as package deal');
-      
-      // Psychological insights
-      let psychologicalInsights = '';
-      if (avgNegPercent > 15) {
-        psychologicalInsights = `Client is an aggressive negotiator (typically negotiates ${avgNegPercent.toFixed(1)}% down). Start higher and be prepared for multiple rounds.`;
-      } else if (avgNegPercent > 5) {
-        psychologicalInsights = `Client is a moderate negotiator (typically negotiates ${avgNegPercent.toFixed(1)}% down). Standard negotiation approach should work.`;
-      } else if (avgNegPercent > 0) {
-        psychologicalInsights = `Client is a light negotiator (typically negotiates ${avgNegPercent.toFixed(1)}% down). May accept initial offer with minor adjustments.`;
-      } else {
-        psychologicalInsights = 'No clear negotiation pattern identified. Use standard negotiation approach.';
-      }
-      
-      const negFreq = (clientPatterns as ClientPatterns | null)?.negotiationFrequency ?? 0;
-      if (negFreq > 70) {
-        psychologicalInsights += ' High negotiation frequency - expect pushback on price.';
-      } else if (negFreq < 30) {
-        psychologicalInsights += ' Low negotiation frequency - client may accept fair pricing more readily.';
-      }
-      
-      negotiationStrategy = {
-        openingPrice,
-        walkAwayPrice,
-        concessionPlan: {
-          firstConcession,
-          secondConcession,
-          finalConcession,
-          strategy: concessionStrategy,
-        },
-        valueAddSuggestions: valueAddSuggestions.slice(0, 5),
-        alternativeOffers: alternativeOffers.slice(0, 4),
-        psychologicalInsights,
-        clientPatterns: (clientPatterns as ClientPatterns | null)?.patterns || 'No client-specific negotiation patterns available.',
-      };
-      
-      // Set aliases for backward compatibility
-      openingPrice = negotiationStrategy.openingPrice;
-      walkAwayPrice = negotiationStrategy.walkAwayPrice;
-      concessionPlan = negotiationStrategy.concessionPlan;
-      
-      console.log('[AI Pricing] Negotiation strategy complete:', {
-        openingPrice: openingPrice.toFixed(2),
-        walkAwayPrice: walkAwayPrice.toFixed(2),
-        negotiationRoom: (openingPrice - walkAwayPrice).toFixed(2),
-        clientNegotiationPercent: avgNegPercent > 0 ? avgNegPercent.toFixed(1) + '%' : 'N/A',
-      });
-    } catch (error: any) {
-      console.warn('[AI Pricing] Error building negotiation strategy:', error.message);
-      // Continue without negotiation strategy if it fails
+    } else {
+      warnings.push('⚠️ Client demand price not provided - cannot determine if deal can proceed');
+    }
+
+    // Add AI warnings if provided
+    if (Array.isArray(aiResponse.warnings) && aiResponse.warnings.length > 0) {
+      warnings.push(...aiResponse.warnings.filter((w): w is string => typeof w === 'string' && w.trim().length > 0));
     }
 
     console.log('[AI Pricing] Analysis complete:', {
-      currentPrice: input.ourPricePerUnit,
-      winProbability,
-      guaranteedWinPrice,
+      chosenPrice: chosenPrice.toFixed(2),
+      margin: marginCheck.margin.toFixed(2) + '%',
+      canProceed: marginCheck.canProceed,
+      winProbability: winProbability + '%',
       suggestionsCount: suggestions.length,
-      negotiationNotesCount: finalNegotiationNotes.length,
-      warningsCount: finalWarnings.length + marginWarnings.length,
-      hasHistoricalInsight: historicalInsight !== 'No relevant historical learning identified',
-      reasoningQuality: isPoorReasoning ? 'poor (fallback applied)' : 'good',
-      competitivePosition,
-      pricingStrategy: pricingStrategy.substring(0, 50),
-      negotiationLeverageCount: negotiationLeverage.length,
-      hasLearningInsights: !!learningInsights,
-      hasMarginAnalysis: !!marginAnalysis,
-      hasNegotiationStrategy: !!negotiationStrategy,
     });
-    console.log(`[AI] Pricing AI: Analysis complete - Current Price: ₹${input.ourPricePerUnit}, Win Prob: ${winProbability}%, Guaranteed Win: ₹${guaranteedWinPrice}, Position: ${competitivePosition || 'N/A'}`);
 
     return {
       winProbability,
       guaranteedWinPrice,
-      reasoning: finalReasoning,
+      reasoning,
       suggestions,
-      historicalInsight,
-      negotiationNotes: finalNegotiationNotes,
-      warnings: [...finalWarnings, ...marginWarnings],
-      competitivePosition,
-      pricingStrategy,
-      negotiationLeverage,
-      confidenceFactors,
-      learningInsights,
-      marginAnalysis,
-      marginWarnings: marginWarnings.length > 0 ? marginWarnings : undefined,
-      marginTrends,
-      negotiationStrategy,
-      openingPrice,
-      walkAwayPrice,
-      concessionPlan,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      canProceed: marginCheck.canProceed,
+      calculatedMargin: marginCheck.margin,
+      chosenBasePrice: chosenPrice,
     };
   } catch (error: any) {
     console.error('[AI Pricing] Analysis failed:', error.message);
@@ -1560,195 +390,53 @@ ${baseContext}
  * Helper function to format pricing analysis for display
  */
 export function formatPricingAnalysis(analysis: PricingAnalysisOutput): string {
-  let formatted = `Win Probability: ${analysis.winProbability}%\n`;
+  let formatted = `Pricing Analysis Results\n`;
+  formatted += `═══════════════════════════════════════\n\n`;
+  
+  formatted += `Chosen Base Price: ₹${analysis.chosenBasePrice.toLocaleString('en-IN', { 
+    minimumFractionDigits: 2, 
+    maximumFractionDigits: 2 
+  })}\n`;
+  
   formatted += `Guaranteed Win Price: ₹${analysis.guaranteedWinPrice.toLocaleString('en-IN', { 
     minimumFractionDigits: 2, 
     maximumFractionDigits: 2 
-  })}\n\n`;
+  })}\n`;
   
-  // Format reasoning - handle both string and object formats
+  formatted += `Calculated Margin: ${analysis.calculatedMargin.toFixed(2)}%\n`;
+  formatted += `Minimum Required Margin: 1%\n`;
+  formatted += `Can Proceed: ${analysis.canProceed ? '✅ Yes' : '❌ No'}\n`;
+  formatted += `Win Probability: ${analysis.winProbability}%\n\n`;
+  
+  // Format reasoning
   if (typeof analysis.reasoning === 'object' && analysis.reasoning !== null) {
-    formatted += `REASONING ANALYSIS:\n`;
-    if (analysis.reasoning.competitorAnalysis) {
-      formatted += `\nCompetitor Analysis:\n${analysis.reasoning.competitorAnalysis}\n`;
+    formatted += `REASONING:\n`;
+    if (analysis.reasoning.priceSelection) {
+      formatted += `\nPrice Selection:\n${analysis.reasoning.priceSelection}\n`;
     }
-    if (analysis.reasoning.historicalComparison) {
-      formatted += `\nHistorical Comparison:\n${analysis.reasoning.historicalComparison}\n`;
+    if (analysis.reasoning.marginCheck) {
+      formatted += `\nMargin Check:\n${analysis.reasoning.marginCheck}\n`;
     }
-    if (analysis.reasoning.demandAssessment) {
-      formatted += `\nDemand Assessment:\n${analysis.reasoning.demandAssessment}\n`;
+    if (analysis.reasoning.recommendation) {
+      formatted += `\nRecommendation:\n${analysis.reasoning.recommendation}\n`;
     }
-    if (analysis.reasoning.marginConsideration) {
-      formatted += `\nMargin Consideration:\n${analysis.reasoning.marginConsideration}\n`;
-    }
-    formatted += `\n`;
   } else {
     formatted += `Reasoning: ${analysis.reasoning}\n\n`;
   }
   
-  // Add confidence factors if available
-  if (analysis.confidenceFactors) {
-    formatted += `CONFIDENCE FACTORS:\n`;
-    if (analysis.confidenceFactors.dataQuality) {
-      formatted += `Data Quality: ${analysis.confidenceFactors.dataQuality}\n`;
-    }
-    if (analysis.confidenceFactors.historicalRelevance) {
-      formatted += `Historical Relevance: ${analysis.confidenceFactors.historicalRelevance}\n`;
-    }
-    if (analysis.confidenceFactors.competitorDataReliability) {
-      formatted += `Competitor Data Reliability: ${analysis.confidenceFactors.competitorDataReliability}\n`;
-    }
-    formatted += `\n`;
-  }
-  
   if (analysis.suggestions.length > 0) {
-    formatted += `Suggestions:\n`;
+    formatted += `\nSUGGESTIONS:\n`;
     analysis.suggestions.forEach((suggestion, index) => {
       formatted += `${index + 1}. ${suggestion}\n`;
     });
-    formatted += `\n`;
   }
-
-  if (analysis.negotiationNotes && analysis.negotiationNotes.length > 0) {
-    formatted += `Negotiation Notes:\n`;
-    analysis.negotiationNotes.forEach((note, index) => {
-      formatted += `${index + 1}. ${note}\n`;
-    });
-    formatted += `\n`;
-  }
-
+  
   if (analysis.warnings && analysis.warnings.length > 0) {
-    formatted += `⚠️ Warnings:\n`;
+    formatted += `\n⚠️ WARNINGS:\n`;
     analysis.warnings.forEach((warning, index) => {
       formatted += `${index + 1}. ${warning}\n`;
     });
-    formatted += `\n`;
   }
-
-  if (analysis.historicalInsight) {
-    formatted += `Historical Insight: ${analysis.historicalInsight}\n`;
-  }
-
-  if (analysis.competitivePosition) {
-    const positionLabels = {
-      'ABOVE_MARKET': 'Above Market',
-      'AT_MARKET': 'At Market',
-      'BELOW_MARKET': 'Below Market',
-    };
-    formatted += `\nCompetitive Position: ${positionLabels[analysis.competitivePosition]}\n`;
-  }
-
-  if (analysis.pricingStrategy) {
-    formatted += `Pricing Strategy: ${analysis.pricingStrategy}\n`;
-  }
-
-  if (analysis.negotiationLeverage && analysis.negotiationLeverage.length > 0) {
-    formatted += `\nNegotiation Leverage:\n`;
-    analysis.negotiationLeverage.forEach((leverage, index) => {
-      formatted += `${index + 1}. ${leverage}\n`;
-    });
-  }
-
-    if (analysis.learningInsights) {
-      formatted += `\n═══════════════════════════════════════\n`;
-      formatted += `LEARNING INSIGHTS\n`;
-      formatted += `═══════════════════════════════════════\n`;
-      formatted += `AI Accuracy: ${analysis.learningInsights.aiAccuracy.toFixed(1)}%\n`;
-      formatted += `Human Override Accuracy: ${analysis.learningInsights.overrideAccuracy.toFixed(1)}%\n`;
-      formatted += `Trend: ${analysis.learningInsights.trendAnalysis}\n`;
-      formatted += `Price Sensitivity: ${analysis.learningInsights.priceSensitivity}\n`;
-      
-      if (analysis.learningInsights.recentWins.length > 0) {
-        formatted += `\nRecent Wins:\n`;
-        analysis.learningInsights.recentWins.forEach((win, index) => {
-          formatted += `${index + 1}. ${win}\n`;
-        });
-      }
-      
-      if (analysis.learningInsights.recentLosses.length > 0) {
-        formatted += `\nRecent Losses:\n`;
-        analysis.learningInsights.recentLosses.forEach((loss, index) => {
-          formatted += `${index + 1}. ${loss}\n`;
-        });
-      }
-      
-      if (analysis.learningInsights.productInsights.length > 0) {
-        formatted += `\nProduct Insights:\n`;
-        analysis.learningInsights.productInsights.forEach((insight, index) => {
-          formatted += `${index + 1}. ${insight}\n`;
-        });
-      }
-    }
-
-    if (analysis.marginAnalysis) {
-      formatted += `\n═══════════════════════════════════════\n`;
-      formatted += `MARGIN ANALYSIS\n`;
-      formatted += `═══════════════════════════════════════\n`;
-      formatted += `Suggested Margin: ${analysis.marginAnalysis.suggestedMargin.toFixed(1)}%\n`;
-      formatted += `Minimum Acceptable: ${analysis.marginAnalysis.minimumAcceptableMargin.toFixed(1)}%\n`;
-      formatted += `Optimal Margin: ${analysis.marginAnalysis.optimalMargin.toFixed(1)}%\n`;
-      formatted += `Market Average: ${analysis.marginAnalysis.marketAverageMargin.toFixed(1)}%\n`;
-      formatted += `vs Market: ${analysis.marginAnalysis.marginVsMarket > 0 ? '+' : ''}${analysis.marginAnalysis.marginVsMarket.toFixed(1)}%\n`;
-    }
-
-    if (analysis.marginWarnings && analysis.marginWarnings.length > 0) {
-      formatted += `\n⚠️ Margin Warnings:\n`;
-      analysis.marginWarnings.forEach((warning, index) => {
-        formatted += `${index + 1}. ${warning}\n`;
-      });
-    }
-
-    if (analysis.marginTrends) {
-      formatted += `\n═══════════════════════════════════════\n`;
-      formatted += `MARGIN TRENDS\n`;
-      formatted += `═══════════════════════════════════════\n`;
-      formatted += `By Quantity: ${analysis.marginTrends.byQuantity}\n`;
-      formatted += `By Season: ${analysis.marginTrends.bySeason}\n`;
-      formatted += `Overall Trend: ${analysis.marginTrends.overallTrend}\n`;
-    }
-
-    if (analysis.negotiationStrategy) {
-      formatted += `\n═══════════════════════════════════════\n`;
-      formatted += `NEGOTIATION STRATEGY\n`;
-      formatted += `═══════════════════════════════════════\n`;
-      formatted += `Opening Price: ₹${analysis.negotiationStrategy.openingPrice.toLocaleString('en-IN', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      })}\n`;
-      formatted += `Walk-Away Price: ₹${analysis.negotiationStrategy.walkAwayPrice.toLocaleString('en-IN', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      })}\n`;
-      formatted += `Negotiation Room: ₹${(analysis.negotiationStrategy.openingPrice - analysis.negotiationStrategy.walkAwayPrice).toLocaleString('en-IN', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      })}\n\n`;
-      
-      formatted += `Concession Plan:\n`;
-      formatted += `${analysis.negotiationStrategy.concessionPlan.strategy}\n\n`;
-      
-      formatted += `Psychological Insights:\n`;
-      formatted += `${analysis.negotiationStrategy.psychologicalInsights}\n\n`;
-      
-      formatted += `Client Patterns:\n`;
-      formatted += `${analysis.negotiationStrategy.clientPatterns}\n\n`;
-      
-      if (analysis.negotiationStrategy.valueAddSuggestions.length > 0) {
-        formatted += `Value-Add Suggestions:\n`;
-        analysis.negotiationStrategy.valueAddSuggestions.forEach((suggestion, index) => {
-          formatted += `${index + 1}. ${suggestion}\n`;
-        });
-        formatted += `\n`;
-      }
-      
-      if (analysis.negotiationStrategy.alternativeOffers.length > 0) {
-        formatted += `Alternative Offers:\n`;
-        analysis.negotiationStrategy.alternativeOffers.forEach((offer, index) => {
-          formatted += `${index + 1}. ${offer}\n`;
-        });
-      }
-    }
-
+  
   return formatted;
 }
-
