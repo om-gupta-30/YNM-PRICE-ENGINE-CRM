@@ -22,12 +22,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Google Maps API key from environment variables
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    // Try multiple possible variable names for compatibility
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim() || 
+                   process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
     
-    if (!apiKey) {
+    if (!apiKey || apiKey.length === 0) {
       console.error('GOOGLE_MAPS_API_KEY is not set in environment variables');
+      console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('GOOGLE')));
       return NextResponse.json(
-        { error: 'Google Maps API key is not configured' },
+        { error: 'Google Maps API key is not configured. Please set GOOGLE_MAPS_API_KEY in your .env.local file and restart the server.' },
         { status: 500 }
       );
     }
