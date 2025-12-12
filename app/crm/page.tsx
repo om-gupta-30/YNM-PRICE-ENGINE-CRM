@@ -59,7 +59,6 @@ export default function CRMDashboard() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Employee state
@@ -85,14 +84,12 @@ export default function CRMDashboard() {
     if (typeof window !== 'undefined') {
       const user = localStorage.getItem('username') || '';
       const admin = localStorage.getItem('isAdmin') === 'true';
-      const analyst = localStorage.getItem('isDataAnalyst') === 'true';
       
       setUsername(user);
       setIsAdmin(admin);
-      setIsDataAnalyst(analyst);
       
       if (user) {
-        loadDashboardData(user, admin, analyst);
+        loadDashboardData(user, admin);
       }
       setLoading(false);
     }
@@ -107,7 +104,7 @@ export default function CRMDashboard() {
            lowerName.includes('administrator');
   };
 
-  const loadDashboardData = async (user: string, admin: boolean, analyst: boolean) => {
+  const loadDashboardData = async (user: string, admin: boolean) => {
     // Load leaderboard for everyone (filtered to exclude admin users)
     try {
       const leaderboardRes = await fetch('/api/leaderboard?days=30');
@@ -141,11 +138,11 @@ export default function CRMDashboard() {
       }
     }
 
-    if (admin && !analyst) {
+    if (admin) {
       // Load admin-specific data
       loadAdminData();
     } else {
-      // Load employee/analyst notifications
+      // Load employee notifications
       try {
         const notifRes = await fetch(`/api/notifications?employee=${user}`);
         const notifData = await notifRes.json();
@@ -294,7 +291,7 @@ export default function CRMDashboard() {
                     Welcome back, <span className="text-premium-gold">{username}</span>! 👋
                   </h1>
                   <p className="text-slate-400">
-                    {isAdmin ? '🔐 Admin Dashboard' : isDataAnalyst ? '📊 Data Analyst Dashboard' : '💼 Sales Dashboard'} • AI-Powered Insights
+                    {isAdmin ? '🔐 Admin Dashboard' : '💼 Sales Dashboard'} • AI-Powered Insights
                   </p>
                 </div>
                 {/* Only show gamification elements (streak & rank) for non-admin users */}
@@ -373,7 +370,7 @@ export default function CRMDashboard() {
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* AI Insights Section - Different for Admin vs Employee */}
-              {isAdmin && !isDataAnalyst ? (
+              {isAdmin ? (
                 // ADMIN VIEW
                 <div className="lg:col-span-2 bg-slate-800/50 backdrop-blur-sm rounded-2xl p-6 border border-slate-700/50">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">

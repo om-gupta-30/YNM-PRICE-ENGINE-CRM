@@ -49,13 +49,10 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
-  // Block data analysts from accessing leads
+  // No blocking needed - all users can access leads
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const isDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
-      if (isDataAnalyst) {
-        router.replace('/crm');
-      }
+      // All authenticated users can access leads
     }
   }, [router]);
 

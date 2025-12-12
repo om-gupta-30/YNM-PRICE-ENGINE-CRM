@@ -13,13 +13,11 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
   const pathname = usePathname();
   const safePathname = pathname ?? "/";
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
 
-  // Check if user is admin or data analyst
+  // Check if user is admin
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
-      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
     }
   }, []);
 
@@ -30,9 +28,9 @@ export default function CRMLayout({ children }: CRMLayoutProps) {
     return safePathname === path || safePathname.startsWith(path + '/');
   };
 
-  // Data analysts cannot see Leads, All Sub-Accounts, or All Contacts
-  const showLeads = !isDataAnalyst;
-  const showAdminSections = isAdmin && !isDataAnalyst; // Full admin only, not data analysts
+  // Admin sections are only visible to admins
+  const showLeads = true; // All users can see leads
+  const showAdminSections = isAdmin; // Admin only
 
   const menuItems = [
     {

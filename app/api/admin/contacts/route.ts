@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const accountId = searchParams.get('account_id');
     const subAccountId = searchParams.get('sub_account_id');
     const callStatus = searchParams.get('call_status');
-    const employeeId = searchParams.get('employee_id');
+    const employeeId = searchParams.get('employee_id'); // For filtering by account's assigned_employee
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -52,11 +52,16 @@ export async function GET(request: NextRequest) {
     if (callStatus) {
       query = query.eq('call_status', callStatus);
     }
-    if (employeeId) {
-      query = query.eq('created_by', employeeId);
-    }
 
     const { data: contacts, error } = await query;
+
+    // Filter by account's assigned_employee if specified (done after query to access joined account data)
+    let filteredContacts = contacts || [];
+    if (employeeId && employeeId !== 'all') {
+      filteredContacts = filteredContacts.filter((contact: any) => {
+        return contact.accounts?.assigned_employee === employeeId;
+      });
+    }
 
     if (error) {
       console.error('Error fetching contacts:', error);
@@ -104,7 +109,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Format contacts using lookup maps (no additional queries)
-    const formattedContacts = (contacts || []).map((contact: any) => ({
+    const formattedContacts = filteredContacts.map((contact: any) => ({
       id: contact.id,
       accountId: contact.account_id,
       accountName: contact.accounts?.account_name || null,

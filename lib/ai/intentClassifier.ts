@@ -42,7 +42,7 @@ import {
  *   Example: "How many contacts do I have in Mumbai?"
  * @param userContext - Optional user context for personalization:
  *   - employeeId: Employee ID for filtering
- *   - role: User role (admin, employee, data_analyst)
+ *   - role: User role (admin, employee)
  *   - permissions: Array of permission strings
  * @returns Promise<IntentClassificationResult> containing:
  *   - intent: QueryIntent with category, tables, filters, etc.

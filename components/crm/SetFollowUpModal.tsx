@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import DatePicker from 'react-datepicker';
 import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
+import 'react-datepicker/dist/react-datepicker.css';
 
 interface SetFollowUpModalProps {
   isOpen: boolean;
@@ -14,7 +16,9 @@ interface SetFollowUpModalProps {
 }
 
 export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, currentFollowUpDate, onFollowUpSet }: SetFollowUpModalProps) {
-  const [followUpDate, setFollowUpDate] = useState(currentFollowUpDate || '');
+  const [followUpDate, setFollowUpDate] = useState<Date | null>(
+    currentFollowUpDate ? new Date(currentFollowUpDate) : null
+  );
   const [submitting, setSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -22,6 +26,15 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Update date when currentFollowUpDate changes
+  useEffect(() => {
+    if (currentFollowUpDate) {
+      setFollowUpDate(new Date(currentFollowUpDate));
+    } else {
+      setFollowUpDate(null);
+    }
+  }, [currentFollowUpDate]);
 
   // Bring modal into view when it opens
   useEffect(() => {
@@ -44,11 +57,14 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
       setSubmitting(true);
       const username = typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin';
 
+      // Format date as YYYY-MM-DD for API
+      const dateString = followUpDate.toISOString().split('T')[0];
+
       const response = await fetch(`/api/crm/leads/${leadId}/follow-up`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          follow_up_date: followUpDate,
+          follow_up_date: dateString,
           created_by: username,
         }),
       });
@@ -59,7 +75,7 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
         throw new Error(data.error || 'Failed to set follow-up');
       }
 
-      // Trigger notification refresh
+      // Trigger notification refresh immediately
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('refreshNotifications'));
       }
@@ -91,7 +107,12 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
         throw new Error(data.error || 'Failed to remove follow-up');
       }
 
-      setFollowUpDate('');
+      // Trigger notification refresh immediately
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshNotifications'));
+      }
+
+      setFollowUpDate(null);
       onFollowUpSet();
       onClose();
     } catch (error: any) {
@@ -102,8 +123,9 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
     }
   };
 
-  // Get today's date in YYYY-MM-DD format
-  const today = new Date().toISOString().split('T')[0];
+  // Get today's date
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const modalContent = (
     <div 
@@ -131,12 +153,14 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
             <label className="block text-sm font-semibold text-slate-300 mb-2">
               Lead: <span className="text-premium-gold">{leadName}</span>
             </label>
-            <input
-              type="date"
-              value={followUpDate}
-              onChange={(e) => setFollowUpDate(e.target.value)}
-              min={today}
+            <DatePicker
+              selected={followUpDate}
+              onChange={(date: Date | null) => setFollowUpDate(date)}
+              minDate={today}
+              dateFormat="dd/MM/yyyy"
               className="w-full px-4 py-3 text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold"
+              wrapperClassName="w-full"
+              placeholderText="Select follow-up date"
               required
             />
             {currentFollowUpDate && (
@@ -162,6 +186,16 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
               {submitting ? 'Saving...' : currentFollowUpDate ? 'Update Follow-Up' : 'Set Follow-Up'}
             </button>
           </div>
+          {currentFollowUpDate && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={submitting}
+              className="w-full px-6 py-3 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Remove Follow-Up Date
+            </button>
+          )}
         </form>
       </div>
     </div>

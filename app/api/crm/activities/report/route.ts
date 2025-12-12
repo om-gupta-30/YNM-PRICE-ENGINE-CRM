@@ -66,7 +66,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeUsername = searchParams.get('employee');
     const isAdmin = searchParams.get('isAdmin') === 'true';
-    const isDataAnalyst = searchParams.get('isDataAnalyst') === 'true';
     const filterEmployee = searchParams.get('filterEmployee');
     const filterDate = searchParams.get('filterDate');
     const format = searchParams.get('format') || 'json';
@@ -90,9 +89,9 @@ export async function GET(request: NextRequest) {
       .select('*');
 
     // Filter by employee
-    if (isAdmin && !isDataAnalyst && filterEmployee) {
+    if (isAdmin && filterEmployee) {
       query = query.eq('employee_id', filterEmployee);
-    } else if (!isAdmin || isDataAnalyst) {
+    } else if (!isAdmin) {
       if (employeeUsername) {
         query = query.eq('employee_id', employeeUsername);
       }
@@ -150,8 +149,7 @@ export async function GET(request: NextRequest) {
       filters: {
         employee: filterEmployee || (employeeUsername || 'All'),
         date: filterDate || 'All dates',
-        isAdmin: isAdmin && !isDataAnalyst,
-        isDataAnalyst: isDataAnalyst,
+        isAdmin: isAdmin,
       },
       generatedAt: new Date().toISOString(),
     };

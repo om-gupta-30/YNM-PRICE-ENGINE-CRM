@@ -30,7 +30,8 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
   return (
     <>
-      <ParticleBackground />
+      {/* ParticleBackground disabled for performance on Windows laptops */}
+      {/* <ParticleBackground /> */}
       {/* Activity Tracker - monitors user activity for employees */}
       <ActivityTracker isAdmin={isAdmin} />
       <div className="relative z-0 pointer-events-auto">

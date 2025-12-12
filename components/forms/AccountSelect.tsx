@@ -44,11 +44,14 @@ export default function AccountSelect({
       setLoading(true);
       setError(null);
       
-      // Always fetch all accounts - no filtering by employee
+      // Filter accounts based on user role:
+      // - Admin: see all accounts
+      // - Employees: see only accounts assigned to them
       const params = new URLSearchParams();
-      // Still pass isAdmin for any future admin-specific logic if needed
       if (isAdmin) {
         params.append('isAdmin', 'true');
+      } else if (employeeUsername && employeeUsername !== 'Admin') {
+        params.append('employee', employeeUsername);
       }
       
       const response = await fetch(`/api/accounts?${params}`);

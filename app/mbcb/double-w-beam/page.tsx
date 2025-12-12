@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import DatePicker from 'react-datepicker';
 import SmartDropdown from '@/components/forms/SmartDropdown';
 import SubAccountSelect from '@/components/forms/SubAccountSelect';
@@ -72,7 +72,14 @@ function formatIndianUnits(value: number): string {
 export default function DoubleWBeamPage() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { username } = useUser();
+  
+  // Edit mode state
+  const editId = searchParams?.get('edit');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState<number | null>(null);
+  const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   
   // Admin state
   const [isAdmin, setIsAdmin] = useState(false);
@@ -478,10 +485,142 @@ export default function DoubleWBeamPage() {
     setTotalWeight(totalWeightPerRmKg); // Store kgPerRm in totalWeight
   };
 
+  // Load quotation data for edit mode
+  useEffect(() => {
+    if (editId && !isLoadingEditData && !isEditMode) {
+      const loadEditData = async () => {
+        setIsLoadingEditData(true);
+        try {
+          const response = await fetch(`/api/quotes/${editId}?product_type=mbcb`);
+          if (!response.ok) {
+            throw new Error('Failed to load quotation');
+          }
+          const { data } = await response.json();
+          
+          if (data) {
+            setIsEditMode(true);
+            setEditingQuoteId(data.id);
+            
+            // Load basic quotation info
+            setStateId(data.state_id);
+            setCityId(data.city_id);
+            setPurpose(data.purpose || '');
+            setSubAccountId(data.sub_account_id);
+            setSubAccountName(data.sub_account_name || '');
+            setContactId(data.contact_id);
+            setCustomerName(data.customer_name || '');
+            
+            // Load dates
+            if (data.date) {
+              const dateParts = data.date.includes('-') 
+                ? data.date.split('-')
+                : data.date.split('/');
+              if (dateParts.length === 3) {
+                const [year, month, day] = data.date.includes('-') 
+                  ? dateParts 
+                  : [dateParts[2], dateParts[1], dateParts[0]];
+                setEstimateDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+              }
+            }
+            
+            // Load estimate number
+            if (data.pdf_estimate_number) {
+              setEstimateNumber(data.pdf_estimate_number);
+            }
+            
+            // Load raw payload
+            const payload = data.raw_payload || {};
+            
+            // Load parts selection
+            setIncludeWBeam(payload.includeWBeam ?? true);
+            setIncludePost(payload.includePost ?? true);
+            setIncludeSpacer(payload.includeSpacer ?? true);
+            setIncludeTransportation(payload.includeTransportation ?? false);
+            setIncludeInstallation(payload.includeInstallation ?? false);
+            
+            // Load part specifications
+            if (payload.wBeam) {
+              setWBeam(payload.wBeam);
+            }
+            if (payload.post) {
+              setPost(payload.post);
+            }
+            if (payload.spacer) {
+              setSpacer(payload.spacer);
+            }
+            
+            // Load fastener mode
+            if (payload.fastenerMode) {
+              setFastenerMode(payload.fastenerMode);
+              if (payload.fastenerMode === 'manual') {
+                setHexBoltQty(payload.hexBoltQty || 0);
+                setButtonBoltQty(payload.buttonBoltQty || 0);
+              }
+            }
+            
+            // Load results (to restore confirmed states)
+            if (payload.wBeamResult) {
+              setWBeamResult(payload.wBeamResult);
+            }
+            if (payload.postResult) {
+              setPostResult(payload.postResult);
+            }
+            if (payload.spacerResult) {
+              setSpacerResult(payload.spacerResult);
+            }
+            
+            // Load pricing
+            setRatePerKg(payload.ratePerKg || null);
+            setTransportCostPerKg(payload.transportCostPerKg || null);
+            setInstallationCostPerRm(payload.installationCostPerRm || null);
+            setQuantityRm(data.quantity_rm || payload.quantityRm || null);
+            
+            // Note: totalCostPerRm and finalTotal are computed values, not state
+            // They will be recalculated automatically based on the loaded inputs
+            
+            // Load AI pricing if exists
+            if (data.ai_suggested_price_per_unit) {
+              setAiSuggestedPrice(data.ai_suggested_price_per_unit);
+            }
+            if (data.ai_win_probability) {
+              setAiWinProbability(data.ai_win_probability);
+            }
+            if (data.ai_pricing_insights) {
+              setAiPricingInsights(data.ai_pricing_insights);
+              if (data.ai_pricing_insights.overrideReason) {
+                setOverrideReason(data.ai_pricing_insights.overrideReason);
+                setShowOverrideReasonField(true);
+              }
+            }
+            
+            // Auto-confirm quotation and parts if data exists
+            setIsQuotationConfirmed(true);
+            setIsEditingQuotation(false);
+            if (data.total_cost_per_rm) {
+              setIsCostConfirmed(true);
+            }
+            if (data.quantity_rm) {
+              setIsQuantityConfirmed(true);
+            }
+            
+            setToast({ message: 'Quotation loaded for editing', type: 'success' });
+          }
+        } catch (error) {
+          console.error('Error loading quotation for edit:', error);
+          setToast({ message: 'Failed to load quotation for editing', type: 'error' });
+        } finally {
+          setIsLoadingEditData(false);
+        }
+      };
+      
+      loadEditData();
+    }
+  }, [editId]);
+
   // Reset all state when navigating to this page - only on mount
   useEffect(() => {
-    // Only reset if we're actually on this page and state hasn't been initialized
-    if (pathname === '/mbcb/double-w-beam' && !wBeamResult && !postResult && !spacerResult) {
+    // Only reset if we're actually on this page and state hasn't been initialized and not in edit mode
+    if (pathname === '/mbcb/double-w-beam' && !wBeamResult && !postResult && !spacerResult && !isEditMode) {
       // Reset all form states to defaults
       setIncludeWBeam(true);
       setIncludePost(true);
@@ -527,7 +666,7 @@ export default function DoubleWBeamPage() {
       setTotalWeight(0);
       setTotalSetWeight(0);
     }
-  }, []); // Only run on mount
+  }, [isEditMode]); // Only run on mount or when edit mode changes
 
   // Update totals whenever any result or selection changes
   useEffect(() => {
@@ -891,7 +1030,7 @@ export default function DoubleWBeamPage() {
     setHistoricalMatch(null);
   };
 
-  // Save Quotation Function (separate from PDF)
+  // Save Quotation and Generate PDF Function (combined for employees)
   const handleSaveQuotation = async () => {
     // Prevent duplicate saves
     if (isSaving) {
@@ -914,6 +1053,11 @@ export default function DoubleWBeamPage() {
         setToast({ message: 'Please confirm parts and enter rate per kg', type: 'error' });
         return;
       }
+    }
+
+    if (!finalTotal || !gstCalculations) {
+      setToast({ message: 'Please complete all calculations before saving', type: 'error' });
+      return;
     }
 
     // ============================================
@@ -951,8 +1095,29 @@ export default function DoubleWBeamPage() {
     }
 
     setIsSaving(true);
+    
     try {
       const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
+      
+      // Fetch a NEW estimate number for PDF only if not in edit mode
+      let pdfEstimateNumber = estimateNumber;
+      if (!isEditMode || !pdfEstimateNumber) {
+        try {
+          const estResponse = await fetch('/api/estimate/next-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (estResponse.ok) {
+            const estData = await estResponse.json();
+            if (estData.estimateNumber) {
+              pdfEstimateNumber = estData.estimateNumber;
+              setEstimateNumber(pdfEstimateNumber); // Update display
+            }
+          }
+        } catch (e) {
+          console.log('Could not fetch new estimate number, using existing');
+        }
+      }
       
       // Save meta fields (customers, purposes) to database ONLY when saving quotation
       // State and City are already in the database, no need to save them
@@ -1004,6 +1169,7 @@ export default function DoubleWBeamPage() {
           ...aiPricingInsights,
           overrideReason: overrideReason || null,
         } : null,
+        pdf_estimate_number: pdfEstimateNumber, // Save PDF estimate number
         created_by: currentUsername,
         is_saved: true,
         raw_payload: {
@@ -1038,8 +1204,14 @@ export default function DoubleWBeamPage() {
         },
       };
 
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
+      // Use PUT to update if in edit mode, POST to create new
+      const url = isEditMode && editingQuoteId 
+        ? `/api/quotes/${editingQuoteId}?product_type=mbcb`
+        : '/api/quotes';
+      const method = isEditMode && editingQuoteId ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1048,11 +1220,118 @@ export default function DoubleWBeamPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        setToast({ message: errorData.error || 'Error saving quotation', type: 'error' });
+        setToast({ message: errorData.error || `Error ${isEditMode ? 'updating' : 'saving'} quotation`, type: 'error' });
+        setIsSaving(false);
         return;
       }
 
-      setToast({ message: 'Quotation saved successfully', type: 'success' });
+      // After saving, generate PDF
+      try {
+        // Load logo
+        const logoBase64 = await loadLogoAsBase64();
+        
+        const items = [];
+        
+        // Build description for crash barrier components (clubbed together)
+        const components = [];
+        if (includeWBeam && wBeamResult?.found) {
+          components.push(`Double W-Beam (${wBeam.thickness}mm, ${wBeam.coatingGsm} GSM)`);
+        }
+        if (includePost && postResult?.found) {
+          components.push(`Post (${post.thickness}mm, ${post.length}mm, ${post.coatingGsm} GSM)`);
+        }
+        if (includeSpacer && spacerResult?.found) {
+          components.push(`Spacer (${spacer.thickness}mm, ${spacer.length}mm, ${spacer.coatingGsm} GSM)`);
+        }
+        if (fastenerMode === 'default') {
+          components.push('Fasteners (Standard)');
+        } else if (fastenerMode === 'manual' && (hexBoltQty > 0 || buttonBoltQty > 0)) {
+          components.push(`Fasteners (Hex: ${hexBoltQty}, Button: ${buttonBoltQty})`);
+        }
+        
+        const materialOnlyCost = (materialCostPerRm || 0) * (quantityRm || 0);
+        
+        // Add main crash barrier item (clubbed together)
+        if (components.length > 0) {
+          items.push({
+            description: `Metal Beam Crash Barrier (Double W-Beam)\n${components.join(', ')}`,
+            quantity: quantityRm || 0,
+            unit: 'RM',
+            hsnCode: getPDFHSNCode('Crash Barrier', 'MBCB'),
+            rate: materialCostPerRm || 0,
+            amount: materialOnlyCost,
+          });
+        }
+
+        // Add Transportation if included (separate line item)
+        if (includeTransportation && transportCostPerRm && transportCostPerRm > 0) {
+          items.push({
+            description: 'Transportation Charges',
+            quantity: quantityRm || 0,
+            unit: 'RM',
+            hsnCode: '9965',
+            rate: transportCostPerRm,
+            amount: transportCostPerRm * (quantityRm || 0),
+          });
+        }
+
+        // Add Installation if included (separate line item)
+        if (includeInstallation && installationCostPerRm && installationCostPerRm > 0) {
+          items.push({
+            description: 'Installation Charges',
+            quantity: quantityRm || 0,
+            unit: 'RM',
+            hsnCode: '9954',
+            rate: installationCostPerRm,
+            amount: installationCostPerRm * (quantityRm || 0),
+          });
+        }
+
+        const formatDate = (date: Date | null) => {
+          if (!date) return '';
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        };
+
+        const pdfData = {
+          estimateNumber: pdfEstimateNumber,
+          estimateDate: formatDate(estimateDate),
+          expiryDate: formatDate(expiryDate),
+          placeOfSupply: `${cityName}, ${stateName}`,
+          billTo: billToAddress || {
+            name: accountName || subAccountName,
+            address: '',
+            city: cityName,
+            state: stateName,
+            pincode: '',
+            gstNumber: '',
+          },
+          shipTo: shipToAddress || {
+            name: subAccountName,
+            address: '',
+            city: cityName,
+            state: stateName,
+            pincode: '',
+          },
+          items: items,
+          subtotal: finalTotal,
+          sgst: gstCalculations.sgst,
+          cgst: gstCalculations.cgst,
+          igst: gstCalculations.igst,
+          totalAmount: gstCalculations.totalWithGST,
+          termsAndConditions: termsAndConditions,
+        };
+
+        const pdf = generateQuotationPDF(pdfData, logoBase64 || undefined);
+        pdf.save(`Quotation_${pdfEstimateNumber.replace(/\//g, '-')}_${Date.now()}.pdf`);
+        
+        setToast({ message: `Quotation ${isEditMode ? 'updated' : 'saved'} and PDF generated successfully`, type: 'success' });
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError);
+        setToast({ message: 'Quotation saved but PDF generation failed. Please try generating PDF again.', type: 'error' });
+      }
     } catch (error) {
       console.error('Error saving quotation:', error);
       setToast({ message: 'Error saving quotation. Please try again.', type: 'error' });
@@ -2785,9 +3064,9 @@ export default function DoubleWBeamPage() {
           </div>
         )}
 
-        {/* Save Quotation Button - Only show when quotation, cost, and quantity are confirmed - Hidden for MBCB and Admin users */}
+        {/* Save Quotation and Generate PDF Button - Combined for employees - Only show when quotation, cost, and quantity are confirmed - Hidden for MBCB and Admin users */}
         {!isViewOnlyUser && isQuotationConfirmed && isCostConfirmed && isQuantityConfirmed && ((fastenerMode === 'manual' && calculateFastenerWeight() > 0 && ratePerKg !== null && ratePerKg > 0) || 
-          (fastenerMode === 'default' && totalWeight > 0 && ratePerKg !== null && ratePerKg > 0)) && (
+          (fastenerMode === 'default' && totalWeight > 0 && ratePerKg !== null && ratePerKg > 0)) && gstCalculations && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button
               onClick={handleSaveQuotation}
@@ -2797,21 +3076,8 @@ export default function DoubleWBeamPage() {
                 boxShadow: '0 0 20px rgba(212, 166, 90, 0.3)',
               }}
             >
-              {isSaving ? '⏳ Saving...' : '💾 Save Quotation'}
+              {isSaving ? '⏳ Saving & Generating PDF...' : '💾 Save Quotation & Generate PDF'}
             </button>
-            
-            {/* Generate PDF Button - Employee Only */}
-            {!isViewOnlyUser && gstCalculations && (
-              <button
-                onClick={handleGeneratePDF}
-                className="btn-premium-gold px-12 py-4 text-lg shimmer relative overflow-hidden"
-                style={{
-                  boxShadow: '0 0 20px rgba(209, 168, 90, 0.3)',
-                }}
-              >
-                📄 Generate PDF
-              </button>
-            )}
           </div>
         )}
         

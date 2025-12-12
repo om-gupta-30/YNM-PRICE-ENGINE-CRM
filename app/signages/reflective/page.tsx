@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import DatePicker from 'react-datepicker';
 import SmartDropdown from '@/components/forms/SmartDropdown';
 import SubAccountSelect from '@/components/forms/SubAccountSelect';
@@ -127,7 +127,14 @@ function formatIndianUnits(value: number): string {
 
 export default function ReflectivePartPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { username } = useUser();
+  
+  // Edit mode state
+  const editId = searchParams?.get('edit');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingQuoteId, setEditingQuoteId] = useState<number | null>(null);
+  const [isLoadingEditData, setIsLoadingEditData] = useState(false);
   
   // Admin state
   const [isAdmin, setIsAdmin] = useState(false);
@@ -358,6 +365,146 @@ export default function ReflectivePartPage() {
   const [msLengths, setMsLengths] = useState<{ postLengthM: number; frameLengthM: number; remarks: string } | null>(null);
   const [msLengthsLoading, setMsLengthsLoading] = useState<boolean>(false);
   
+  // Load quotation data for edit mode
+  useEffect(() => {
+    if (editId && !isLoadingEditData && !isEditMode) {
+      const loadEditData = async () => {
+        setIsLoadingEditData(true);
+        try {
+          const response = await fetch(`/api/quotes/${editId}?product_type=signages`);
+          if (!response.ok) {
+            throw new Error('Failed to load quotation');
+          }
+          const { data } = await response.json();
+          
+          if (data) {
+            setIsEditMode(true);
+            setEditingQuoteId(data.id);
+            
+            // Load basic quotation info
+            setStateId(data.state_id);
+            setCityId(data.city_id);
+            setPurpose(data.purpose || '');
+            setSubAccountId(data.sub_account_id);
+            setSubAccountName(data.sub_account_name || '');
+            setContactId(data.contact_id);
+            setCustomerName(data.customer_name || '');
+            
+            // Load dates
+            if (data.date) {
+              const dateParts = data.date.includes('-') 
+                ? data.date.split('-')
+                : data.date.split('/');
+              if (dateParts.length === 3) {
+                const [year, month, day] = data.date.includes('-') 
+                  ? dateParts 
+                  : [dateParts[2], dateParts[1], dateParts[0]];
+                setEstimateDate(new Date(parseInt(year), parseInt(month) - 1, parseInt(day)));
+              }
+            }
+            
+            // Load estimate number
+            if (data.pdf_estimate_number) {
+              setEstimateNumber(data.pdf_estimate_number);
+            }
+            
+            // Load raw payload
+            const payload = data.raw_payload || {};
+            
+            // Load board specifications
+            if (payload.boardType) {
+              setBoardType(payload.boardType);
+            }
+            if (payload.shape) {
+              setShape(payload.shape);
+            }
+            if (payload.size) {
+              setSize(payload.size);
+            }
+            if (payload.width) {
+              setWidth(payload.width);
+            }
+            if (payload.height) {
+              setHeight(payload.height);
+            }
+            if (payload.sheetingType) {
+              setSheetingType(payload.sheetingType);
+            }
+            if (payload.acpThickness) {
+              setAcpThickness(payload.acpThickness);
+            }
+            if (payload.printingType) {
+              setPrintingType(payload.printingType);
+            }
+            
+            // Load quantity
+            if (payload.quantity) {
+              setQuantity(payload.quantity);
+            }
+            
+            // Load MS structure if exists
+            if (payload.msEnabled) {
+              setMsEnabled(payload.msEnabled);
+              if (payload.msPostSpec) {
+                setMsPostSpec(payload.msPostSpec);
+              }
+              if (payload.msFrameSpec) {
+                setMsFrameSpec(payload.msFrameSpec);
+              }
+              if (payload.msPostLengthM && payload.msFrameLengthM !== undefined) {
+                setMsLengths({
+                  postLengthM: payload.msPostLengthM,
+                  frameLengthM: payload.msFrameLengthM,
+                  remarks: '',
+                });
+              }
+            }
+            
+            // Note: costPerPiece and finalTotal are computed values, not state
+            // They will be recalculated automatically based on the loaded inputs
+            
+            // Load AI pricing if exists
+            if (data.ai_suggested_price_per_unit) {
+              setAiSuggestedPrice(data.ai_suggested_price_per_unit);
+            }
+            if (data.ai_win_probability) {
+              setAiWinProbability(data.ai_win_probability);
+            }
+            if (data.ai_pricing_insights) {
+              setAiPricingInsights(data.ai_pricing_insights);
+              if (data.ai_pricing_insights.overrideReason) {
+                setOverrideReason(data.ai_pricing_insights.overrideReason);
+                setShowOverrideReasonField(true);
+              }
+            }
+            
+            // Auto-confirm if data exists
+            setIsQuotationConfirmed(true);
+            setIsEditingQuotation(false);
+            if (payload.boardType && payload.shape) {
+              setBoardSpecsConfirmed(true);
+            }
+            if (payload.costPerPiece) {
+              setPricingConfirmed(true);
+            }
+            if (payload.msEnabled && payload.msPostSpec) {
+              setIsMsStructureConfirmed(true);
+            }
+            
+            setToast({ message: 'Quotation loaded for editing', type: 'success' });
+          }
+        } catch (error) {
+          console.error('Error loading quotation for edit:', error);
+          setToast({ message: 'Failed to load quotation for editing', type: 'error' });
+        } finally {
+          setIsLoadingEditData(false);
+        }
+      };
+      
+      loadEditData();
+    }
+  }, [editId]);
+
   // Get available shapes for selected board type
   const availableShapes = useMemo(() => {
     if (!boardType) return [];
@@ -924,7 +1071,7 @@ export default function ReflectivePartPage() {
     setHistoricalMatch(null);
   };
   
-  // Save quotation
+  // Save quotation and Generate PDF (combined for employees)
   const handleSaveQuotation = async () => {
     if (!isQuotationComplete) {
       setToast({ message: 'Please complete all quotation details', type: 'error' });
@@ -933,6 +1080,11 @@ export default function ReflectivePartPage() {
     
     if (!areaResult || !costPerPiece || !finalTotal) {
       setToast({ message: 'Please complete all calculation fields', type: 'error' });
+      return;
+    }
+    
+    if (!gstCalculations) {
+      setToast({ message: 'Please complete all calculations before saving', type: 'error' });
       return;
     }
     
@@ -975,11 +1127,30 @@ export default function ReflectivePartPage() {
     try {
       const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
       
+      // Fetch a NEW estimate number for PDF only if not in edit mode
+      let pdfEstimateNumber = estimateNumber;
+      if (!isEditMode || !pdfEstimateNumber) {
+        try {
+          const estResponse = await fetch('/api/estimate/next-number', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (estResponse.ok) {
+            const estData = await estResponse.json();
+            if (estData.estimateNumber) {
+              pdfEstimateNumber = estData.estimateNumber;
+              setEstimateNumber(pdfEstimateNumber); // Update display
+            }
+          }
+        } catch (e) {
+          console.log('Could not fetch new estimate number, using existing');
+        }
+      }
+      
       // Save meta fields (customers, purposes) to database ONLY when saving quotation
       // State and City are already in the database, no need to save them
       if (customerName.trim()) {
         // Determine sales employee from current user
-        const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
         const salesEmployee = currentUsername.startsWith('Sales_') 
           ? currentUsername 
           : 'Admin';
@@ -1058,8 +1229,14 @@ export default function ReflectivePartPage() {
         dateForDb = `${year}-${month}-${day}`;
       }
       
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
+      // Use PUT to update if in edit mode, POST to create new
+      const url = isEditMode && editingQuoteId 
+        ? `/api/quotes/${editingQuoteId}?product_type=signages`
+        : '/api/quotes';
+      const method = isEditMode && editingQuoteId ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -1087,6 +1264,7 @@ export default function ReflectivePartPage() {
             ...aiPricingInsights,
             overrideReason: overrideReason || null,
           } : null,
+          pdf_estimate_number: pdfEstimateNumber, // Save PDF estimate number
           raw_payload: rawPayload,
           created_by: currentUsername,
           is_saved: true,
@@ -1095,11 +1273,94 @@ export default function ReflectivePartPage() {
       
       if (!response.ok) {
         const errorData = await response.json();
-        setToast({ message: errorData.error || 'Error saving quotation', type: 'error' });
+        setToast({ message: errorData.error || `Error ${isEditMode ? 'updating' : 'saving'} quotation`, type: 'error' });
+        setIsSaving(false);
         return;
       }
       
-      setToast({ message: 'Quotation saved successfully', type: 'success' });
+      // After saving, generate PDF
+      try {
+        // Load logo
+        const logoBase64 = await loadLogoAsBase64();
+        
+        const items = [];
+        
+        // Reflective Board
+        const sizeDescription = shape === 'Rectangular' 
+          ? `${width}x${height}mm` 
+          : `${size}mm`;
+        
+        items.push({
+          description: `${boardType} - ${shape} (${sizeDescription})\n${sheetingType}, ${acpThickness}mm ACP, ${printingType}`,
+          quantity: quantity,
+          unit: 'Nos',
+          hsnCode: getPDFHSNCode('Board', 'Signages'),
+          rate: costPerPiece || 0,
+          amount: finalTotal || 0,
+        });
+
+        // MS Structure (if enabled)
+        if (msEnabled && msCostPerStructure > 0) {
+          const frameDesc = msFrameSpec && msLengths?.frameLengthM 
+            ? `, Frame: ${msFrameSpec}, ${msLengths.frameLengthM}m` 
+            : '';
+          
+          items.push({
+            description: `MS Structure\nPost: ${msPostSpec}, ${msLengths?.postLengthM}m${frameDesc}`,
+            quantity: quantity,
+            unit: 'Nos',
+            hsnCode: '7308',
+            rate: msCostPerStructure,
+            amount: totalMsCost,
+          });
+        }
+
+        // Format dates for PDF
+        const formatDate = (date: Date | null) => {
+          if (!date) return '';
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = String(date.getMonth() + 1).padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        };
+
+        const pdfData = {
+          estimateNumber: pdfEstimateNumber,
+          estimateDate: formatDate(estimateDate),
+          expiryDate: formatDate(expiryDate),
+          placeOfSupply: `${cityName}, ${stateName}`,
+          billTo: billToAddress || {
+            name: accountName || subAccountName,
+            address: '',
+            city: cityName,
+            state: stateName,
+            pincode: '',
+            gstNumber: '',
+          },
+          shipTo: shipToAddress || {
+            name: subAccountName,
+            address: '',
+            city: cityName,
+            state: stateName,
+            pincode: '',
+          },
+          items: items,
+          subtotal: combinedTotal || finalTotal,
+          sgst: gstCalculations.sgst,
+          cgst: gstCalculations.cgst,
+          igst: gstCalculations.igst,
+          totalAmount: gstCalculations.totalWithGST,
+          termsAndConditions: termsAndConditions,
+        };
+
+        const pdf = generateQuotationPDF(pdfData, logoBase64 || undefined);
+        pdf.save(`Quotation_${pdfEstimateNumber.replace(/\//g, '-')}_${Date.now()}.pdf`);
+        
+        setToast({ message: `Quotation ${isEditMode ? 'updated' : 'saved'} and PDF generated successfully`, type: 'success' });
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError);
+        setToast({ message: 'Quotation saved but PDF generation failed. Please try generating PDF again.', type: 'error' });
+      }
     } catch (error) {
       console.error('Error saving quotation:', error);
       setToast({ message: 'Error saving quotation. Please try again.', type: 'error' });
@@ -2401,8 +2662,8 @@ export default function ReflectivePartPage() {
           </div>
         )}
 
-        {/* Save Quotation Button - Only show when quotation is confirmed - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && !isAdmin && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && (
+        {/* Save Quotation and Generate PDF Button - Combined for employees - Only show when quotation is confirmed - Hidden for MBCB and Admin users */}
+        {!isViewOnlyUser && !isAdmin && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && gstCalculations && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button
               onClick={handleSaveQuotation}
@@ -2412,21 +2673,8 @@ export default function ReflectivePartPage() {
                 boxShadow: '0 0 20px rgba(209, 168, 90, 0.3)',
               }}
             >
-              {isSaving ? '⏳ Saving...' : '💾 Save Quotation'}
+              {isSaving ? '⏳ Saving & Generating PDF...' : '💾 Save Quotation & Generate PDF'}
             </button>
-            
-            {/* Generate PDF Button - Employee Only */}
-            {!isViewOnlyUser && !isAdmin && gstCalculations && (
-              <button
-                onClick={handleGeneratePDF}
-                className="btn-premium-gold btn-ripple btn-press btn-3d px-12 py-4 text-lg shimmer relative overflow-hidden"
-                style={{
-                  boxShadow: '0 0 20px rgba(209, 168, 90, 0.3)',
-                }}
-              >
-                📄 Generate PDF
-              </button>
-            )}
           </div>
         )}
         

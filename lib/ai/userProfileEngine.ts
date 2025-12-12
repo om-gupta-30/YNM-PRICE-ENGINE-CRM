@@ -28,25 +28,18 @@ const roleProfiles: Record<string, UserProfile> = {
     detailLevel: 'practical',
     coachStyle: 'stepByStep',
   },
-  'data_analyst': {
-    tone: 'analytical',
-    detailLevel: 'detailed',
-    coachStyle: 'informative',
-  },
 };
 
 /**
  * Get user profile based on role
  * 
- * @param role - User role (admin, employee, data_analyst, etc.)
+ * @param role - User role (admin, employee, etc.)
  * @returns User profile with tone, detailLevel, and coachStyle
  */
 export function getUserProfile(role: string): UserProfile {
-  // Normalize role: handle "DATA_ANALYST", "data_analyst", "dataanalyst", etc.
+  // Normalize role
   const normalizedRole = role?.toLowerCase().replace(/_/g, '');
-  const roleKey = normalizedRole === 'dataanalyst' || normalizedRole === 'analyst'
-    ? 'data_analyst'
-    : normalizedRole;
+  const roleKey = normalizedRole;
   
   const profile = roleProfiles[roleKey] || DEFAULT_PROFILE;
   console.log(`[AI] UserProfileEngine: Role "${role}" → profile`, {

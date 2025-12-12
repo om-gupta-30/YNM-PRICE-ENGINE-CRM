@@ -90,17 +90,16 @@ export default function LoginPage() {
       localStorage.setItem('userId', userDbId.toString());
       localStorage.setItem('department', data.department || 'Sales');
       localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
-      localStorage.setItem('isDataAnalyst', data.isDataAnalyst ? 'true' : 'false');
       // Update global username context
       setUsername(username);
       
-      // Check if this was an auto-logout (for employees and data analysts, not full admin)
+      // Check if this was an auto-logout (for employees, not admin)
       const wasAutoLogout = localStorage.getItem('auto_logout') === 'true';
-      const isFullAdmin = data.isAdmin && !data.isDataAnalyst;
-      const isEmployeeOrDataAnalyst = !isFullAdmin;
+      const isFullAdmin = data.isAdmin;
+      const isEmployee = !isFullAdmin;
       
-      if (wasAutoLogout && isEmployeeOrDataAnalyst) {
-        // Show inactivity reason modal before redirecting (for employees and data analysts)
+      if (wasAutoLogout && isEmployee) {
+        // Show inactivity reason modal before redirecting (for employees)
         setLoggedInUsername(username);
         setShowInactivityModal(true);
         // Don't redirect yet - wait for user to submit reason
@@ -108,12 +107,8 @@ export default function LoginPage() {
         // Clear auto-logout flag if it exists
         localStorage.removeItem('auto_logout');
         localStorage.removeItem('auto_logout_time');
-        // Redirect data analysts to CRM, others to home
-        if (data.isDataAnalyst) {
-          router.replace('/crm');
-        } else {
+        // Redirect to home
           router.replace('/home');
-        }
       }
     } catch (err: any) {
       console.error('Login error:', err);

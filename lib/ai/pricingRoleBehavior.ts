@@ -9,10 +9,9 @@
  * Adjust recommended price based on user role
  * 
  * Only Admin and Employee roles trigger price adjustments.
- * Data Analyst role bypasses pricing logic entirely.
  * 
  * @param baseRecommendedPrice - Base price recommended by AI
- * @param role - User role (admin, employee, data_analyst, etc.)
+ * @param role - User role (admin, employee, etc.)
  * @returns Adjusted price based on role, or base price if role is not admin/employee
  */
 export function adjustPriceForRole(baseRecommendedPrice: number, role?: string): number {
@@ -20,12 +19,7 @@ export function adjustPriceForRole(baseRecommendedPrice: number, role?: string):
     return baseRecommendedPrice;
   }
 
-  const r = role.toLowerCase().replace(/_/g, ''); // Normalize: "data_analyst" -> "dataanalyst", "ADMIN" -> "admin"
-
-  // Data Analyst should never trigger pricing adjustments
-  if (r === 'dataanalyst' || r === 'analyst') {
-    return baseRecommendedPrice; // No adjustment, bypass pricing logic
-  }
+  const r = role.toLowerCase().replace(/_/g, ''); // Normalize: "ADMIN" -> "admin"
 
   if (r === 'admin') {
     // Admins control final pricing → stay neutral (no adjustment)
@@ -45,9 +39,8 @@ export function adjustPriceForRole(baseRecommendedPrice: number, role?: string):
  * Get role-based insight message for pricing suggestions
  * 
  * Only Admin and Employee roles receive pricing insight messages.
- * Data Analyst role should never receive pricing messages.
  * 
- * @param role - User role (admin, employee, data_analyst, etc.)
+ * @param role - User role (admin, employee, etc.)
  * @returns Role-specific insight message or null
  */
 export function roleBasedInsightMessage(role?: string): string | null {
@@ -55,12 +48,7 @@ export function roleBasedInsightMessage(role?: string): string | null {
     return null;
   }
 
-  const r = role.toLowerCase().replace(/_/g, ''); // Normalize: "data_analyst" -> "dataanalyst"
-
-  // Data Analyst should never receive pricing messages
-  if (r === 'dataanalyst' || r === 'analyst') {
-    return null; // No pricing messages for analysts
-  }
+  const r = role.toLowerCase().replace(/_/g, ''); // Normalize role
 
   if (r === 'employee') {
     // Employees get cautionary warning about minimum margin

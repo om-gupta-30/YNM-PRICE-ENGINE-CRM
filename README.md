@@ -83,9 +83,6 @@ A comprehensive natural language interface for querying CRM data using conversat
   - SQL transparency (view generated queries)
   - Export options for all query results
 
-**Documentation**: See `docs/AI_FEATURES.md` for comprehensive guide  
-**Example Queries**: See `docs/EXAMPLE_QUERIES.md` for query examples
-
 #### 2. AI Pricing Intelligence
 Intelligent pricing recommendations based on historical data, market analysis, and business rules.
 
@@ -98,8 +95,6 @@ Intelligent pricing recommendations based on historical data, market analysis, a
   - Margin analysis
   - Feedback loop for continuous improvement
 
-**Documentation**: See `docs/AI_PRICING.md` for detailed guide
-
 #### 3. Historical Pricing Recall
 Automatically detects when users enter product specifications that match previous quotations and suggests previous pricing.
 
@@ -110,14 +105,13 @@ Automatically detects when users enter product specifications that match previou
   - Integrated into all price engine forms
   - Supports MBCB and Signages products
 
-**Documentation**: See `HISTORICAL_RECALL_IMPLEMENTATION.md`
-
 #### 4. AI Coach
 - **Endpoint**: `/api/ai/coach`
 - Context-aware coaching based on user's recent activities
 - Role-specific advice (Admin vs Employee)
 - Suggested actions with tone indicators
 - Considers streak, leaderboard position, and weak account alerts
+- Floating button interface accessible from any page
 
 #### 5. Engagement Scoring
 - **Endpoint**: `/api/ai/subaccount-insights`
@@ -147,7 +141,7 @@ Automatically detects when users enter product specifications that match previou
 - Priority accounts identification
 
 #### 9. AI Monitoring Dashboard
-- **Page**: `/admin/ai-monitoring`
+- **Page**: `/crm/admin/ai-monitoring`
 - System health metrics
 - Query performance tracking
 - AI accuracy monitoring
@@ -211,6 +205,7 @@ Automatically detects when users enter product specifications that match previou
 - Configurable time period (default: 30 days)
 - Shows: score, calls, followups, closed won, streak, total activities
 - Real-time updates
+- Admin users excluded from leaderboard
 
 #### Engagement Score Badge
 - Color-coded: Red (0-25), Yellow (26-50), Orange (51-75), Green (76-100)
@@ -239,8 +234,6 @@ Automatically detects when users enter product specifications that match previou
 - Automatic closed date tracking
 - Analytics integration for win rate analysis
 - AI learning from outcomes
-
-**Documentation**: See `QUOTATION_OUTCOME_TRACKING_IMPLEMENTATION.md`
 
 ### 🔔 Notification System
 
@@ -324,20 +317,14 @@ Automatically detects when users enter product specifications that match previou
 │   │
 │   ├── crm/                          # CRM pages
 │   │   ├── accounts/                 # Accounts list & detail
-│   │   │   ├── [id]/                 # Account detail page
-│   │   │   │   └── sub-accounts/     # Sub-accounts page
-│   │   │   └── page.tsx              # Accounts list
 │   │   ├── activities/               # Activities page
 │   │   ├── admin/                    # Admin pages
-│   │   │   ├── contacts/             # Contact admin
-│   │   │   └── subaccounts/          # Sub-account admin
 │   │   ├── contacts/                 # Contacts page
 │   │   ├── customers/                # Customer management
 │   │   ├── dashboard/                # Dashboard
 │   │   ├── leads/                    # Leads management
 │   │   ├── notifications/            # Notifications center
 │   │   ├── subaccounts/              # Sub-account pages
-│   │   │   └── [id]/                 # Sub-account detail
 │   │   └── tasks/                    # Task manager
 │   │
 │   ├── mbcb/                         # MBCB module pages
@@ -349,10 +336,11 @@ Automatically detects when users enter product specifications that match previou
 │   │   └── reflective/               # Reflective Part
 │   ├── home/                         # Home page
 │   ├── login/                        # Login page
-│   ├── change-password/              # Password change
+│   ├── change-password/               # Password change
 │   ├── history/                      # Quotation history
-│   ├── quotation-status/            # Quotation status (Admin)
+│   ├── quotation-status/              # Quotation status (Admin)
 │   ├── quotation-status-update/      # Status update (Employee)
+│   ├── pricing-insights/              # Pricing insights dashboard
 │   └── layout.tsx                    # Root layout
 │
 ├── components/                       # React components
@@ -361,42 +349,13 @@ Automatically detects when users enter product specifications that match previou
 │   ├── AIChatCoach.tsx               # 🤖 AI Coach sidebar
 │   ├── CoachButton.tsx               # AI Coach trigger button
 │   ├── animations/                   # Animation components
-│   │   ├── FloatingMascot.tsx
-│   │   ├── GlobalLoader.tsx
-│   │   ├── LandingAnimation.tsx
-│   │   ├── PageTransition.tsx
-│   │   └── ParticleBackground.tsx
 │   ├── crm/                          # CRM components
-│   │   ├── activities/               # Activity components
-│   │   ├── tasks/                    # Task components
-│   │   ├── AINotificationsPanel.tsx  # 🤖 AI notifications panel
-│   │   ├── CelebrationEffect.tsx     # Achievement celebrations
-│   │   ├── CelebrationToast.tsx      # Toast notifications
-│   │   ├── EngagementScoreBadge.tsx  # Score badge with tips
-│   │   └── NotificationsBell.tsx     # Notification bell
 │   ├── forms/                        # Form components
-│   │   ├── AccountSelect.tsx
-│   │   ├── ContactSelect.tsx
-│   │   ├── CustomerSelect.tsx
-│   │   ├── SmartDropdown.tsx         # Main dropdown component
-│   │   ├── StateCitySelect.tsx
-│   │   └── SubAccountSelect.tsx
 │   ├── layout/                       # Layout components
-│   │   ├── AuthGuard.tsx             # Authentication guard
-│   │   ├── ClientLayout.tsx          # Client-side layout
-│   │   ├── CRMLayout.tsx             # CRM layout wrapper
-│   │   ├── CRMSidebar.tsx            # CRM sidebar navigation
-│   │   └── LogoutButton.tsx          # Logout with reason modal
 │   ├── modals/                       # Modal components
-│   │   └── InactivityReasonModal.tsx # Inactivity reason capture
 │   ├── pricing/                      # Pricing components
-│   │   └── HistoricalPricingAlert.tsx # Historical pricing alert
 │   ├── quotations/                   # Quotation components
-│   │   └── QuotationOutcomePanel.tsx # Outcome tracking panel
 │   └── ui/                           # UI components
-│       ├── ButtonCard.tsx            # Card button component
-│       ├── ButtonCarousel.tsx        # Carousel component
-│       └── NotificationBell.tsx      # Global notification bell
 │
 ├── contexts/                         # React contexts
 │   └── UserContext.tsx               # User context provider
@@ -414,7 +373,7 @@ Automatically detects when users enter product specifications that match previou
 │   │   ├── dynamicQueryBuilder.ts    # SQL query generation
 │   │   ├── queryCache.ts             # Smart query caching
 │   │   ├── querySuggestions.ts       # Personalized query suggestions
-│   │   ├── conversationRouterV2.ts   # COACH vs QUERY mode routing
+│   │   ├── conversationRouterV2.ts  # COACH vs QUERY mode routing
 │   │   ├── conversationMemory.ts    # Conversation history
 │   │   ├── sessionManager.ts        # Session management
 │   │   ├── contextFormatter.ts       # Data formatting for AI
@@ -423,31 +382,18 @@ Automatically detects when users enter product specifications that match previou
 │   │   ├── engagement.ts             # Engagement scoring & AI logic
 │   │   └── engagementGuard.ts        # Activity type guards
 │   ├── calculations/                 # Price calculations
-│   │   ├── areaCalculations.ts
-│   │   ├── postCalculations.ts
-│   │   ├── thrieBeamCalculations.ts
-│   │   └── wBeamCalculations.ts
 │   ├── constants/
-│   │   └── types.ts                  # Type definitions
 │   ├── services/                     # Service layer
-│   │   └── historicalQuoteLookup.ts  # Historical pricing lookup
-│   ├── utils/
-│   │   ├── activityLogger.ts         # Activity + streak logging
-│   │   ├── dateFormatters.ts         # IST date formatting
-│   │   ├── leadScore.ts              # Lead scoring
-│   │   ├── notificationSync.ts       # Notification sync
-│   │   ├── performanceUtils.ts       # Performance utilities
-│   │   └── supabaseClient.ts         # Supabase client
+│   ├── utils/                        # Utility functions
 │   └── pdfGenerator.ts               # PDF generation
 │
-├── docs/                             # Documentation & SQL
-│   ├── COMPLETE_DATABASE_SETUP.sql   # ⭐ Main database setup
-│   ├── AI_FEATURES.md                # 🤖 Comprehensive AI features guide
-│   ├── AI_PRICING.md                 # 💰 AI pricing intelligence guide
-│   ├── EXAMPLE_QUERIES.md            # 📝 Example queries for RAG chatbot
-│   ├── ADD_AI_PRICING_FIELDS_TO_QUOTES.sql # AI pricing fields migration
-│   ├── ADD_OUTCOME_TRACKING_FIELDS.sql     # Outcome tracking migration
-│   └── [other SQL migrations...]
+├── scripts/                          # Utility scripts
+│   └── convert/                      # Data conversion scripts
+│
+├── types/                            # TypeScript type definitions
+├── data/                             # Static data files
+│   ├── config/                       # Configuration files
+│   └── master/                       # Master data (Excel, JSON)
 │
 ├── middleware.ts                     # Next.js middleware
 ├── package.json                      # Dependencies
@@ -532,7 +478,7 @@ cp .env.example .env.local
 # Edit .env.local with your credentials
 
 # 4. Run database setup in Supabase SQL Editor
-# Execute: docs/COMPLETE_DATABASE_SETUP.sql
+# Execute all necessary SQL migrations in Supabase dashboard
 
 # 5. Start development server
 npm run dev
@@ -629,25 +575,22 @@ npm start
 
 ## 🔧 Latest Updates & Implementations
 
-### ✅ Recent Features (December 2024)
+### ✅ Current Features (2024)
 
 1. **Historical Pricing Recall**
    - Automatic detection of matching previous quotations
    - One-click application of historical pricing
    - Integrated into all price engine forms
-   - See `HISTORICAL_RECALL_IMPLEMENTATION.md`
 
 2. **Quotation Outcome Tracking**
    - Track won/lost/pending outcomes
    - Analytics integration
    - AI learning from outcomes
-   - See `QUOTATION_OUTCOME_TRACKING_IMPLEMENTATION.md`
 
 3. **AI Pricing Intelligence**
    - Intelligent pricing recommendations
    - Win probability predictions
    - Historical learning system
-   - See `docs/AI_PRICING.md`
 
 4. **RAG Chatbot Enhancements**
    - Streaming responses
@@ -660,7 +603,7 @@ npm start
    - Database indexing
    - Optimized API responses
 
-### ✅ System Status (December 2024)
+### ✅ System Status
 
 | System | Status | Notes |
 |--------|--------|-------|
@@ -685,33 +628,9 @@ npm start
 1. **TypeScript Errors**: Run `npx tsc --noEmit` to check
 2. **Build Fails**: Ensure all env variables are set
 3. **AI Not Working**: Verify `GOOGLE_GEMINI_API_KEY` is set correctly
-4. **Database Errors**: Run latest migration scripts in `docs/`
+4. **Database Errors**: Check Supabase connection and run necessary migrations
 5. **Historical Pricing Not Showing**: Check that previous quotes exist with matching specs
-6. **Outcome Tracking Not Saving**: Verify database migration has been run
-
-### Database Migrations
-
-Run migrations in order:
-1. `docs/COMPLETE_DATABASE_SETUP.sql` - Main setup
-2. `docs/ADD_AI_PRICING_FIELDS_TO_QUOTES.sql` - AI pricing fields
-3. `docs/ADD_OUTCOME_TRACKING_FIELDS.sql` - Outcome tracking
-
----
-
-## 📚 Documentation
-
-### Main Documentation Files
-- `docs/AI_FEATURES.md` - Comprehensive AI features guide
-- `docs/AI_PRICING.md` - AI pricing intelligence guide
-- `docs/EXAMPLE_QUERIES.md` - Example queries for RAG chatbot
-- `PROJECT_STRUCTURE.md` - Detailed project structure guide
-- `HISTORICAL_RECALL_IMPLEMENTATION.md` - Historical pricing feature
-- `QUOTATION_OUTCOME_TRACKING_IMPLEMENTATION.md` - Outcome tracking feature
-
-### Implementation Summaries
-- `AI_PRICING_IMPLEMENTATION_SUMMARY.md`
-- `HISTORICAL_RECALL_IMPLEMENTATION.md`
-- `QUOTATION_OUTCOME_TRACKING_IMPLEMENTATION.md`
+6. **Outcome Tracking Not Saving**: Verify database schema includes outcome fields
 
 ---
 
@@ -739,16 +658,14 @@ Proprietary - YNM Safety Pvt Ltd
 ## 📞 Support
 
 For questions or issues:
-- Review the documentation in `docs/`
-- Check implementation summaries for specific features
 - Review code comments in each file
-- Test API endpoints using the examples in documentation
+- Test API endpoints using the examples in this README
+- Check Supabase dashboard for database issues
 
 ---
 
 **Version**: 2.0.0 (AI-Enhanced CRM with Pricing Intelligence)  
 **Last Updated**: December 2024  
-**Last Audit**: December 2024 - All systems verified ✅  
 **AI Provider**: Google Gemini 2.5 (models/gemini-2.5-pro, models/gemini-2.5-flash)  
 **Node Version**: >=20.0.0
 

@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const stage = searchParams.get('stage');
     const tag = searchParams.get('tag');
     const employee = searchParams.get('employee');
+    const isAdmin = searchParams.get('isAdmin') === 'true';
     const search = searchParams.get('search');
 
     let supabase;
@@ -50,17 +51,20 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .order('created_at', { ascending: false });
 
-    // Apply filters
+    // Filter accounts based on user role:
+    // - Admin: see all accounts
+    // - Employees: see only accounts assigned to them
+    if (!isAdmin && employee && employee !== 'Admin') {
+      query = query.eq('assigned_employee', employee);
+    }
+
+    // Apply additional filters
     if (stage) {
       query = query.eq('company_stage', stage);
     }
 
     if (tag) {
       query = query.eq('company_tag', tag);
-    }
-
-    if (employee) {
-      query = query.eq('assigned_employee', employee);
     }
 
     // Search by account name

@@ -48,20 +48,12 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
-  // Pagination for performance on large lists
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 30; // Render max 30 items at a time for performance
+  // Removed pagination - show all accounts at once
 
   // User info state - initialize from localStorage immediately to avoid uninitialized variable errors
   const [isAdmin, setIsAdmin] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('isAdmin') === 'true';
-    }
-    return false;
-  });
-  const [isDataAnalyst, setIsDataAnalyst] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('isDataAnalyst') === 'true';
     }
     return false;
   });
@@ -81,6 +73,7 @@ export default function AccountsPage() {
         stateId: null,
         cityId: null,
         search: '',
+        employee: 'all',
       };
     }
     const industryId = searchParams.get('industryId');
@@ -88,6 +81,7 @@ export default function AccountsPage() {
     const stateId = searchParams.get('stateId');
     const cityId = searchParams.get('cityId');
     const search = searchParams.get('search') || '';
+    const employee = searchParams.get('employee') || 'all';
     
     return {
       industryId: industryId ? parseInt(industryId) : null,
@@ -95,6 +89,7 @@ export default function AccountsPage() {
       stateId: stateId ? parseInt(stateId) : null,
       cityId: cityId ? parseInt(cityId) : null,
       search: search,
+      employee: employee,
     };
   };
 
@@ -115,6 +110,7 @@ export default function AccountsPage() {
           stateId: parsed.stateId ?? null,
           cityId: parsed.cityId ?? null,
           search: parsed.searchQuery ?? '',
+          employee: parsed.employee ?? 'all',
         };
       }
     } catch (error) {
@@ -132,6 +128,7 @@ export default function AccountsPage() {
   const [searchQuery, setSearchQuery] = useState<string>(initialFilters.search);
   const [filterStateId, setFilterStateId] = useState<number | null>(initialFilters.stateId);
   const [filterCityId, setFilterCityId] = useState<number | null>(initialFilters.cityId);
+  const [filterEmployee, setFilterEmployee] = useState<string>(initialFilters.employee);
 
   // Pending filter states (what user is selecting, not yet applied)
   const [pendingFilterIndustryId, setPendingFilterIndustryId] = useState<number | null>(initialFilters.industryId);
@@ -139,6 +136,7 @@ export default function AccountsPage() {
   const [pendingSearchQuery, setPendingSearchQuery] = useState<string>(initialFilters.search);
   const [pendingFilterStateId, setPendingFilterStateId] = useState<number | null>(initialFilters.stateId);
   const [pendingFilterCityId, setPendingFilterCityId] = useState<number | null>(initialFilters.cityId);
+  const [pendingFilterEmployee, setPendingFilterEmployee] = useState<string>(initialFilters.employee);
 
   const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
   const [subIndustries, setSubIndustries] = useState<Array<{ id: number; name: string }>>([]);
@@ -166,6 +164,9 @@ export default function AccountsPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<string>('');
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [bulkAssigning, setBulkAssigning] = useState(false);
+  
+  // Employee filter list (for admin filtering)
+  const [filterEmployees, setFilterEmployees] = useState<string[]>([]);
 
   // ========== FUNCTIONS AFTER STATE ==========
   // Save filters to localStorage
@@ -177,6 +178,7 @@ export default function AccountsPage() {
       searchQuery: pendingSearchQuery,
       stateId: pendingFilterStateId,
       cityId: pendingFilterCityId,
+      employee: pendingFilterEmployee,
     };
     localStorage.setItem('crm_filters_accounts', JSON.stringify(filterData));
   };
@@ -208,7 +210,7 @@ export default function AccountsPage() {
     setSearchQuery(pendingSearchQuery);
     setFilterStateId(pendingFilterStateId);
     setFilterCityId(pendingFilterCityId);
-    setCurrentPage(1); // Reset to first page when filters change
+    setFilterEmployee(pendingFilterEmployee);
     
     // Save to localStorage for persistence across pages
     saveFiltersToStorage();
@@ -220,6 +222,7 @@ export default function AccountsPage() {
     if (pendingFilterStateId) params.set('stateId', pendingFilterStateId.toString());
     if (pendingFilterCityId) params.set('cityId', pendingFilterCityId.toString());
     if (pendingSearchQuery.trim()) params.set('search', pendingSearchQuery.trim());
+    if (pendingFilterEmployee !== 'all') params.set('employee', pendingFilterEmployee);
     
     // Update URL without page reload
     const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -233,9 +236,10 @@ export default function AccountsPage() {
       pendingFilterSubIndustryId !== filterSubIndustryId ||
       pendingSearchQuery !== searchQuery ||
       pendingFilterStateId !== filterStateId ||
-      pendingFilterCityId !== filterCityId
+      pendingFilterCityId !== filterCityId ||
+      pendingFilterEmployee !== filterEmployee
     );
-  }, [pendingFilterIndustryId, pendingFilterSubIndustryId, pendingSearchQuery, pendingFilterStateId, pendingFilterCityId, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId]);
+  }, [pendingFilterIndustryId, pendingFilterSubIndustryId, pendingSearchQuery, pendingFilterStateId, pendingFilterCityId, pendingFilterEmployee, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId, filterEmployee]);
 
   // Clear all filters
   const clearAllFilters = () => {
@@ -244,13 +248,14 @@ export default function AccountsPage() {
     setPendingSearchQuery('');
     setPendingFilterStateId(null);
     setPendingFilterCityId(null);
+    setPendingFilterEmployee('all');
     // Also clear active filters immediately
     setFilterIndustryId(null);
     setFilterSubIndustryId(null);
     setSearchQuery('');
     setFilterStateId(null);
     setFilterCityId(null);
-    setCurrentPage(1);
+    setFilterEmployee('all');
     // Clear from localStorage
     clearFiltersFromStorage();
     router.replace(window.location.pathname, { scroll: false });
@@ -265,10 +270,8 @@ export default function AccountsPage() {
       let currentUsername = '';
       if (typeof window !== 'undefined') {
         const currentIsAdmin = localStorage.getItem('isAdmin') === 'true';
-        const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
         currentUsername = localStorage.getItem('username') || '';
-        // Data analysts should see all accounts like admins, but with restrictions
-        effectiveIsAdmin = currentIsAdmin || currentIsDataAnalyst;
+        effectiveIsAdmin = currentIsAdmin;
       }
 
       // Check cache first
@@ -288,6 +291,10 @@ export default function AccountsPage() {
       const params = new URLSearchParams();
       if (effectiveIsAdmin) {
         params.append('isAdmin', 'true');
+        // Add employee filter if admin has selected one
+        if (filterEmployee && filterEmployee !== 'all') {
+          params.append('employee', filterEmployee);
+        }
       }
       // Pass employee username for filtering (admin can still see all)
       if (currentUsername && !effectiveIsAdmin) {
@@ -389,18 +396,12 @@ export default function AccountsPage() {
       
       // Get current values to avoid stale closure
       const currentIsAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
-      const currentIsDataAnalyst = typeof window !== 'undefined' ? localStorage.getItem('isDataAnalyst') === 'true' : false;
       const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
       
       // Determine assigned employee based on user role:
-      // - Admin (not data analyst): Can assign to any employee via form, use formData.assignedEmployee
-      // - Data analyst: Cannot assign accounts - keep existing or null
+      // - Admin: Can assign to any employee via form, use formData.assignedEmployee
       // - Employee: Auto-assign to themselves
       const determineAssignedEmployee = (existingAssignment?: string | null) => {
-        if (currentIsDataAnalyst) {
-          // Data analysts cannot assign - keep existing
-          return existingAssignment || null;
-        }
         if (currentIsAdmin) {
           // Admin can assign via form - use the value from form (can be null for unassigned)
           return formData.assignedEmployee || null;
@@ -486,14 +487,6 @@ export default function AccountsPage() {
   
   // Handle delete account
   const handleDeleteAccount = async (accountId: number) => {
-    // Data analysts cannot delete accounts
-    if (typeof window !== 'undefined') {
-      const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
-      if (currentIsDataAnalyst) {
-        setToast({ message: 'Data analysts cannot delete accounts', type: 'error' });
-        return;
-      }
-    }
     
     if (!confirm('Are you sure you want to delete this account? This action cannot be undone.')) {
       return;
@@ -704,21 +697,14 @@ export default function AccountsPage() {
     return filtered;
   }, [accounts, sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId]);
   
-  // Paginated accounts for performance (only render visible items)
-  const paginatedAccounts = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredAndSortedAccounts.slice(startIndex, endIndex);
-  }, [filteredAndSortedAccounts, currentPage, itemsPerPage]);
-  
-  const totalPages = Math.ceil(filteredAndSortedAccounts.length / itemsPerPage);
+  // Show all accounts - no pagination
+  const paginatedAccounts = filteredAndSortedAccounts;
 
   // ========== EFFECTS ==========
   // Load user info on mount (update if changed)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
-      setIsDataAnalyst(localStorage.getItem('isDataAnalyst') === 'true');
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
@@ -785,16 +771,15 @@ export default function AccountsPage() {
     
     const currentUsername = localStorage.getItem('username') || '';
     const currentIsAdmin = localStorage.getItem('isAdmin') === 'true';
-    const currentIsDataAnalyst = localStorage.getItem('isDataAnalyst') === 'true';
     
-    // Always fetch if we have any user info (username, admin, or data analyst)
-    if (currentUsername || currentIsAdmin || currentIsDataAnalyst) {
+    // Always fetch if we have any user info (username or admin)
+    if (currentUsername || currentIsAdmin) {
       fetchAccounts();
       fetchIndustries();
       fetchStates();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username, isAdmin, isDataAnalyst]);
+  }, [username, isAdmin]);
 
   // Update sub-industries when pending industry filter changes
   useEffect(() => {
@@ -836,10 +821,32 @@ export default function AccountsPage() {
     }
   }, [filterStateId]);
 
-  // Reset to page 1 when filters change
+  // Fetch employees for filter (admin only)
   useEffect(() => {
-    setCurrentPage(1);
-  }, [sortField, sortDirection, filterIndustryId, filterSubIndustryId, searchQuery, filterStateId, filterCityId]);
+    if (isAdmin) {
+      const fetchFilterEmployees = async () => {
+        try {
+          const response = await fetch('/api/employees?type=sales');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.employees) {
+              setFilterEmployees(data.employees);
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching employees for filter:', error);
+        }
+      };
+      fetchFilterEmployees();
+    }
+  }, [isAdmin]);
+
+  // Refetch accounts when employee filter changes (admin only)
+  useEffect(() => {
+    if (isAdmin && filterEmployee) {
+      fetchAccounts();
+    }
+  }, [filterEmployee, isAdmin]);
 
   // ========== RENDER ==========
   return (
@@ -868,7 +875,7 @@ export default function AccountsPage() {
                 <span className="hidden sm:inline">Create New Account</span>
                 <span className="sm:hidden">New</span>
               </button>
-              {isAdmin && !isDataAnalyst && (
+              {isAdmin && (
                 <button 
                   onClick={(e) => {
                     e.preventDefault();
@@ -996,6 +1003,25 @@ export default function AccountsPage() {
                 ))}
               </select>
             </div>
+
+            {/* Employee Filter - Admin Only */}
+            {isAdmin && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-2">Assigned Employee</label>
+                <select
+                  value={pendingFilterEmployee}
+                  onChange={(e) => setPendingFilterEmployee(e.target.value)}
+                  className="input-premium w-full px-3 py-2 text-sm text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                >
+                  <option value="all">All Employees</option>
+                  {filterEmployees.map((emp) => (
+                    <option key={emp} value={emp}>
+                      {emp}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           
           {/* Filter Actions */}
@@ -1008,7 +1034,7 @@ export default function AccountsPage() {
               <span>✓</span>
               <span>Apply Filters</span>
             </button>
-            {(filterIndustryId || filterSubIndustryId || filterStateId || filterCityId || searchQuery.trim()) && (
+            {(filterIndustryId || filterSubIndustryId || filterStateId || filterCityId || searchQuery.trim() || (isAdmin && filterEmployee !== 'all')) && (
               <button
                 onClick={clearAllFilters}
                 className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"
@@ -1020,7 +1046,7 @@ export default function AccountsPage() {
         </div>
 
         {/* Bulk Assign Toolbar */}
-        {isBulkAssignMode && isAdmin && !isDataAnalyst && (
+        {isBulkAssignMode && isAdmin && (
           <div className="mb-6 bg-blue-600/20 border border-blue-500/50 rounded-xl p-4">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex-1">
@@ -1159,7 +1185,7 @@ export default function AccountsPage() {
                 </thead>
                 <tbody>
                   {paginatedAccounts.map((account, idx) => {
-                    const globalIndex = (currentPage - 1) * itemsPerPage + idx;
+                    const globalIndex = idx;
                     // Calculate total number of projects
                     const totalProjects = account.industryProjects ? Object.values(account.industryProjects).reduce((sum: number, count: any) => sum + (Number(count) || 0), 0) : 0;
                     const hasProjectsBreakdown = account.industries && account.industries.length > 0 && totalProjects > 0;
@@ -1209,7 +1235,7 @@ export default function AccountsPage() {
                           }} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-green-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Details</button>
                           <button onClick={() => handleViewSubAccounts(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-blue-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Sub-Accounts</button>
                           <button onClick={() => handleEditAccount(account)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-yellow-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Edit</button>
-                          {isAdmin && !isDataAnalyst && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}
+                          {isAdmin && <button onClick={() => handleDeleteAccount(account.id)} className="px-2 sm:px-3 py-1.5 text-xs sm:text-xs font-semibold text-white bg-red-500/80 rounded-lg touch-manipulation min-h-[36px] sm:min-h-[40px]" style={{ WebkitTapHighlightColor: 'transparent' }}>Delete</button>}
                         </div>
                       </td>
                     </tr>
@@ -1218,33 +1244,12 @@ export default function AccountsPage() {
                 </tbody>
               </table>
               
-              {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 px-4 py-3 border-t border-slate-700/50">
-                  <div className="text-sm text-slate-400">
-                    Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredAndSortedAccounts.length)} of {filteredAndSortedAccounts.length} accounts
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-slate-300 px-3">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 text-sm font-semibold text-white bg-slate-700/50 hover:bg-slate-600/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                    >
-                      Next
-                    </button>
-                  </div>
+              {/* Account count display */}
+              <div className="mt-4 px-4 py-3 border-t border-slate-700/50">
+                <div className="text-sm text-slate-400">
+                  Showing {filteredAndSortedAccounts.length} account{filteredAndSortedAccounts.length !== 1 ? 's' : ''}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -1256,7 +1261,6 @@ export default function AccountsPage() {
         onClose={handleCloseModal}
         onSubmit={handleSubmit}
         isAdmin={isAdmin}
-        isDataAnalyst={isDataAnalyst}
         currentUser={username}
         initialData={editAccount ? {
           accountName: editAccount.accountName || '',

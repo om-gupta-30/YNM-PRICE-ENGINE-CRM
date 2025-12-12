@@ -24,24 +24,22 @@ const ButtonCard = memo(function ButtonCard({ title, href, icon, delay = "0ms" }
         
         {icon && (
           <div 
-            className="text-8xl mb-8 filter drop-shadow-2xl relative z-10 transform group-hover:scale-110 group-hover:rotate-6"
+            className="text-8xl mb-8 filter drop-shadow-2xl relative z-10"
             style={{ 
-              transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', /* Reduced from 0.5s to 0.3s */
-              textShadow: '0 0 30px rgba(212, 166, 90, 0.5), 0 0 60px rgba(106, 90, 249, 0.3)',
-              willChange: 'transform'
+              textShadow: '0 0 20px rgba(212, 166, 90, 0.4), 0 0 40px rgba(106, 90, 249, 0.2)', /* Reduced for performance */
             }}
           >
             {icon}
           </div>
         )}
-        <h2 className="text-4xl font-extrabold text-white group-hover:text-premium-gold transition-colors duration-300 tracking-tight drop-shadow-2xl relative z-10 transform group-hover:scale-105" style={{ transition: 'color 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', willChange: 'transform' }}>
+        <h2 className="text-4xl font-extrabold text-white group-hover:text-premium-gold transition-colors duration-200 tracking-tight drop-shadow-2xl relative z-10" style={{ transition: 'color 0.2s ease' }}>
           {title}
         </h2>
         
-        {/* Shimmer effect on hover */}
-        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+        {/* Shimmer effect disabled for performance */}
+        {/* <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent transform -skew-x-12 animate-shimmer" />
-        </div>
+        </div> */}
       </div>
     </Link>
   );

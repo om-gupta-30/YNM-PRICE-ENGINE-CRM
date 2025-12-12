@@ -118,9 +118,7 @@ export async function POST(request: NextRequest) {
 
     // Detect user role from username
     // Admin = full admin user
-    // DataAnalyst_* = data analyst users (restricted admin access)
     // Sales_* = sales employees
-    const isDataAnalyst = user.username.startsWith('DataAnalyst_');
     const isAdmin = user.username === 'Admin';
     const isSalesEmployee = user.username.startsWith('Sales_');
     const department = 'Sales'; // All users are in Sales department for now
@@ -136,8 +134,7 @@ export async function POST(request: NextRequest) {
       userId: user.username, // Keep for backward compatibility
       id: user.id, // Keep for backward compatibility
       department, // Add department
-      isAdmin: isAdmin || isDataAnalyst, // Data analysts see admin portal but with restrictions
-      isDataAnalyst, // Flag for data analyst role
+      isAdmin, // Only true admin users
     };
 
     // Ensure userId is NEVER undefined
@@ -207,8 +204,7 @@ export async function POST(request: NextRequest) {
       loginTime: loginTime,
       metadata: {
         department,
-        isAdmin: isAdmin || isDataAnalyst,
-        isDataAnalyst,
+        isAdmin,
         wasInactive,
         inactivityReason,
         previousStatus: wasInactive ? 'inactive' : null,

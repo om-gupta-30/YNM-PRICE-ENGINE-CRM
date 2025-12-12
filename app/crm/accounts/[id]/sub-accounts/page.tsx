@@ -98,17 +98,13 @@ export default function SubAccountsPage() {
 
   // User info state
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
   // Load user info on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const adminValue = localStorage.getItem('isAdmin') === 'true';
-      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
-      // Data analysts should see all accounts like admins, but with restrictions
-      setIsAdmin(adminValue || dataAnalystValue);
-      setIsDataAnalyst(dataAnalystValue);
+      setIsAdmin(adminValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
@@ -119,12 +115,10 @@ export default function SubAccountsPage() {
     
     try {
       const params = new URLSearchParams();
-      // Data analysts should see all accounts like admins
-      const effectiveIsAdmin = isAdmin || isDataAnalyst;
-      if (!effectiveIsAdmin && username) {
+      if (!isAdmin && username) {
         params.append('employee', username);
       }
-      if (effectiveIsAdmin) {
+      if (isAdmin) {
         params.append('isAdmin', 'true');
       }
       
@@ -232,12 +226,12 @@ export default function SubAccountsPage() {
   }, [subAccounts, stateFilter]);
 
   useEffect(() => {
-    if (accountId && (username || isAdmin || isDataAnalyst)) {
+    if (accountId && (username || isAdmin)) {
       fetchAccountInfo();
       fetchSubAccounts();
       fetchStates();
     }
-  }, [accountId, username, isAdmin, isDataAnalyst]);
+  }, [accountId, username, isAdmin]);
 
   // Fetch cities when state changes
   useEffect(() => {
@@ -642,15 +636,9 @@ export default function SubAccountsPage() {
                           >
                             ✏️ Edit
                           </button>
-                          {isAdmin && !isDataAnalyst && subAccount?.id && (
+                          {isAdmin && subAccount?.id && (
                             <button
                               onClick={async () => {
-                                // Data analysts cannot delete
-                                if (isDataAnalyst) {
-                                  setToast({ message: 'Data analysts cannot delete sub-accounts', type: 'error' });
-                                  return;
-                                }
-                                
                                 if (!subAccount?.subAccountName || !confirm(`Are you sure you want to delete "${subAccount.subAccountName}"? This action cannot be undone.`)) {
                                   return;
                                 }

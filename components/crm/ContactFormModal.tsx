@@ -84,6 +84,10 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
       if (result.error) {
         alert(result.error);
       } else {
+        // Trigger notification refresh immediately when follow-up date is set
+        if (typeof window !== 'undefined' && formData.follow_up_date) {
+          window.dispatchEvent(new CustomEvent('refreshNotifications'));
+        }
         onSuccess();
       }
     } catch (err: any) {

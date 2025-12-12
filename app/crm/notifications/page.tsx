@@ -32,6 +32,21 @@ export default function NotificationsPage() {
     }
   }, [filter, isAdmin]);
 
+  // Listen for refreshNotifications event to update immediately when follow-up dates are added/edited
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !isAdmin) {
+      const handleRefresh = () => {
+        loadNotifications();
+      };
+      
+      window.addEventListener('refreshNotifications', handleRefresh);
+      
+      return () => {
+        window.removeEventListener('refreshNotifications', handleRefresh);
+      };
+    }
+  }, [isAdmin]);
+
   const loadNotifications = async () => {
     try {
       setLoading(true);

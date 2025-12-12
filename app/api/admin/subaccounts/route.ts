@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
     const isActive = searchParams.get('is_active');
     const industryId = searchParams.get('industry_id');
     const subIndustryId = searchParams.get('sub_industry_id');
+    const employee = searchParams.get('employee');
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -73,8 +74,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Filter by industry/sub-industry if specified
+    // Filter by employee if specified (filter by account's assigned_employee)
     let filteredSubAccounts = subAccounts || [];
+    if (employee) {
+      filteredSubAccounts = filteredSubAccounts.filter((sub: any) => {
+        return sub.accounts?.assigned_employee === employee;
+      });
+    }
+    
+    // Filter by industry/sub-industry if specified
     if (industryId || subIndustryId) {
       filteredSubAccounts = filteredSubAccounts.filter((sub: any) => {
         const accountIndustries = sub.accounts?.industries || [];

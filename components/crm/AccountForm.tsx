@@ -29,11 +29,10 @@ interface AccountFormProps {
   initialData?: AccountFormData | null;
   mode?: 'create' | 'edit';
   isAdmin?: boolean;
-  isDataAnalyst?: boolean;
   currentUser?: string;
 }
 
-export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, isDataAnalyst = false, currentUser = '' }: AccountFormProps) {
+export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mode = 'create', isAdmin = false, currentUser = '' }: AccountFormProps) {
   const [mounted, setMounted] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const modalContentRef = useRef<HTMLDivElement>(null);
@@ -90,13 +89,13 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
   const [employees, setEmployees] = useState<string[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
 
-  // Load employees list for admin assignment (only sales employees, not data analysts)
+  // Load employees list for admin assignment
   const loadEmployees = async () => {
-    if (!isAdmin || isDataAnalyst) return; // Only admin (not data analyst) can assign
+    if (!isAdmin) return; // Only admin can assign
     
     setLoadingEmployees(true);
     try {
-      // Use type=sales to get only sales employees (excludes data analysts)
+      // Get sales employees
       const response = await fetch('/api/employees?type=sales');
       if (response.ok) {
         const data = await response.json();
@@ -113,10 +112,10 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
 
   // Load employees when modal opens for admin
   useEffect(() => {
-    if (isOpen && isAdmin && !isDataAnalyst) {
+    if (isOpen && isAdmin) {
       loadEmployees();
     }
-  }, [isOpen, isAdmin, isDataAnalyst]);
+  }, [isOpen, isAdmin]);
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -282,8 +281,8 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
               />
             </div>
 
-            {/* Assign Employee - Only visible for Admin (not Data Analyst) */}
-            {isAdmin && !isDataAnalyst && (
+            {/* Assign Employee - Only visible for Admin */}
+            {isAdmin && (
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">
                   Assign to Employee

@@ -198,6 +198,12 @@ export default function SubAccountContactsPage() {
         message: editContact ? 'Contact updated successfully' : 'Contact created successfully', 
         type: 'success' 
       });
+      
+      // Trigger notification refresh immediately when follow-up date is added/edited
+      if (typeof window !== 'undefined' && formData.followUpDate) {
+        window.dispatchEvent(new CustomEvent('refreshNotifications'));
+      }
+      
       handleCloseModal();
       await fetchContacts();
     } catch (error: any) {

@@ -7,7 +7,6 @@ import Image from "next/image";
 export default function HomePage() {
   const router = useRouter();
   const [username, setUsername] = useState<string>('');
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
@@ -20,17 +19,9 @@ export default function HomePage() {
         return;
       }
       
-      // Check if data analyst - redirect to CRM
-      const isDataAnalystUser = localStorage.getItem('isDataAnalyst') === 'true';
-      if (isDataAnalystUser) {
-        router.replace('/crm');
-        return;
-      }
-      
       // Authenticated - load username
       const storedUsername = localStorage.getItem('username') || '';
       setUsername(storedUsername);
-      setIsDataAnalyst(isDataAnalystUser);
       setIsChecking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,37 +86,35 @@ export default function HomePage() {
       </div>
 
       {/* Two Large Buttons */}
-      <div className={`w-full max-w-4xl mx-auto grid gap-8 relative z-10 px-4 ${isDataAnalyst ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2'}`}>
-        {/* Price Engine Button - Hidden for data analysts */}
-        {!isDataAnalyst && (
-          <button
-            onClick={() => router.push('/price-engine')}
-            className="glassmorphic-premium rounded-3xl p-12 shadow-2xl card-hover-gold relative overflow-hidden group transition-all duration-300 hover:scale-105"
-            style={{
-              minHeight: '300px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '1.5rem'
-            }}
-          >
-            {/* Animated border glow */}
-            <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-brand-gold/30 via-brand-primary/30 to-brand-gold/30 blur-xl" />
-            </div>
-            
-            <div className="relative z-10 text-center">
-              <div className="text-6xl mb-4">⚡</div>
-              <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-4 drop-shadow-lg">
-                Price Engine
-              </h2>
-              <p className="text-lg text-slate-300 font-medium">
-                Access quotation tools and price calculations
-              </p>
-            </div>
-          </button>
-        )}
+      <div className="w-full max-w-4xl mx-auto grid gap-8 relative z-10 px-4 grid-cols-1 md:grid-cols-2">
+        {/* Price Engine Button */}
+        <button
+          onClick={() => router.push('/price-engine')}
+          className="glassmorphic-premium rounded-3xl p-12 shadow-2xl card-hover-gold relative overflow-hidden group transition-all duration-300 hover:scale-105"
+          style={{
+            minHeight: '300px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1.5rem'
+          }}
+        >
+          {/* Animated border glow */}
+          <div className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+            <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-brand-gold/30 via-brand-primary/30 to-brand-gold/30 blur-xl" />
+          </div>
+          
+          <div className="relative z-10 text-center">
+            <div className="text-6xl mb-4">⚡</div>
+            <h2 className="text-4xl md:text-5xl font-extrabold text-white mb-4 drop-shadow-lg">
+              Price Engine
+            </h2>
+            <p className="text-lg text-slate-300 font-medium">
+              Access quotation tools and price calculations
+            </p>
+          </div>
+        </button>
 
         {/* CRM Button */}
         <button

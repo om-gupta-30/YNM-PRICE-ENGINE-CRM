@@ -40,7 +40,6 @@ export default function AccountDetailsPage() {
 
   // User info state - MUST be declared before useEffects that use them
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
 
   // Admin AI Insights state
@@ -58,20 +57,17 @@ export default function AccountDetailsPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const adminValue = localStorage.getItem('isAdmin') === 'true';
-      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
-      // Data analysts should see all accounts like admins, but with restrictions
-      setIsAdmin(adminValue || dataAnalystValue);
-      setIsDataAnalyst(dataAnalystValue);
+      setIsAdmin(adminValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
 
   useEffect(() => {
-    if (accountId && (username || isAdmin || isDataAnalyst)) {
+    if (accountId && (username || isAdmin)) {
       loadAccount();
       loadRelatedData();
     }
-  }, [accountId, username, isAdmin, isDataAnalyst]);
+  }, [accountId, username, isAdmin]);
 
   // Update page title with account name
   useEffect(() => {
@@ -85,12 +81,10 @@ export default function AccountDetailsPage() {
   const loadAccount = async () => {
     try {
       const params = new URLSearchParams();
-      // Data analysts should see all accounts like admins
-      const effectiveIsAdmin = isAdmin || isDataAnalyst;
-      if (!effectiveIsAdmin && username) {
+      if (!isAdmin && username) {
         params.append('employee', username);
       }
-      if (effectiveIsAdmin) {
+      if (isAdmin) {
         params.append('isAdmin', 'true');
       }
       
@@ -823,6 +817,10 @@ export default function AccountDetailsPage() {
             setShowAddContactModal(false);
             setEditingContact(null);
             loadRelatedData();
+            // Trigger notification refresh immediately when contact follow-up date is added/edited
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('refreshNotifications'));
+            }
             setToast({ 
               message: editingContact ? 'Contact updated successfully' : 'Contact added successfully', 
               type: 'success' 

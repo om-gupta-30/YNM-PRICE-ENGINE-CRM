@@ -811,6 +811,28 @@ export default function HistoryPage() {
     setDeleteConfirmOpen(true);
   };
   
+  const handleEditQuotation = (quote: Quote) => {
+    // Determine the route based on section
+    const section = quote.section?.toLowerCase() || '';
+    let route = '';
+    
+    if (section.includes('w-beam') && !section.includes('double')) {
+      route = `/mbcb/w-beam?edit=${quote.id}`;
+    } else if (section.includes('double')) {
+      route = `/mbcb/double-w-beam?edit=${quote.id}`;
+    } else if (section.includes('thrie')) {
+      route = `/mbcb/thrie?edit=${quote.id}`;
+    } else if (section.includes('signages') || section.includes('reflective')) {
+      route = `/signages/reflective?edit=${quote.id}`;
+    }
+    
+    if (route) {
+      router.push(route);
+    } else {
+      setToast({ message: 'Unable to determine edit route for this quotation', type: 'error' });
+    }
+  };
+  
   // Status updates are now handled in the Quotation Status Update page only
 
   const handleDeleteConfirm = async () => {
@@ -894,6 +916,7 @@ export default function HistoryPage() {
             >
               Date {sortColumn === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
             </th>
+            <th className="text-left py-4 px-4 text-sm font-bold text-white">PDF Estimate #</th>
             <th className="text-left py-4 px-4 text-sm font-bold text-white">Qty (rm)</th>
             <th className="text-left py-4 px-4 text-sm font-bold text-white">Weight/rm</th>
             <th className="text-left py-4 px-4 text-sm font-bold text-white">Cost/rm</th>
@@ -950,6 +973,7 @@ export default function HistoryPage() {
                     })()
                   : quote.date}
               </td>
+              <td className="py-4 px-4 text-slate-200 font-semibold">{quote.pdf_estimate_number || '-'}</td>
               <td className="py-4 px-4 text-slate-200">{quote.quantity_rm || '-'}</td>
               <td className="py-4 px-4 text-slate-200">
                 {quote.total_weight_per_rm ? `${quote.total_weight_per_rm.toFixed(2)} kg` : '-'}
@@ -980,6 +1004,14 @@ export default function HistoryPage() {
                   >
                     View
                   </button>
+                  {!isAdmin && (
+                    <button
+                      onClick={() => handleEditQuotation(quote)}
+                      className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200"
+                    >
+                      ✏️ Edit
+                    </button>
+                  )}
                   <button
                     onClick={() => exportToExcel(quote)}
                     className="px-3 py-1.5 text-xs font-semibold text-white bg-premium-gold/80 hover:bg-premium-gold rounded-lg transition-all duration-200"
@@ -1048,6 +1080,7 @@ export default function HistoryPage() {
               >
                 Date {sortColumn === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}
               </th>
+              <th className="text-left py-4 px-4 text-sm font-bold text-white">PDF Estimate #</th>
               <th className="text-left py-4 px-4 text-sm font-bold text-white">Status</th>
               <th className="text-left py-4 px-4 text-sm font-bold text-white">Actions</th>
             </tr>
@@ -1098,6 +1131,7 @@ export default function HistoryPage() {
                         })()
                       : quote.date}
                   </td>
+                  <td className="py-4 px-4 text-slate-200 font-semibold">{quote.pdf_estimate_number || '-'}</td>
                   <td className="py-4 px-4">
                     <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${
                       quote.status === 'closed_won' ? 'bg-green-500/20 text-green-300' :
@@ -1118,6 +1152,14 @@ export default function HistoryPage() {
                       >
                         View
                       </button>
+                      {!isAdmin && (
+                        <button
+                          onClick={() => handleEditQuotation(quote)}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200"
+                        >
+                          ✏️ Edit
+                        </button>
+                      )}
                       <button
                         onClick={() => exportToExcel(quote)}
                         className="px-3 py-1.5 text-xs font-semibold text-white bg-premium-gold/80 hover:bg-premium-gold rounded-lg transition-all duration-200"

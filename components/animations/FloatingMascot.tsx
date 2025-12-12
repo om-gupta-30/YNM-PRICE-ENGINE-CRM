@@ -24,37 +24,36 @@ function FloatingMascot() {
 
   useEffect(() => {
     let frame: number;
-    const smoothFollow = () => {
-      setScrollYPosition(prev => {
-        const lerp = prev + (scrollTarget - prev) * 0.1;
-        return lerp;
-      });
+    let lastTime = 0;
+    const smoothFollow = (currentTime: number) => {
+      // Throttle to ~30fps for performance
+      if (currentTime - lastTime >= 33) {
+        setScrollYPosition(prev => {
+          const lerp = prev + (scrollTarget - prev) * 0.15; // Slightly faster for responsiveness
+          return lerp;
+        });
+        lastTime = currentTime;
+      }
       frame = requestAnimationFrame(smoothFollow);
     };
-    smoothFollow();
+    frame = requestAnimationFrame(smoothFollow);
     return () => cancelAnimationFrame(frame);
   }, [scrollTarget]);
 
   useEffect(() => {
     const dance = () => {
       const motions = [
-        'rotate(4deg)',
-        'rotate(-4deg)',
-        'translateY(-6px)',
-        'translateY(6px)',
-        'translateX(4px)',
-        'translateX(-4px)',
-        'scale(1.05)',
-        'scale(0.97)',
-        'rotate(2deg) translateY(-4px)',
-        'rotate(-2deg) translateY(4px)',
+        'rotate(2deg)',
+        'rotate(-2deg)',
+        'translateY(-4px)',
+        'translateY(4px)',
       ];
 
       const random = motions[Math.floor(Math.random() * motions.length)];
       setDanceTransform(random);
     };
 
-    const interval = setInterval(dance, 1500); // New fun move every 1.5 sec
+    const interval = setInterval(dance, 3000); // Reduced frequency for performance
     return () => clearInterval(interval);
   }, []);
 
@@ -88,7 +87,7 @@ function FloatingMascot() {
       setScale(isOverInteractive ? 0.4 : 1);
     };
 
-    const interval = setInterval(checkOverContent, 100);
+    const interval = setInterval(checkOverContent, 300); // Reduced frequency for performance
     return () => clearInterval(interval);
   }, []);
 

@@ -47,9 +47,7 @@ export default function TasksPage() {
         return;
       }
       const adminValue = localStorage.getItem('isAdmin') === 'true';
-      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
-      // Data analysts should be treated as employees, not admins
-      setIsAdmin(adminValue && !dataAnalystValue);
+      setIsAdmin(adminValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, [router]);
@@ -1063,11 +1061,14 @@ function CreateTaskModal({
   const fetchAccounts = async () => {
     try {
       setLoadingAccounts(true);
-      // Always fetch all accounts - no filtering by employee
+      // Filter accounts based on user role:
+      // - Admin: see all accounts
+      // - Employees: see only accounts assigned to them
       const params = new URLSearchParams();
-      // Still pass isAdmin for any future admin-specific logic if needed
       if (isAdmin) {
         params.append('isAdmin', 'true');
+      } else if (currentUser && currentUser !== 'Admin') {
+        params.append('employee', currentUser);
       }
       
       const response = await fetch(`/api/accounts?${params}`);

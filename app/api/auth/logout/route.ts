@@ -5,7 +5,7 @@ import { logLogoutActivity } from '@/lib/utils/activityLogger';
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, reason, otherNote, isAdmin, isDataAnalyst } = await request.json();
+    const { username, reason, otherNote, isAdmin } = await request.json();
 
     if (!username) {
       return NextResponse.json(
@@ -14,11 +14,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reason is required for employees and data analysts, not full admins
-    const isFullAdmin = isAdmin && !isDataAnalyst;
-    if (!isFullAdmin && !reason) {
+    // Reason is required for employees, not admins
+    if (!isAdmin && !reason) {
       return NextResponse.json(
-        { error: 'Reason is required for employees and data analysts' },
+        { error: 'Reason is required for employees' },
         { status: 400 }
       );
     }
@@ -38,8 +37,8 @@ export async function POST(request: NextRequest) {
       console.error('Error updating logout_time in users table:', error);
     }
     
-    // Only log activity and create tasks for employees and data analysts (not full admins)
-    if (!isFullAdmin && reason) {
+    // Only log activity and create tasks for employees (not admins)
+    if (!isAdmin && reason) {
       // Save to logout_reasons table
       try {
         const reasonTag = reason === 'Meeting / Field Visit' ? 'Meeting' : reason;

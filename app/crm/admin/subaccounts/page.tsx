@@ -40,24 +40,26 @@ export default function AdminSubAccountsPage() {
   const getInitialFiltersFromURL = () => {
     if (!searchParams) {
       return {
-        accountId: null,
-        stateId: null,
-        cityId: null,
-        officeType: 'all',
-        isActive: 'all',
-        industryId: null,
-        subIndustryId: null,
-      };
-    }
-    return {
-      accountId: searchParams.get('accountId') ? parseInt(searchParams.get('accountId')!) : null,
-      stateId: searchParams.get('stateId') ? parseInt(searchParams.get('stateId')!) : null,
-      cityId: searchParams.get('cityId') ? parseInt(searchParams.get('cityId')!) : null,
-      officeType: searchParams.get('officeType') || 'all',
-      isActive: searchParams.get('isActive') || 'all',
-      industryId: searchParams.get('industryId') ? parseInt(searchParams.get('industryId')!) : null,
-      subIndustryId: searchParams.get('subIndustryId') ? parseInt(searchParams.get('subIndustryId')!) : null,
+      accountId: null,
+      stateId: null,
+      cityId: null,
+      officeType: 'all',
+      isActive: 'all',
+      industryId: null,
+      subIndustryId: null,
+      employee: 'all',
     };
+  }
+  return {
+    accountId: searchParams.get('accountId') ? parseInt(searchParams.get('accountId')!) : null,
+    stateId: searchParams.get('stateId') ? parseInt(searchParams.get('stateId')!) : null,
+    cityId: searchParams.get('cityId') ? parseInt(searchParams.get('cityId')!) : null,
+    officeType: searchParams.get('officeType') || 'all',
+    isActive: searchParams.get('isActive') || 'all',
+    industryId: searchParams.get('industryId') ? parseInt(searchParams.get('industryId')!) : null,
+    subIndustryId: searchParams.get('subIndustryId') ? parseInt(searchParams.get('subIndustryId')!) : null,
+    employee: searchParams.get('employee') || 'all',
+  };
   };
 
   // Helper to get initial filters from localStorage or URL
@@ -79,6 +81,7 @@ export default function AdminSubAccountsPage() {
           isActive: parsed.isActive ?? 'all',
           industryId: parsed.industryId ?? null,
           subIndustryId: parsed.subIndustryId ?? null,
+          employee: parsed.employee ?? 'all',
         };
       }
     } catch (error) {
@@ -98,6 +101,7 @@ export default function AdminSubAccountsPage() {
   const [filterIsActive, setFilterIsActive] = useState<string>(initialFilters.isActive);
   const [filterIndustryId, setFilterIndustryId] = useState<number | null>(initialFilters.industryId);
   const [filterSubIndustryId, setFilterSubIndustryId] = useState<number | null>(initialFilters.subIndustryId);
+  const [filterEmployee, setFilterEmployee] = useState<string>(initialFilters.employee);
 
   // Pending filter states (what user is selecting, not yet applied)
   const [pendingFilterAccountId, setPendingFilterAccountId] = useState<number | null>(initialFilters.accountId);
@@ -107,6 +111,7 @@ export default function AdminSubAccountsPage() {
   const [pendingFilterIsActive, setPendingFilterIsActive] = useState<string>(initialFilters.isActive);
   const [pendingFilterIndustryId, setPendingFilterIndustryId] = useState<number | null>(initialFilters.industryId);
   const [pendingFilterSubIndustryId, setPendingFilterSubIndustryId] = useState<number | null>(initialFilters.subIndustryId);
+  const [pendingFilterEmployee, setPendingFilterEmployee] = useState<string>(initialFilters.employee);
 
   // Sort states
   type SortField = 'subAccountName' | 'accountName' | null;
@@ -119,6 +124,7 @@ export default function AdminSubAccountsPage() {
   const [states, setStates] = useState<Array<{ id: number; name: string }>>([]);
   const [cities, setCities] = useState<Array<{ id: number; name: string }>>([]);
   const [industries, setIndustries] = useState<Array<{ id: number; name: string; subIndustries: Array<{ id: number; name: string }> }>>([]);
+  const [employees, setEmployees] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -141,6 +147,7 @@ export default function AdminSubAccountsPage() {
       isActive: pendingFilterIsActive,
       industryId: pendingFilterIndustryId,
       subIndustryId: pendingFilterSubIndustryId,
+      employee: pendingFilterEmployee,
     };
     localStorage.setItem('crm_filters_subaccounts', JSON.stringify(filterData));
   };
@@ -160,6 +167,7 @@ export default function AdminSubAccountsPage() {
     setFilterIsActive(pendingFilterIsActive);
     setFilterIndustryId(pendingFilterIndustryId);
     setFilterSubIndustryId(pendingFilterSubIndustryId);
+    setFilterEmployee(pendingFilterEmployee);
     
     // Save to localStorage for persistence across pages
     saveFiltersToStorage();
@@ -173,6 +181,7 @@ export default function AdminSubAccountsPage() {
     if (pendingFilterIsActive !== 'all') params.set('isActive', pendingFilterIsActive);
     if (pendingFilterIndustryId) params.set('industryId', pendingFilterIndustryId.toString());
     if (pendingFilterSubIndustryId) params.set('subIndustryId', pendingFilterSubIndustryId.toString());
+    if (pendingFilterEmployee !== 'all') params.set('employee', pendingFilterEmployee);
     
     // Update URL without page reload
     const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname;
@@ -188,9 +197,10 @@ export default function AdminSubAccountsPage() {
       pendingFilterOfficeType !== filterOfficeType ||
       pendingFilterIsActive !== filterIsActive ||
       pendingFilterIndustryId !== filterIndustryId ||
-      pendingFilterSubIndustryId !== filterSubIndustryId
+      pendingFilterSubIndustryId !== filterSubIndustryId ||
+      pendingFilterEmployee !== filterEmployee
     );
-  }, [pendingFilterAccountId, pendingFilterStateId, pendingFilterCityId, pendingFilterOfficeType, pendingFilterIsActive, pendingFilterIndustryId, pendingFilterSubIndustryId, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId]);
+  }, [pendingFilterAccountId, pendingFilterStateId, pendingFilterCityId, pendingFilterOfficeType, pendingFilterIsActive, pendingFilterIndustryId, pendingFilterSubIndustryId, pendingFilterEmployee, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId, filterEmployee]);
 
   // Clear all filters
   const clearAllFilters = () => {
@@ -201,6 +211,7 @@ export default function AdminSubAccountsPage() {
     setPendingFilterIsActive('all');
     setPendingFilterIndustryId(null);
     setPendingFilterSubIndustryId(null);
+    setPendingFilterEmployee('all');
     // Also clear active filters immediately
     setFilterAccountId(null);
     setFilterStateId(null);
@@ -209,6 +220,7 @@ export default function AdminSubAccountsPage() {
     setFilterIsActive('all');
     setFilterIndustryId(null);
     setFilterSubIndustryId(null);
+    setFilterEmployee('all');
     // Clear from localStorage
     clearFiltersFromStorage();
     router.replace(window.location.pathname, { scroll: false });
@@ -277,8 +289,9 @@ export default function AdminSubAccountsPage() {
       fetchAccounts();
       fetchStates();
       fetchIndustries();
+      fetchEmployees();
     }
-  }, [isAdmin, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId]);
+  }, [isAdmin, filterAccountId, filterStateId, filterCityId, filterOfficeType, filterIsActive, filterIndustryId, filterSubIndustryId, filterEmployee]);
 
   useEffect(() => {
     if (pendingFilterStateId) {
@@ -310,6 +323,7 @@ export default function AdminSubAccountsPage() {
       if (filterIsActive !== 'all') params.append('is_active', filterIsActive);
       if (filterIndustryId) params.append('industry_id', filterIndustryId.toString());
       if (filterSubIndustryId) params.append('sub_industry_id', filterSubIndustryId.toString());
+      if (filterEmployee && filterEmployee !== 'all') params.append('employee', filterEmployee);
 
       const response = await fetch(`/api/admin/subaccounts?${params}`);
       const data = await response.json();
@@ -388,6 +402,20 @@ export default function AdminSubAccountsPage() {
       }
     } catch (error) {
       console.error('Error fetching industries:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const response = await fetch('/api/employees?type=sales');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.employees) {
+          setEmployees(data.employees);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
@@ -573,6 +601,23 @@ export default function AdminSubAccountsPage() {
                   ))}
                 </select>
               </div>
+
+              {/* Employee Filter */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">Assigned Employee</label>
+                <select
+                  value={pendingFilterEmployee}
+                  onChange={(e) => setPendingFilterEmployee(e.target.value)}
+                  className="input-premium w-full px-4 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
+                >
+                  <option value="all">All Employees</option>
+                  {employees.map((emp) => (
+                    <option key={emp} value={emp}>
+                      {emp}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             
             {/* Filter Actions */}
@@ -585,7 +630,7 @@ export default function AdminSubAccountsPage() {
                 <span>✓</span>
                 <span>Apply Filters</span>
               </button>
-              {(filterAccountId || filterStateId || filterCityId || filterOfficeType !== 'all' || filterIsActive !== 'all' || filterIndustryId || filterSubIndustryId) && (
+              {(filterAccountId || filterStateId || filterCityId || filterOfficeType !== 'all' || filterIsActive !== 'all' || filterIndustryId || filterSubIndustryId || filterEmployee !== 'all') && (
                 <button
                   onClick={clearAllFilters}
                   className="px-4 py-2 text-sm font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200"

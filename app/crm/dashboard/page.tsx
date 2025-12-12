@@ -26,30 +26,6 @@ interface AdminNotification {
   created_at: string;
 }
 
-// Data Analyst Report interface
-interface AnalystReport {
-  analyst: string;
-  period: {
-    from: string;
-    to: string;
-  };
-  summary: {
-    totalActivities: number;
-    accountsEdited: number;
-    subAccountsEdited: number;
-    contactsEdited: number;
-    notesAdded: number;
-    otherActivities: number;
-  };
-  activities: Array<{
-    date: string;
-    type: string;
-    description: string;
-    entityType?: string;
-    entityName?: string;
-  }>;
-  generatedAt: string;
-}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -79,20 +55,12 @@ export default function DashboardPage() {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [errorLeaderboard, setErrorLeaderboard] = useState<string | null>(null);
 
-  // Data Analyst Report state
-  const [dataAnalysts, setDataAnalysts] = useState<string[]>([]);
-  const [selectedAnalyst, setSelectedAnalyst] = useState<string>('');
-  const [analystReport, setAnalystReport] = useState<AnalystReport | null>(null);
-  const [loadingReport, setLoadingReport] = useState(false);
-  const [errorReport, setErrorReport] = useState<string | null>(null);
-  const [reportDays, setReportDays] = useState<number>(30);
 
   // Load admin status and employees on mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsAdmin(localStorage.getItem('isAdmin') === 'true');
       loadEmployees();
-      loadDataAnalysts();
       if (localStorage.getItem('isAdmin') === 'true') {
         fetchAdminNotifications();
         fetchLeaderboard();
@@ -100,55 +68,6 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Load data analysts list
-  const loadDataAnalysts = async () => {
-    try {
-      // Get all users from the users table and filter for data analysts
-      const response = await fetch('/api/employees?type=all');
-      const data = await response.json();
-      
-      if (data.success && data.employees) {
-        // Filter to only include data analysts (those with analyst in their name)
-        const analysts = data.employees.filter((emp: string) => {
-          const lowerEmp = emp.toLowerCase();
-          return lowerEmp.includes('analyst') || lowerEmp.includes('data_analyst');
-        });
-        setDataAnalysts(analysts);
-        if (analysts.length > 0 && !selectedAnalyst) {
-          setSelectedAnalyst(analysts[0]);
-        }
-      }
-    } catch (err) {
-      console.error('Error loading data analysts:', err);
-    }
-  };
-
-  // Generate data analyst activity report
-  const generateAnalystReport = async () => {
-    if (!selectedAnalyst) {
-      setErrorReport('Please select a data analyst');
-      return;
-    }
-
-    setLoadingReport(true);
-    setErrorReport(null);
-    setAnalystReport(null);
-
-    try {
-      const response = await fetch(`/api/admin/analyst-report?analyst=${encodeURIComponent(selectedAnalyst)}&days=${reportDays}`);
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to generate report');
-      }
-
-      setAnalystReport(data.report);
-    } catch (err: any) {
-      setErrorReport(err.message || 'Failed to generate report');
-    } finally {
-      setLoadingReport(false);
-    }
-  };
 
   // Fetch admin notifications
   const fetchAdminNotifications = async () => {
@@ -767,160 +686,6 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Data Analyst Activity Report Section */}
-            {dataAnalysts.length > 0 && (
-              <div className="bg-slate-800/40 backdrop-blur-sm rounded-2xl border border-slate-700/50 p-6 mt-6">
-                <div className="mb-4">
-                  <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
-                    <span>📊</span> Data Analyst Activity Report
-                  </h2>
-                  <p className="text-slate-400 text-sm">
-                    Generate detailed activity reports for data analysts
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                  <select
-                    value={selectedAnalyst}
-                    onChange={(e) => setSelectedAnalyst(e.target.value)}
-                    className="px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-premium-gold/50"
-                  >
-                    <option value="">Select Data Analyst</option>
-                    {dataAnalysts.map((analyst) => (
-                      <option key={analyst} value={analyst}>
-                        {analyst}
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <select
-                    value={reportDays}
-                    onChange={(e) => setReportDays(parseInt(e.target.value))}
-                    className="px-4 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-premium-gold/50"
-                  >
-                    <option value={7}>Last 7 days</option>
-                    <option value={14}>Last 14 days</option>
-                    <option value={30}>Last 30 days</option>
-                    <option value={60}>Last 60 days</option>
-                    <option value={90}>Last 90 days</option>
-                  </select>
-                  
-                  <button
-                    onClick={generateAnalystReport}
-                    disabled={loadingReport || !selectedAnalyst}
-                    className="px-6 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-all duration-300 text-sm flex items-center gap-2"
-                  >
-                    {loadingReport ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>Generating...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>📄</span>
-                        <span>Generate Report</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {errorReport && (
-                  <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm mb-4">
-                    {errorReport}
-                  </div>
-                )}
-
-                {analystReport && (
-                  <div className="space-y-4">
-                    {/* Report Header */}
-                    <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/30">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                          <span>👤</span> {analystReport.analyst}
-                        </h3>
-                        <span className="text-xs text-slate-400">
-                          Generated: {analystReport.generatedAt}
-                        </span>
-                      </div>
-                      <p className="text-slate-400 text-sm">
-                        Report Period: {analystReport.period.from} - {analystReport.period.to}
-                      </p>
-                    </div>
-
-                    {/* Summary Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 text-center">
-                        <p className="text-2xl font-bold text-white">{analystReport.summary.totalActivities}</p>
-                        <p className="text-xs text-slate-400">Total Activities</p>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-blue-500/30 text-center">
-                        <p className="text-2xl font-bold text-blue-400">{analystReport.summary.accountsEdited}</p>
-                        <p className="text-xs text-slate-400">Accounts Edited</p>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-purple-500/30 text-center">
-                        <p className="text-2xl font-bold text-purple-400">{analystReport.summary.subAccountsEdited}</p>
-                        <p className="text-xs text-slate-400">Sub-Accounts Edited</p>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-green-500/30 text-center">
-                        <p className="text-2xl font-bold text-green-400">{analystReport.summary.contactsEdited}</p>
-                        <p className="text-xs text-slate-400">Contacts Edited</p>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-yellow-500/30 text-center">
-                        <p className="text-2xl font-bold text-yellow-400">{analystReport.summary.notesAdded}</p>
-                        <p className="text-xs text-slate-400">Notes Added</p>
-                      </div>
-                      <div className="bg-slate-900/50 rounded-lg p-3 border border-slate-500/30 text-center">
-                        <p className="text-2xl font-bold text-slate-300">{analystReport.summary.otherActivities}</p>
-                        <p className="text-xs text-slate-400">Other Activities</p>
-                      </div>
-                    </div>
-
-                    {/* Activity List */}
-                    <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/30">
-                      <h4 className="text-md font-semibold text-white mb-3 flex items-center gap-2">
-                        <span>📋</span> Activity Log
-                      </h4>
-                      {analystReport.activities.length === 0 ? (
-                        <p className="text-slate-400 text-sm text-center py-4">No activities recorded in this period.</p>
-                      ) : (
-                        <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                          {analystReport.activities.map((activity, idx) => (
-                            <div 
-                              key={idx} 
-                              className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/30 hover:border-slate-600/50 transition-all"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white text-sm">{activity.description}</p>
-                                  {activity.entityName && (
-                                    <p className="text-xs text-slate-400 mt-1">
-                                      {activity.entityType}: <span className="text-slate-300">{activity.entityName}</span>
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex-shrink-0 text-right">
-                                  <span className="text-xs px-2 py-1 bg-slate-700/50 rounded text-slate-300">
-                                    {activity.type}
-                                  </span>
-                                  <p className="text-xs text-slate-500 mt-1">{activity.date}</p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {!analystReport && !loadingReport && !errorReport && (
-                  <div className="text-center py-8 text-slate-400">
-                    <div className="text-4xl mb-3">📊</div>
-                    <p>Select a data analyst and click "Generate Report" to see their activity summary</p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -169,11 +169,14 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
 
   const loadAccounts = async () => {
     try {
-      // Always fetch all accounts - no filtering by employee
+      // Filter accounts based on user role:
+      // - Admin: see all accounts
+      // - Employees: see only accounts assigned to them
       const params = new URLSearchParams();
-      // Still pass isAdmin for any future admin-specific logic if needed
       if (isAdmin) {
         params.append('isAdmin', 'true');
+      } else if (username && username !== 'Admin') {
+        params.append('employee', username);
       }
       
       const response = await fetch(`/api/accounts?${params.toString()}`, {

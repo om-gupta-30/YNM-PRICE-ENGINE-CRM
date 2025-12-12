@@ -59,6 +59,7 @@ export interface Quote {
   ai_suggested_price_per_unit?: number | null; // AI suggested price per unit (numeric, nullable)
   ai_win_probability?: number | null; // AI win probability (0-100, numeric, nullable)
   ai_pricing_insights?: Record<string, any> | null; // AI pricing insights/reasoning (JSON/JSONB, nullable)
+  pdf_estimate_number?: string | null; // PDF estimate number (string, nullable)
   // Outcome Tracking fields
   outcome_status?: 'pending' | 'won' | 'lost'; // Outcome of the quotation
   outcome_notes?: string | null; // Optional notes about why won/lost

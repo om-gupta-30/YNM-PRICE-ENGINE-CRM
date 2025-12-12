@@ -3,8 +3,6 @@ import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 
 // Known employee prefixes - these are valid sales employees
 const VALID_SALES_PREFIXES = ['sales_', 'sales-'];
-// Known data analyst prefixes
-const VALID_ANALYST_PREFIXES = ['data_analyst', 'analyst_', 'dataanalyst'];
 const DEFAULT_SALES_EMPLOYEES = ['Sales_Shweta', 'Sales_Saumya', 'Sales_Nagender', 'Sales_Abhijeet'];
 
 // Helper function to check if a username is admin
@@ -21,15 +19,12 @@ const isValidSalesEmployee = (username: string | null | undefined): boolean => {
   // Exclude admin users
   if (isAdminUser(username)) return false;
   
-  // Exclude data analysts from sales employees
-  if (VALID_ANALYST_PREFIXES.some(prefix => lowerUsername.includes(prefix))) return false;
-  
   // Only include users that start with Sales_ prefix or are in the default list
   return VALID_SALES_PREFIXES.some(prefix => lowerUsername.startsWith(prefix)) ||
          DEFAULT_SALES_EMPLOYEES.some(emp => emp.toLowerCase() === lowerUsername);
 };
 
-// Helper function to check if a username is a valid employee (for AI insights - includes data analysts)
+// Helper function to check if a username is a valid employee (for AI insights)
 const isValidEmployee = (username: string | null | undefined): boolean => {
   if (!username) return false;
   const lowerUsername = username.trim().toLowerCase();
@@ -41,15 +36,12 @@ const isValidEmployee = (username: string | null | undefined): boolean => {
   if (VALID_SALES_PREFIXES.some(prefix => lowerUsername.startsWith(prefix))) return true;
   if (DEFAULT_SALES_EMPLOYEES.some(emp => emp.toLowerCase() === lowerUsername)) return true;
   
-  // Include data analysts
-  if (VALID_ANALYST_PREFIXES.some(prefix => lowerUsername.includes(prefix))) return true;
-  
   return false;
 };
 
 // GET - Fetch employees
-// Query param: type=sales (for account assignment - excludes data analysts)
-// Query param: type=all (for AI insights - includes data analysts)
+// Query param: type=sales (for account assignment)
+// Query param: type=all (for AI insights)
 // Default: type=all
 export async function GET(request: NextRequest) {
   try {

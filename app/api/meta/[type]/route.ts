@@ -55,7 +55,12 @@ export async function GET(
         .select('account_name')
         .eq('is_active', true); // Only show active accounts
 
-      // Removed filter: All users can now see all accounts (not just assigned ones)
+      // Filter accounts based on user role:
+      // - Admin: see all accounts
+      // - Employees: see only accounts assigned to them
+      if (!isAdmin && salesEmployee && salesEmployee !== 'Admin') {
+        query = query.eq('assigned_employee', salesEmployee);
+      }
 
       const { data, error } = await query
         .order('created_at', { ascending: false })

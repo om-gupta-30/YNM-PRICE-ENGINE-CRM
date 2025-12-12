@@ -66,7 +66,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const employeeUsername = searchParams.get('employee');
     const isAdmin = searchParams.get('isAdmin') === 'true';
-    const isDataAnalyst = searchParams.get('isDataAnalyst') === 'true';
     const filterEmployee = searchParams.get('filterEmployee'); // For admin only to filter by employee
     const filterDate = searchParams.get('filterDate'); // Filter by date (YYYY-MM-DD format)
 
@@ -86,12 +85,12 @@ export async function GET(request: NextRequest) {
       .select('*');
 
     // Filter by employee
-    // Only full admins see all activities; data analysts and employees see only their own
-    if (isAdmin && !isDataAnalyst && filterEmployee) {
+    // Only admins see all activities; employees see only their own
+    if (isAdmin && filterEmployee) {
       // Admin filtering by specific employee
       query = query.eq('employee_id', filterEmployee);
-    } else if (!isAdmin || isDataAnalyst) {
-      // Data analysts and employees see only their own activities
+    } else if (!isAdmin) {
+      // Employees see only their own activities
       if (employeeUsername) {
       query = query.eq('employee_id', employeeUsername);
       }

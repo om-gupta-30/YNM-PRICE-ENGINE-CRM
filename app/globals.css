@@ -184,7 +184,7 @@
   border: 1px solid rgba(209, 168, 90, 0.3) !important;
   border-radius: 12px !important;
   background: linear-gradient(135deg, rgba(26, 16, 60, 0.98) 0%, rgba(30, 20, 70, 0.98) 100%) !important;
-  backdrop-filter: blur(20px) !important;
+  backdrop-filter: blur(4px) !important; /* Reduced blur for performance */
   box-shadow: 0px 4px 18px rgba(0, 0, 0, 0.25) !important;
   overflow: hidden !important;
   padding: 0 !important;
@@ -345,8 +345,8 @@
     background: 
       linear-gradient(135deg, rgba(26, 16, 60, 0.85) 0%, rgba(30, 20, 70, 0.85) 100%),
       linear-gradient(135deg, rgba(116, 6, 13, 0.3) 0%, rgba(139, 10, 18, 0.2) 100%);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(4px) saturate(120%); /* Reduced blur for performance */
+    -webkit-backdrop-filter: blur(4px) saturate(120%);
     border: 1px solid rgba(209, 168, 90, 0.3);
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.4),
@@ -379,9 +379,9 @@
   }
   
   /* Force reduced motion for Windows laptop performance */
-  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin),
-  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin)::before,
-  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin)::after {
+  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin):not(.mascot-float),
+  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin):not(.mascot-float)::before,
+  *:not(.spinner-gold):not([style*="animation"]):not(.animate-spin):not(.mascot-float)::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.15s !important; /* Keep minimal transitions for feedback */
@@ -439,8 +439,8 @@
     background: 
       linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.12) 100%),
       rgba(0, 0, 0, 0.35) !important;
-    backdrop-filter: blur(4px) saturate(120%);
-    -webkit-backdrop-filter: blur(4px) saturate(120%);
+    backdrop-filter: blur(2px) saturate(110%); /* Reduced blur for performance */
+    -webkit-backdrop-filter: blur(2px) saturate(110%);
     border: 1.5px solid rgba(209, 168, 90, 0.3);
     border-radius: 2rem;
       box-shadow: 
@@ -490,8 +490,8 @@
     background: 
       linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.16) 100%),
       rgba(0, 0, 0, 0.4) !important;
-    backdrop-filter: blur(4px) saturate(120%);
-    -webkit-backdrop-filter: blur(4px) saturate(120%);
+    backdrop-filter: blur(2px) saturate(110%); /* Reduced blur for performance */
+    -webkit-backdrop-filter: blur(2px) saturate(110%);
     border: 2px solid rgba(209, 168, 90, 0.6);
     border-radius: 2rem;
       box-shadow: 
@@ -516,17 +516,18 @@
     );
     border-radius: inherit;
     opacity: 0;
-    transition: opacity 0.5s ease;
+    transition: opacity 0.3s ease; /* Reduced transition */
     z-index: -1;
-    filter: blur(8px);
-    animation: borderGlow 3s ease-in-out infinite;
+    filter: blur(4px); /* Reduced blur for performance */
+    animation: none; /* Disabled animation for performance */
   }
   
   .glassmorphic-premium:hover::after {
     opacity: 0.6;
   }
   
-  @keyframes borderGlow {
+  /* borderGlow animation disabled for performance */
+  /* @keyframes borderGlow {
     0%, 100% {
       opacity: 0.3;
       transform: scale(1);
@@ -535,7 +536,7 @@
       opacity: 0.6;
       transform: scale(1.02);
     }
-  }
+  } */
   
   /* ============================================
      ADDICTIVE PREMIUM BUTTONS
@@ -664,8 +665,8 @@
   
   .input-premium {
     background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(2px); /* Reduced for performance */
-    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(1px); /* Further reduced for performance */
+    -webkit-backdrop-filter: blur(1px);
     border: 1.5px solid rgba(255, 255, 255, 0.2);
     border-radius: 0.75rem;
     color: white;
@@ -675,7 +676,7 @@
     box-shadow: 
       inset 0 2px 4px rgba(0, 0, 0, 0.1),
       0 1px 0 rgba(255, 255, 255, 0.1);
-    transform: translateZ(0); /* GPU acceleration */
+    /* transform: translateZ(0); Disabled for performance */
     will-change: auto; /* Reduced for performance */
     min-height: 44px; /* Touch target */
     width: 100%;
@@ -867,17 +868,18 @@
     );
     background-size: 200% 200%;
     opacity: 0;
-    transition: opacity 0.3s ease; /* Reduced from 0.4s to 0.3s */
+    transition: opacity 0.2s ease; /* Further reduced */
     z-index: -1;
-    filter: blur(4px); /* Reduced from 6px for performance */
-    animation: toggleGradient 3s ease infinite;
+    filter: blur(2px); /* Further reduced for performance */
+    animation: none; /* Disabled for performance */
     pointer-events: none;
   }
   
-  @keyframes toggleGradient {
+  /* toggleGradient animation disabled for performance */
+  /* @keyframes toggleGradient {
     0%, 100% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
-  }
+  } */
   
   .toggle-glow:has(input:checked)::after {
     opacity: 0.8;
@@ -888,10 +890,10 @@
      ============================================ */
   
   .card-hover-gold {
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease; /* Optimized transitions, max 300ms */
+    transition: box-shadow 0.2s ease, border-color 0.2s ease; /* Optimized transitions, removed transform */
     position: relative;
     will-change: auto; /* Disabled for performance */
-    transform: translateZ(0); /* GPU acceleration */
+    /* transform: translateZ(0); Disabled for performance */
   }
   
   .card-hover-gold::before {
@@ -905,9 +907,9 @@
       rgba(116, 6, 13, 0.4)
     );
     opacity: 0;
-    transition: opacity 0.3s ease; /* Reduced from 0.5s to 0.3s */
+    transition: opacity 0.2s ease; /* Further reduced */
     z-index: -1;
-    filter: blur(6px); /* Reduced from 10px for performance */
+    filter: blur(3px); /* Further reduced for performance */
     pointer-events: none;
   }
   
@@ -993,7 +995,7 @@
   }
   
   .mascot-float {
-    animation: gentleFloat 5s ease-in-out infinite;
+    animation: gentleFloat 6s ease-in-out infinite; /* Slower for less CPU usage */
   }
   
   @keyframes wiggle {
@@ -1054,7 +1056,7 @@
   .btn-ripple {
     position: relative;
     overflow: hidden;
-    transform: translateZ(0);
+    /* transform: translateZ(0); Disabled for performance */
   }
 
   .btn-ripple::after {
@@ -1090,21 +1092,20 @@
 
   /* Enhanced button hover with 3D lift */
   .btn-3d {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
-    perspective: 1000px;
+    transition: box-shadow 0.2s ease; /* Reduced transition, removed 3D transforms */
+    /* transform-style: preserve-3d; Disabled for performance */
+    /* perspective: 1000px; Disabled for performance */
   }
 
   .btn-3d:hover {
-    transform: translateY(-2px) scale(1.02);
+    /* transform: translateY(-2px) scale(1.02); Disabled for performance */
     box-shadow: 
-      0 15px 50px rgba(116, 6, 13, 0.6),
-      0 6px 20px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      0 8px 24px rgba(116, 6, 13, 0.4), /* Reduced for performance */
+      0 3px 10px rgba(0, 0, 0, 0.3);
   }
 
   .btn-3d:active {
-    transform: translateY(0) scale(0.98);
+    /* transform: translateY(0) scale(0.98); Disabled for performance */
   }
 
   /* ============================================
@@ -1387,11 +1388,12 @@
      ============================================ */
   
   .stagger-item {
-    opacity: 0;
-    animation: staggerFadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    opacity: 1; /* Always visible for performance */
+    animation: none; /* Disabled for performance */
   }
 
-  .stagger-item:nth-child(1) { animation-delay: 0.05s; }
+  /* Stagger animations disabled for performance */
+  /* .stagger-item:nth-child(1) { animation-delay: 0.05s; }
   .stagger-item:nth-child(2) { animation-delay: 0.1s; }
   .stagger-item:nth-child(3) { animation-delay: 0.15s; }
   .stagger-item:nth-child(4) { animation-delay: 0.2s; }
@@ -1412,24 +1414,25 @@
       opacity: 1;
       transform: translateY(0);
     }
-  }
+  } */
 
   /* ============================================
      ENHANCED BADGE ANIMATIONS
      ============================================ */
   
   .badge-pulse {
-    animation: badgePulse 2s ease-in-out infinite;
+    animation: none; /* Disabled for performance */
   }
 
-  @keyframes badgePulse {
+  /* badgePulse animation disabled for performance */
+  /* @keyframes badgePulse {
     0%, 100% {
       box-shadow: 0 0 0 0 rgba(209, 168, 90, 0.4);
     }
     50% {
       box-shadow: 0 0 0 6px rgba(209, 168, 90, 0);
     }
-  }
+  } */
 
   .badge-glow {
     position: relative;
@@ -1456,7 +1459,7 @@
      ============================================ */
   
   .icon-btn {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.2s ease; /* Reduced transition, removed transform */
     position: relative;
     overflow: hidden;
   }
@@ -1471,7 +1474,7 @@
   }
 
   .icon-btn:hover {
-    transform: scale(1.1);
+    /* transform: scale(1.1); Disabled for performance */
   }
 
   .icon-btn:hover::before {
@@ -1479,7 +1482,7 @@
   }
 
   .icon-btn:active {
-    transform: scale(0.95);
+    /* transform: scale(0.95); Disabled for performance */
   }
 
   /* ============================================
@@ -1500,10 +1503,11 @@
     background: #ef4444;
     border-radius: 50%;
     border: 2px solid rgba(26, 16, 60, 0.9);
-    animation: notificationPing 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: none; /* Disabled for performance */
   }
 
-  @keyframes notificationPing {
+  /* notificationPing animation disabled for performance */
+  /* @keyframes notificationPing {
     0%, 100% {
       transform: scale(1);
       opacity: 1;
@@ -1512,7 +1516,7 @@
       transform: scale(1.2);
       opacity: 0.8;
     }
-  }
+  } */
 
   /* ============================================
      SUCCESS/ERROR STATE ANIMATIONS
@@ -1742,11 +1746,11 @@
      ============================================ */
   
   .tag-hover {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 0.2s ease; /* Reduced transition, removed transform */
   }
 
   .tag-hover:hover {
-    transform: translateY(-2px);
+    /* transform: translateY(-2px); Disabled for performance */
     box-shadow: 0 4px 12px rgba(209, 168, 90, 0.3);
   }
 
@@ -1772,11 +1776,12 @@
       rgba(255, 255, 255, 0.1),
       transparent
     );
-    transition: left 0.5s ease;
+    transition: none; /* Disabled for performance */
+    display: none; /* Disabled for performance */
   }
 
   .card-shine:hover::before {
-    left: 100%;
+    display: none; /* Disabled for performance */
   }
 
   /* ============================================
@@ -1798,17 +1803,18 @@
     top: 50%;
     transform: translateY(-50%);
     box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
-    animation: statusPulse 2s ease-in-out infinite;
+    animation: none; /* Disabled for performance */
   }
 
-  @keyframes statusPulse {
+  /* statusPulse animation disabled for performance */
+  /* @keyframes statusPulse {
     0%, 100% {
       box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
     }
     50% {
       box-shadow: 0 0 12px rgba(34, 197, 94, 0.8);
     }
-  }
+  } */
 
   /* ============================================
      PROGRESS BAR ANIMATION
@@ -1832,17 +1838,18 @@
       rgba(255, 255, 255, 0.3),
       transparent
     );
-    animation: progressShine 2s linear infinite;
+    animation: none; /* Disabled for performance */
   }
 
-  @keyframes progressShine {
+  /* progressShine animation disabled for performance */
+  /* @keyframes progressShine {
     0% {
       transform: translateX(-100%);
     }
     100% {
       transform: translateX(100%);
     }
-  }
+  } */
 
   /* ============================================
      TASK CARD ENHANCEMENTS
@@ -1850,11 +1857,11 @@
   
   .task-card {
     position: relative;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 0.2s ease; /* Reduced transition, removed transform */
   }
 
   .task-card:hover {
-    transform: translateY(-2px);
+    /* transform: translateY(-2px); Disabled for performance */
   }
 
   .task-card::after {
@@ -1881,17 +1888,17 @@
      ============================================ */
   
   .stat-card {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
+    transition: box-shadow 0.2s ease; /* Reduced transition, removed 3D */
+    /* transform-style: preserve-3d; Disabled for performance */
   }
 
   .stat-card:hover {
-    transform: none; /* Disabled for performance */
+    /* transform: none; Disabled for performance */
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
   .stat-card:active {
-    transform: none; /* Disabled for performance */
+    /* transform: none; Disabled for performance */
   }
 
   /* ============================================
@@ -1933,12 +1940,12 @@
      ============================================ */
   
   .btn-press {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-    transform-style: preserve-3d;
+    transition: box-shadow 0.15s ease; /* Reduced transition, removed 3D */
+    /* transform-style: preserve-3d; Disabled for performance */
   }
 
   .btn-press:active {
-    transform: scale(0.97);
+    /* transform: scale(0.97); Disabled for performance */
   }
 
   .btn-press:focus-visible {
@@ -2011,7 +2018,7 @@
       rgba(255, 255, 255, 0.05) 75%
     );
     background-size: 200% 100%;
-    animation: skeletonShimmer 1.5s ease-in-out infinite;
+    animation: skeletonShimmer 2s ease-in-out infinite; /* Slower for performance */
     border-radius: 0.5rem;
   }
 
@@ -2050,8 +2057,8 @@
   }
 
   .list-item-animate {
-    animation: listSlideIn 0.3s ease forwards;
-    opacity: 0;
+    animation: none; /* Disabled for performance */
+    opacity: 1; /* Always visible */
   }
 
   /* ============================================

@@ -8,7 +8,6 @@ export default function ActivitiesPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [isDataAnalyst, setIsDataAnalyst] = useState(false);
   const [username, setUsername] = useState('');
   const [filterEmployee, setFilterEmployee] = useState<string>('');
   const [filterDate, setFilterDate] = useState<string>('');
@@ -19,17 +18,14 @@ export default function ActivitiesPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const adminValue = localStorage.getItem('isAdmin') === 'true';
-      const dataAnalystValue = localStorage.getItem('isDataAnalyst') === 'true';
-      // Data analysts should only see their own activities, not all like admins
-      setIsAdmin(adminValue && !dataAnalystValue); // Only true admin, not data analyst
-      setIsDataAnalyst(dataAnalystValue);
+      setIsAdmin(adminValue);
       setUsername(localStorage.getItem('username') || '');
     }
   }, []);
 
-  // Fetch employee list for admin filter (admin only, not data analysts)
+  // Fetch employee list for admin filter (admin only)
   useEffect(() => {
-    if (isAdmin && !isDataAnalyst) {
+    if (isAdmin) {
       const fetchEmployees = async () => {
         try {
           const response = await fetch('/api/employees');
@@ -43,21 +39,21 @@ export default function ActivitiesPage() {
       };
       fetchEmployees();
     }
-  }, [isAdmin, isDataAnalyst]);
+  }, [isAdmin]);
 
-  // Fetch employee statuses (for admin) or current user status (for employees and data analysts)
+  // Fetch employee statuses (for admin) or current user status (for employees)
   useEffect(() => {
     const fetchStatuses = async () => {
       try {
-        if (isAdmin && !isDataAnalyst) {
-          // Fetch all employee and data analyst statuses for admin only
+        if (isAdmin) {
+          // Fetch all employee statuses for admin
           const response = await fetch('/api/auth/all-users-status');
           const data = await response.json();
           if (data.success && Array.isArray(data.statuses)) {
             setEmployeeStatuses(data.statuses);
           }
         } else if (username) {
-          // Fetch current user status for employees and data analysts
+          // Fetch current user status for employees
           const response = await fetch(`/api/auth/user-status?username=${encodeURIComponent(username)}`);
           const data = await response.json();
           if (data.success && data.status) {
@@ -73,7 +69,7 @@ export default function ActivitiesPage() {
     // Refresh statuses every 30 seconds
     const interval = setInterval(fetchStatuses, 30000);
     return () => clearInterval(interval);
-  }, [isAdmin, isDataAnalyst, username]);
+  }, [isAdmin, username]);
 
   // Set default date to today
   useEffect(() => {
@@ -82,27 +78,22 @@ export default function ActivitiesPage() {
   }, []);
 
   useEffect(() => {
-    if (!username && !isAdmin && !isDataAnalyst) return;
+    if (!username && !isAdmin) return;
 
     const fetchActivities = async () => {
       try {
         setLoading(true);
         const params = new URLSearchParams();
-        // Data analysts see only their own activities, not all like admins
         if (!isAdmin && username) {
-          // Data analysts and employees see only their own activities
+          // Employees see only their own activities
           params.append('employee', username);
         }
-        if (isAdmin && !isDataAnalyst) {
-          // Only full admins see all activities
+        if (isAdmin) {
+          // Admins see all activities
           params.append('isAdmin', 'true');
           if (filterEmployee) {
             params.append('filterEmployee', filterEmployee);
           }
-        }
-        if (isDataAnalyst) {
-          // Data analysts are treated like employees
-          params.append('isDataAnalyst', 'true');
         }
         if (filterDate) {
           params.append('filterDate', filterDate);
@@ -128,7 +119,7 @@ export default function ActivitiesPage() {
     // Refresh activities every 10 seconds for live updates
     const interval = setInterval(fetchActivities, 10000);
     return () => clearInterval(interval);
-  }, [username, isAdmin, isDataAnalyst, filterEmployee, filterDate]);
+  }, [username, isAdmin, filterEmployee, filterDate]);
 
   // Generate report function
   const generateReport = async () => {
@@ -138,14 +129,11 @@ export default function ActivitiesPage() {
       if (!isAdmin && username) {
         params.append('employee', username);
       }
-      if (isAdmin && !isDataAnalyst) {
+      if (isAdmin) {
         params.append('isAdmin', 'true');
         if (filterEmployee) {
           params.append('filterEmployee', filterEmployee);
         }
-      }
-      if (isDataAnalyst) {
-        params.append('isDataAnalyst', 'true');
       }
       if (filterDate) {
         params.append('filterDate', filterDate);

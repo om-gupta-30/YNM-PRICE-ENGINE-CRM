@@ -20,7 +20,6 @@ interface ReportData {
     employee: string;
     date: string;
     isAdmin: boolean;
-    isDataAnalyst: boolean;
   };
   generatedAt: string;
 }
@@ -79,7 +78,7 @@ export function generateActivitiesPDF(reportData: ReportData): Blob {
   addText('Filters:', 12, true);
   addText(`Employee: ${reportData.filters.employee}`, 10);
   addText(`Date: ${reportData.filters.date}`, 10);
-  addText(`User Type: ${reportData.filters.isAdmin ? 'Admin' : reportData.filters.isDataAnalyst ? 'Data Analyst' : 'Employee'}`, 10);
+  addText(`User Type: ${reportData.filters.isAdmin ? 'Admin' : 'Employee'}`, 10);
   yPosition += sectionSpacing;
 
   // Summary Section
