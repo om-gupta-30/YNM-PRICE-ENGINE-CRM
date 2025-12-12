@@ -54,8 +54,10 @@ export async function GET(request: NextRequest) {
     // Filter by is_active to only show active accounts (exclude deleted ones)
     query = query.eq('is_active', true);
     
-    // Removed filter: All users can now see all accounts (not just assigned ones)
-    // Previously filtered by assigned_employee if not admin, but now everyone sees all accounts
+    // Filter by assigned_employee: Admin sees all accounts, employees see only their assigned accounts
+    if (!isAdmin && employeeUsername && employeeUsername !== 'Admin') {
+      query = query.eq('assigned_employee', employeeUsername);
+    }
 
     const { data: accounts, error } = await query;
 

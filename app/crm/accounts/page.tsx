@@ -284,11 +284,14 @@ export default function AccountsPage() {
         setLoading(true);
       }
 
-      // Always fetch all accounts - no filtering by employee
+      // Pass user info for server-side filtering: Admin sees all, employees see only assigned accounts
       const params = new URLSearchParams();
-      // Still pass isAdmin for any future admin-specific logic if needed
       if (effectiveIsAdmin) {
         params.append('isAdmin', 'true');
+      }
+      // Pass employee username for filtering (admin can still see all)
+      if (currentUsername && !effectiveIsAdmin) {
+        params.append('employee', currentUsername);
       }
       
       const response = await fetch(`/api/accounts?${params}`);
