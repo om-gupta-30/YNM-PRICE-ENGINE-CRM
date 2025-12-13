@@ -149,22 +149,34 @@ export default function QuotationStatusUpdatePage() {
 
   // Handle confirm update (both status and comments)
   const handleConfirmUpdate = async (quote: Quote) => {
+    const newStatus = tempStatus[quote.id] || quote.status || 'draft';
+    const newComments = tempComments[quote.id] || quoteComments[quote.id] || '';
+    const oldStatus = quote.status || 'draft';
+    const oldComments = quoteComments[quote.id] || '';
+
+    // OPTIMISTIC UPDATE - Update UI immediately (LIGHTNING FAST!)
+    setQuotes(prev => prev.map(q => 
+      q.id === quote.id ? { ...q, status: newStatus } : q
+    ));
+    setQuoteComments(prev => ({ ...prev, [quote.id]: newComments }));
+    setEditingQuote(null);
+    setToast({ message: 'Quotation updated successfully', type: 'success' });
+    
     try {
       setUpdatingStatus(quote.id);
       setUpdatingComments(quote.id);
       
-      const newStatus = tempStatus[quote.id] || quote.status || 'draft';
-      const newComments = tempComments[quote.id] || quoteComments[quote.id] || '';
-
       // Get current username for history tracking
       const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Unknown' : 'Unknown');
 
-      // Update status
+      // Update status (background - non-blocking)
       const statusResponse = await fetch('/api/quotes/update-status', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
         body: JSON.stringify({
           quoteId: quote.id,
           section: quote.section || activeTab,
@@ -175,18 +187,17 @@ export default function QuotationStatusUpdatePage() {
 
       if (!statusResponse.ok) {
         const statusData = await statusResponse.json();
-        setToast({ message: statusData.error || 'Failed to update status', type: 'error' });
-        setUpdatingStatus(null);
-        setUpdatingComments(null);
-        return;
+        throw new Error(statusData.error || 'Failed to update status');
       }
 
-      // Update comments
+      // Update comments (background - non-blocking)
       const commentsResponse = await fetch('/api/quotes/update-comments', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
         body: JSON.stringify({
           quoteId: quote.id,
           section: quote.section || activeTab,
@@ -197,23 +208,21 @@ export default function QuotationStatusUpdatePage() {
 
       if (!commentsResponse.ok) {
         const commentsData = await commentsResponse.json();
-        setToast({ message: commentsData.error || 'Failed to update comments', type: 'error' });
-        setUpdatingStatus(null);
-        setUpdatingComments(null);
-        return;
+        throw new Error(commentsData.error || 'Failed to update comments');
       }
 
-      setToast({ message: 'Quotation updated successfully', type: 'success' });
-      
-      // Update local state
-      setQuoteComments(prev => ({ ...prev, [quote.id]: newComments }));
-      setEditingQuote(null);
-      
-      // Reload quotes to reflect the update
-      await loadQuotes();
+      // Refresh in background (non-blocking) to ensure sync
+      loadQuotes().catch(() => {
+        // Silently fail - we already updated optimistically
+      });
     } catch (error: any) {
+      // REVERT optimistic update on error
+      setQuotes(prev => prev.map(q => 
+        q.id === quote.id ? { ...q, status: oldStatus } : q
+      ));
+      setQuoteComments(prev => ({ ...prev, [quote.id]: oldComments }));
       console.error('Error updating quotation:', error);
-      setToast({ message: 'An error occurred while updating quotation', type: 'error' });
+      setToast({ message: error.message || 'Failed to update quotation. Reverted.', type: 'error' });
     } finally {
       setUpdatingStatus(null);
       setUpdatingComments(null);

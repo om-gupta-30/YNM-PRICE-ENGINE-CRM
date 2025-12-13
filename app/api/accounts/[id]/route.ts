@@ -265,7 +265,10 @@ export async function PUT(
       last_activity_at: data.last_activity_at ? formatTimestampIST(data.last_activity_at) : null,
     };
 
-    return NextResponse.json({ data: formattedData, success: true });
+    const response = NextResponse.json({ data: formattedData, success: true });
+    // No cache for mutations - ensure fresh data
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    return response;
   } catch (error: any) {
     console.error('Update account error:', error);
     return NextResponse.json(
@@ -357,7 +360,10 @@ export async function DELETE(
       last_activity_at: data.last_activity_at ? formatTimestampIST(data.last_activity_at) : null,
     };
 
-    return NextResponse.json({ data: formattedData, success: true });
+    const response = NextResponse.json({ data: formattedData, success: true });
+    // No cache for mutations - ensure fresh data
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    return response;
   } catch (error: any) {
     console.error('Delete account error:', error);
     return NextResponse.json(

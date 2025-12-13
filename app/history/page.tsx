@@ -781,11 +781,29 @@ export default function HistoryPage() {
   const handleDeleteConfirm = async () => {
     if (!quoteToDelete) return;
     
+    const quoteIdToDelete = quoteToDelete.id;
+    const tableToDelete = getTableFromSection(quoteToDelete.section);
+    
+    const quoteToRestore = quoteToDelete; // Store for potential revert
+    
+    // OPTIMISTIC UPDATE - Remove from UI immediately (LIGHTNING FAST!)
+    setQuotes(prev => prev.filter(q => q.id !== quoteIdToDelete));
+    setDeleteConfirmOpen(false);
+    setQuoteToDelete(null);
+    setToast({ message: 'Quotation deleted successfully', type: 'success' });
+    
+    // Also remove from merge selections if selected
+    setSelectedQuotesForMerge(prev => prev.filter(s => !(s.id === quoteIdToDelete && s.table === tableToDelete)));
+    
     try {
       setIsDeleting(true);
       
-      const response = await fetch(`/api/quotes/delete?id=${quoteToDelete.id}&product_type=${activeTab}`, {
+      const response = await fetch(`/api/quotes/delete?id=${quoteIdToDelete}&product_type=${activeTab}`, {
         method: 'DELETE',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
       });
       
       const data = await response.json();
@@ -794,22 +812,22 @@ export default function HistoryPage() {
         throw new Error(data.error || 'Failed to delete quotation');
       }
       
-      // Remove from UI immediately (temporary, will be refreshed after normalization)
-      setQuotes(prevQuotes => prevQuotes.filter(q => q.id !== quoteToDelete.id));
-      
-      // Close confirmation modal
-      setDeleteConfirmOpen(false);
-      setQuoteToDelete(null);
-      
-      // Refetch quotes after deletion
-      await loadQuotes();
-      console.log('✅ Quotation list refreshed');
-      
-      // Show success toast
-      setToast({ message: 'Quotation deleted successfully', type: 'success' });
+      // Refresh in background (non-blocking) to ensure sync
+      loadQuotes().catch(() => {
+        // Silently fail - we already removed it optimistically
+      });
     } catch (error: any) {
+      // REVERT optimistic update on error
+      setQuotes(prev => {
+        const restored = [...prev, quoteToRestore];
+        return restored.sort((a, b) => {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateB - dateA; // Most recent first
+        });
+      });
       console.error('Error deleting quotation:', error);
-      setToast({ message: error.message || 'Failed to delete quotation', type: 'error' });
+      setToast({ message: error.message || 'Failed to delete quotation. Restored.', type: 'error' });
     } finally {
       setIsDeleting(false);
     }

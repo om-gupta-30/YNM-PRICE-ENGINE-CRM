@@ -10,6 +10,7 @@ import ClientLayout from "@/components/layout/ClientLayout";
 import FloatingMascot from "@/components/animations/FloatingMascot";
 import CelebrationEffect from "@/components/crm/CelebrationEffect";
 import CelebrationToast from "@/components/crm/CelebrationToast";
+import PerformanceOptimizer from "@/components/layout/PerformanceOptimizer";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -41,6 +42,7 @@ export default function RootLayout({
         {/* Global background - rendered once, never re-renders */}
         <GlobalBackground />
         
+        <PerformanceOptimizer />
         <AuthGuard>
           <UserProvider>
             <ClientLayout>

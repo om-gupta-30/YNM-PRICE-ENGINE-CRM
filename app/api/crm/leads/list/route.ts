@@ -110,7 +110,10 @@ export async function GET(request: NextRequest) {
       updated_at: lead.updated_at || null, // Keep raw ISO date string for component formatting
     }));
 
-    return NextResponse.json({ success: true, leads: formattedLeads });
+    const response = NextResponse.json({ success: true, leads: formattedLeads });
+    // Cache for 30 seconds with stale-while-revalidate for better performance
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+    return response;
   } catch (error: any) {
     console.error('Leads list API error:', error);
     return NextResponse.json(

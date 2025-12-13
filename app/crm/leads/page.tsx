@@ -6,7 +6,7 @@ import dynamic from 'next/dynamic';
 import { useDebounce } from '@/hooks/useDebounce';
 import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
-import { getCachedData, setCachedData } from '@/lib/utils/crmCache';
+import { getCachedData, setCachedData, clearCachedData } from '@/lib/utils/crmCache';
 
 // Dynamic imports for better performance - load heavy components only when needed
 const LeadForm = dynamic(() => import('@/components/crm/LeadForm'), { ssr: false });
@@ -166,8 +166,14 @@ export default function LeadsPage() {
       if (isAdmin) {
         params.append('isAdmin', 'true');
       }
+      // Add cache busting timestamp to ensure fresh data
+      params.append('_t', Date.now().toString());
+      
       const response = await fetch(`/api/crm/leads/list?${params}`, {
         cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
       });
       
       if (!response.ok) {
@@ -466,7 +472,9 @@ export default function LeadsPage() {
         handleCloseModal();
         setToast({ message: 'Lead updated successfully', type: 'success' });
         
-        // Refresh in background (non-blocking) to ensure sync
+        // Clear cache and refresh in background (non-blocking) to ensure sync
+        const cacheKey = `leads_${isAdmin ? 'admin' : username}`;
+        clearCachedData(cacheKey);
         fetchLeads().catch(() => {
           // Silently fail - we already updated optimistically
         });
@@ -522,7 +530,9 @@ export default function LeadsPage() {
         handleCloseModal();
         setToast({ message: 'Lead Created Successfully!', type: 'success' });
         
-        // Refresh in background (non-blocking)
+        // Clear cache and refresh in background (non-blocking)
+        const cacheKey = `leads_${isAdmin ? 'admin' : username}`;
+        clearCachedData(cacheKey);
         fetchLeads().catch(() => {
           // Silently fail - we already updated optimistically
         });
@@ -699,7 +709,9 @@ export default function LeadsPage() {
 
       setToast({ message: 'Priority updated successfully', type: 'success' });
       
-      // Refresh in background (non-blocking) to ensure sync
+      // Clear cache and refresh in background (non-blocking) to ensure sync
+      const cacheKey = `leads_${isAdmin ? 'admin' : username}`;
+      clearCachedData(cacheKey);
       fetchLeads().catch(() => {
         // Silently fail - we already updated optimistically
       });

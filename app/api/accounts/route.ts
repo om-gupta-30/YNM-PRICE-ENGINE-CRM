@@ -195,7 +195,10 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    return NextResponse.json({ success: true, accounts: accountsWithScores });
+    const response = NextResponse.json({ success: true, accounts: accountsWithScores });
+    // Cache for 30 seconds with stale-while-revalidate for better performance
+    response.headers.set('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=60');
+    return response;
   } catch (error: any) {
     console.error('API error in /api/accounts:', error);
     return NextResponse.json(
@@ -311,7 +314,10 @@ export async function POST(request: NextRequest) {
       // Silently fail - notification creation is non-critical
     });
 
-    return NextResponse.json({ success: true, accountId: account.id }, { status: 201 });
+    const response = NextResponse.json({ success: true, accountId: account.id }, { status: 201 });
+    // No cache for mutations - ensure fresh data
+    response.headers.set('Cache-Control', 'no-store, must-revalidate');
+    return response;
   } catch (error: any) {
     console.error('API error in /api/accounts POST:', error);
     return NextResponse.json(

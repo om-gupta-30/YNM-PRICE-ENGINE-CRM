@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Toast from '@/components/ui/Toast';
 import AccountForm, { AccountFormData } from '@/components/crm/AccountForm';
 import EngagementScoreBadge from '@/components/crm/EngagementScoreBadge';
-import { getCachedData, setCachedData } from '@/lib/utils/crmCache';
+import { getCachedData, setCachedData, clearCachedData } from '@/lib/utils/crmCache';
 
 interface SelectedIndustry {
   industry_id: number;
@@ -300,8 +300,15 @@ export default function AccountsPage() {
       if (currentUsername && !effectiveIsAdmin) {
         params.append('employee', currentUsername);
       }
+      // Add cache busting timestamp to ensure fresh data
+      params.append('_t', Date.now().toString());
       
-      const response = await fetch(`/api/accounts?${params}`);
+      const response = await fetch(`/api/accounts?${params}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
       const data = await response.json();
       
       if (data.success) {
@@ -411,12 +418,36 @@ export default function AccountsPage() {
       };
       
       if (editAccount) {
-        // Update account
+        // Update account - OPTIMISTIC UPDATE
+        const assignedEmployee = determineAssignedEmployee(editAccount?.assignedEmployee);
+        
+        // Optimistically update the account in the list immediately
+        const optimisticAccount: Account = {
+          ...editAccount,
+          accountName: formData.accountName,
+          companyStage: formData.companyStage || '',
+          companyTag: formData.companyTag || '',
+          assignedEmployee: assignedEmployee,
+          notes: formData.notes || null,
+          industries: formData.industries || [],
+          industryProjects: formData.industryProjects || {},
+        };
+        
+        setAccounts(prev => prev.map(acc => 
+          acc.id === editAccount.id ? optimisticAccount : acc
+        ));
+        
+        setToast({ message: 'Updating account...', type: 'success' });
+        handleCloseModal();
+        
         try {
-          const assignedEmployee = determineAssignedEmployee(editAccount?.assignedEmployee);
           const response = await fetch(`/api/accounts/${editAccount.id}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+            },
+            cache: 'no-store',
             body: JSON.stringify({
               accountName: formData.accountName,
               companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
@@ -435,22 +466,60 @@ export default function AccountsPage() {
             throw new Error(data.error || 'Failed to update account');
           }
 
+          // Clear cache and refresh in background (non-blocking)
+          const cacheKey = `accounts_${currentIsAdmin ? 'admin' : currentUsername}`;
+          clearCachedData(cacheKey);
+          fetchAccounts().catch(() => {
+            // Silently fail - we already updated optimistically
+          });
+          
           setToast({ message: 'Account updated successfully', type: 'success' });
-          handleCloseModal();
-          await fetchAccounts(); // Refresh list
           return;
         } catch (error: any) {
+          // Revert optimistic update on error
+          await fetchAccounts();
           console.error('Error updating account:', error);
           setToast({ message: error.message || 'Failed to update account', type: 'error' });
           return;
         }
       }
 
-      // Create new account
+      // Create new account - OPTIMISTIC UPDATE
       const assignedEmployee = determineAssignedEmployee(null);
-      const response = await fetch('/api/accounts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      
+      // Create optimistic account (will be replaced with real data from API)
+      const tempId = Date.now(); // Temporary ID
+      const optimisticAccount: Account = {
+        id: tempId,
+        accountName: formData.accountName,
+        companyStage: formData.companyStage || '',
+        companyTag: formData.companyTag || '',
+        assignedEmployee: assignedEmployee,
+        notes: formData.notes || null,
+        industries: formData.industries || [],
+        industryProjects: formData.industryProjects || {},
+        engagementScore: 0,
+        stateId: null,
+        cityId: null,
+        stateName: null,
+        cityName: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Add optimistically to list
+      setAccounts(prev => [optimisticAccount, ...prev]);
+      setToast({ message: 'Creating account...', type: 'success' });
+      handleCloseModal();
+      
+      try {
+        const response = await fetch('/api/accounts', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache',
+          },
+          cache: 'no-store',
           body: JSON.stringify({
             accountName: formData.accountName,
             companyStage: formData.companyStage && formData.companyStage.trim() !== '' ? formData.companyStage : null,
@@ -461,20 +530,38 @@ export default function AccountsPage() {
             industryProjects: formData.industryProjects || {},
             createdBy: currentUsername || 'System',
           }),
-      });
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create account');
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Failed to create account');
+        }
+
+        // Replace optimistic account with real data
+        if (data.account) {
+          setAccounts(prev => prev.map(acc => 
+            acc.id === tempId ? data.account : acc
+          ));
+        }
+        
+        // Clear cache and refresh in background (non-blocking)
+        const cacheKey = `accounts_${currentIsAdmin ? 'admin' : currentUsername}`;
+        clearCachedData(cacheKey);
+        fetchAccounts().catch(() => {
+          // Silently fail - we already updated optimistically
+        });
+        
+        setToast({ message: 'Account created successfully', type: 'success' });
+      } catch (error: any) {
+        // Remove optimistic account on error
+        setAccounts(prev => prev.filter(acc => acc.id !== tempId));
+        console.error('Error creating account:', error);
+        setToast({ message: error.message || 'Failed to create account', type: 'error' });
       }
-
-      setToast({ message: 'Account created successfully', type: 'success' });
-      handleCloseModal();
-      await fetchAccounts(); // Refresh list
     } catch (error: any) {
-      console.error('Error creating account:', error);
-      setToast({ message: error.message || 'Failed to create account', type: 'error' });
+      console.error('Error saving account:', error);
+      setToast({ message: error.message || 'Failed to save account', type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -492,15 +579,27 @@ export default function AccountsPage() {
       return;
     }
     
+    // Get account to restore on error
+    const accountToDelete = accounts.find(acc => acc.id === accountId);
+    
+    // Optimistic update - remove from list immediately
+    setAccounts(prev => prev.filter(acc => acc.id !== accountId));
+    setToast({ message: 'Deleting account...', type: 'success' });
+    
     try {
       const params = new URLSearchParams();
       const currentUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+      const currentIsAdmin = typeof window !== 'undefined' ? localStorage.getItem('isAdmin') === 'true' : false;
       if (currentUsername) {
         params.append('deletedBy', currentUsername);
       }
       
       const response = await fetch(`/api/accounts/${accountId}?${params}`, {
         method: 'DELETE',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+        cache: 'no-store',
       });
       
       const data = await response.json();
@@ -509,9 +608,21 @@ export default function AccountsPage() {
         throw new Error(data.error || 'Failed to delete account');
       }
       
+      // Clear cache and refresh in background (non-blocking)
+      const cacheKey = `accounts_${currentIsAdmin ? 'admin' : currentUsername}`;
+      clearCachedData(cacheKey);
+      fetchAccounts().catch(() => {
+        // Silently fail - we already removed it optimistically
+      });
+      
       setToast({ message: 'Account deleted successfully', type: 'success' });
-      await fetchAccounts(); // Refresh list
     } catch (error: any) {
+      // Restore account on error
+      if (accountToDelete) {
+        setAccounts(prev => [...prev, accountToDelete].sort((a, b) => 
+          a.accountName.localeCompare(b.accountName)
+        ));
+      }
       console.error('Error deleting account:', error);
       setToast({ message: error.message || 'Failed to delete account', type: 'error' });
     }
@@ -871,9 +982,20 @@ export default function AccountsPage() {
                 className="px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3 text-sm sm:text-base md:text-lg font-bold text-white bg-gradient-to-r from-premium-gold to-dark-gold hover:from-dark-gold hover:to-premium-gold rounded-lg sm:rounded-xl transition-all duration-200 shadow-md shadow-premium-gold/30 flex items-center gap-1 sm:gap-2 disabled:opacity-50 disabled:cursor-not-allowed touch-manipulation min-h-[44px]"
                 style={{ WebkitTapHighlightColor: 'transparent' }}
               >
-                <span>+</span>
-                <span className="hidden sm:inline">Create New Account</span>
-                <span className="sm:hidden">New</span>
+                {submitting ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span className="hidden sm:inline">Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>+</span>
+                    <span className="hidden sm:inline">Create New Account</span>
+                    <span className="sm:hidden">New</span>
+                  </>
+                )}
               </button>
               {isAdmin && (
                 <button 

@@ -1103,6 +1103,9 @@ export default function DoubleWBeamPage() {
 
     setIsSaving(true);
     
+    // OPTIMISTIC UI FEEDBACK - Show immediate success message
+    setToast({ message: isEditMode ? 'Updating quotation...' : 'Saving quotation...', type: 'success' });
+    
     try {
       
       let pdfEstimateNumber = estimateNumber;
@@ -1229,7 +1232,9 @@ export default function DoubleWBeamPage() {
         headers: {
           'Content-Type': 'application/json',
           'x-ynm-username': localStorage.getItem('username') || 'Unknown',
+          'Cache-Control': 'no-cache',
         },
+        cache: 'no-store',
         body: JSON.stringify(quotePayload),
       });
 
@@ -1239,6 +1244,9 @@ export default function DoubleWBeamPage() {
         setIsSaving(false);
         return;
       }
+
+      // Show immediate success (backend saved successfully)
+      setToast({ message: `Quotation ${isEditMode ? 'updated' : 'saved'} successfully! Generating PDF...`, type: 'success' });
 
       // After saving, generate PDF
       try {
@@ -1342,7 +1350,8 @@ export default function DoubleWBeamPage() {
         const pdf = generateQuotationPDF(pdfData, logoBase64 || undefined);
         pdf.save(`Quotation_${pdfEstimateNumber.replace(/\//g, '-')}_${Date.now()}.pdf`);
         
-        setToast({ message: `Quotation ${isEditMode ? 'updated' : 'saved'} and PDF generated successfully`, type: 'success' });
+        // Final success message
+        setToast({ message: `✅ PDF generated successfully!`, type: 'success' });
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError);
         setToast({ message: 'Quotation saved but PDF generation failed. Please try generating PDF again.', type: 'error' });
@@ -3086,12 +3095,24 @@ export default function DoubleWBeamPage() {
             <button
               onClick={handleSaveQuotation}
               disabled={isSaving}
-              className="btn-premium-gold px-12 py-4 text-lg shimmer relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-premium-gold px-12 py-4 text-lg shimmer relative overflow-hidden disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               style={{
                 boxShadow: '0 0 20px rgba(212, 166, 90, 0.3)',
               }}
             >
-              {isSaving ? '⏳ Saving & Generating PDF...' : '💾 Save Quotation & Generate PDF'}
+              {isSaving ? (
+                <>
+                  <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Saving & Generating PDF...</span>
+                </>
+              ) : (
+                <>
+                  <span>💾</span>
+                  <span>Save Quotation & Generate PDF</span>
+                </>
+              )}
             </button>
           </div>
         )}
