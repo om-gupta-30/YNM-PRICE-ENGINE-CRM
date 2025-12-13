@@ -1073,6 +1073,13 @@ export default function ReflectivePartPage() {
   
   // Save quotation and Generate PDF (combined for employees)
   const handleSaveQuotation = async () => {
+    // Admin should never be allowed to save or generate PDFs
+    const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
+    if (currentUsername === 'Admin') {
+      setToast({ message: 'Admins cannot save quotations', type: 'error' });
+      return;
+    }
+
     if (!isQuotationComplete) {
       setToast({ message: 'Please complete all quotation details', type: 'error' });
       return;
@@ -1103,9 +1110,9 @@ export default function ReflectivePartPage() {
       if (validationResult.errors.length > 0) {
         const errorMessages = validationResult.errors
           .map(err => formatValidationMessage(err))
-          .join('\n\n');
+          .join('\n');
         setToast({ message: errorMessages, type: 'error' });
-        return;
+        return; // Required
       }
 
       // Show warnings (non-blocking, but inform user)
@@ -1125,26 +1132,34 @@ export default function ReflectivePartPage() {
     setIsSaving(true);
     
     try {
-      const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
       
       // Fetch a NEW estimate number for PDF only if not in edit mode
       let pdfEstimateNumber = estimateNumber;
-      if (!isEditMode || !pdfEstimateNumber) {
-        try {
-          const estResponse = await fetch('/api/estimate/next-number', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (estResponse.ok) {
-            const estData = await estResponse.json();
-            if (estData.estimateNumber) {
-              pdfEstimateNumber = estData.estimateNumber;
-              setEstimateNumber(pdfEstimateNumber); // Update display
+      // Only fetch new estimate number if NOT in edit mode
+      // In edit mode, preserve the existing estimate number
+      if (!isEditMode) {
+        // If estimate number is empty, fetch a new one
+        if (!pdfEstimateNumber) {
+          try {
+            const estResponse = await fetch('/api/estimate/next-number', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (estResponse.ok) {
+              const estData = await estResponse.json();
+              if (estData.estimateNumber) {
+                pdfEstimateNumber = estData.estimateNumber;
+                setEstimateNumber(pdfEstimateNumber); // Update display
+              }
             }
+          } catch (e) {
+            console.log('Could not fetch new estimate number, using existing');
           }
-        } catch (e) {
-          console.log('Could not fetch new estimate number, using existing');
         }
+      } else {
+        // In edit mode, use the existing estimate number (already loaded from data)
+        // If for some reason it's empty, keep it empty (don't generate new one)
+        pdfEstimateNumber = estimateNumber || '';
       }
       
       // Save meta fields (customers, purposes) to database ONLY when saving quotation
@@ -1239,6 +1254,7 @@ export default function ReflectivePartPage() {
         method,
         headers: {
           'Content-Type': 'application/json',
+          'x-ynm-username': localStorage.getItem('username') || 'Unknown',
         },
         body: JSON.stringify({
           section: 'Signages - Reflective',
@@ -2663,7 +2679,7 @@ export default function ReflectivePartPage() {
         )}
 
         {/* Save Quotation and Generate PDF Button - Combined for employees - Only show when quotation is confirmed - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && !isAdmin && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && gstCalculations && (
+        {!isViewOnlyUser && username !== 'Admin' && isQuotationConfirmed && boardSpecsConfirmed && pricingConfirmed && areaResult && costPerPiece && finalTotal && gstCalculations && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button
               onClick={handleSaveQuotation}

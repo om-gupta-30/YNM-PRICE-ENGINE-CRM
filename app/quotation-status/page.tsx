@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseBrowser } from '@/lib/utils/supabaseClient';
 import { Quote } from '@/lib/constants/types';
 import Toast from '@/components/ui/Toast';
 import CelebrationEffect from '@/components/crm/CelebrationEffect';
@@ -35,12 +34,10 @@ export default function QuotationStatusPage() {
       }
       
       const storedUsername = localStorage.getItem('username') || '';
-      const storedDepartment = localStorage.getItem('department') || 'Sales';
-      const storedIsAdmin = localStorage.getItem('isAdmin') === 'true';
       
-      // Redirect if not Admin
-      if (!storedIsAdmin || storedUsername !== 'Admin' || storedDepartment !== 'Sales') {
-        router.replace('/');
+      // Only Admin can access
+      if (storedUsername !== "Admin") {
+        router.replace("/");
         return;
       }
       
@@ -49,43 +46,31 @@ export default function QuotationStatusPage() {
     }
   }, [router]);
 
-  // Load all quotes (admin sees everything)
-  const loadQuotes = async () => {
+  // Load quotes from API route (never query Supabase directly)
+  const loadStatusData = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      let query: any;
-      
-      if (activeTab === 'mbcb') {
-        query = supabaseBrowser
-          .from('quotes_mbcb')
-          .select('*');
-      } else if (activeTab === 'signages') {
-        query = supabaseBrowser
-          .from('quotes_signages')
-          .select('*');
-      } else if (activeTab === 'paint') {
-        query = supabaseBrowser
-          .from('quotes_paint')
-          .select('*');
-      } else {
-        setQuotes([]);
-        setLoading(false);
-        return;
-      }
-      
-      // Admin sees all quotations - no filtering
-      // Order by created_at descending
-      query = query.order('created_at', { ascending: false });
-      
-      const { data, error: queryError } = await query;
-      
-      if (queryError) throw queryError;
-      
-      setQuotes(data || []);
+
+      const storedUsername = localStorage.getItem("username") || "";
+      const username = storedUsername;
+      const isAdmin = username === "Admin";
+      const productType = activeTab; // 'mbcb', 'signages', or 'paint'
+
+      const url = isAdmin
+        ? `/api/quotes?product_type=${productType}`
+        : `/api/quotes?product_type=${productType}&created_by=${username}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to load");
+
+      const quotes = json.data || [];
+
+      // Keep existing transform/mapping logic the same
+      // In this case, quotes are already in the correct format from API
+      setQuotes(quotes);
     } catch (err: any) {
-      console.error('Error loading quotes:', err);
       setError(err.message || 'Failed to load quotations');
     } finally {
       setLoading(false);
@@ -94,7 +79,7 @@ export default function QuotationStatusPage() {
 
   useEffect(() => {
     if (username) {
-      loadQuotes();
+      loadStatusData();
     }
   }, [activeTab, username]);
 

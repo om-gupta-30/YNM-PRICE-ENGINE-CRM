@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import Toast from '@/components/ui/Toast';
 import DeleteConfirmationModal from '@/components/modals/DeleteConfirmationModal';
-import { supabaseBrowser } from '@/lib/utils/supabaseClient';
 import { Quote } from '@/lib/constants/types';
 import dynamic from 'next/dynamic';
 import QuotationDetailsModal from '@/components/modals/QuotationDetailsModal';
@@ -16,7 +16,7 @@ type SectionTab = 'mbcb' | 'signages' | 'paint';
 // Type for tracking selections with source table
 interface QuoteSelection {
   id: number;
-  table: SectionTab;
+  table: string; // 'mbcb', 'signages', or 'paint'
   final_total_cost: number | null;
   section: string;
   state_id: number | null;
@@ -73,7 +73,7 @@ export default function HistoryPage() {
   const [isMerging, setIsMerging] = useState(false);
   
   // Check if a quote is selected (by table and id, not just id)
-  const isQuoteSelected = (id: number, table: SectionTab) => {
+  const isQuoteSelected = (id: number, table: SectionTab | string) => {
     return selectedQuotesForMerge.some(s => s.id === id && s.table === table);
   };
   
@@ -88,17 +88,39 @@ export default function HistoryPage() {
     const section = quote.section.toLowerCase();
     return section.includes('signages') || section.includes('reflective');
   };
+
+  // Helper function to get section slug from section name
+  const getSectionSlug = (section: string): string => {
+    const sectionLower = section.toLowerCase();
+    if (sectionLower.includes('w-beam') && !sectionLower.includes('double')) {
+      return 'mbcb/w-beam';
+    } else if (sectionLower.includes('double')) {
+      return 'mbcb/double-w-beam';
+    } else if (sectionLower.includes('thrie')) {
+      return 'mbcb/thrie';
+    } else if (sectionLower.includes('signages') || sectionLower.includes('reflective')) {
+      return 'signages/reflective';
+    }
+    return '';
+  };
+
+  // Helper function to get table name from section (for merge feature)
+  const getTableFromSection = (section: string): string => {
+    const sectionLower = section.toLowerCase();
+    if (sectionLower.includes('beam')) {
+      return 'mbcb';
+    } else if (sectionLower.includes('sign')) {
+      return 'signages';
+    }
+    return 'paint';
+  };
   
   // Get quotes for active tab
+  // Since we're already querying the correct table (quotes_mbcb, quotes_signages, etc.),
+  // we don't need to filter by section - all quotes in the array are already for the active tab
   const quotesForActiveTab = useMemo(() => {
-    if (activeTab === 'mbcb') {
-      return quotes.filter(isMBCBQuote);
-    } else if (activeTab === 'signages') {
-      return quotes.filter(isSignagesQuote);
-    } else {
-      return []; // Paint - coming soon
-    }
-  }, [quotes, activeTab]);
+    return quotes; // All quotes are already filtered by table in loadQuotes()
+  }, [quotes]);
   
   // Unique filter values for active tab
   const uniqueValues = useMemo(() => {
@@ -115,10 +137,19 @@ export default function HistoryPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const storedUsername = localStorage.getItem('username') || '';
-      const storedIsAdmin = localStorage.getItem('isAdmin') === 'true';
       const storedDepartment = localStorage.getItem('department') || 'Sales';
+      
+      // Correct admin detection
+      const isAdminUser = storedUsername === "Admin";
+      
+      console.log("[History] Loading user info from localStorage:", {
+        username: storedUsername,
+        isAdmin: isAdminUser,
+        department: storedDepartment
+      });
+      
       setCurrentUsername(storedUsername);
-      setIsAdmin(storedIsAdmin);
+      setIsAdmin(isAdminUser);
       setDepartment(storedDepartment);
       
       // Redirect if not Sales department (Accounts will have different pages later)
@@ -128,19 +159,20 @@ export default function HistoryPage() {
     }
   }, [router]);
 
-  // Function to find which table contains a quote ID
+  // Function to find which table contains a quote ID (using API route)
   const findQuoteTable = async (quoteId: number): Promise<SectionTab | null> => {
     try {
-      // Check all three tables for the quote ID
+      // Check all three product types via API route
       const [mbcbRes, signagesRes, paintRes] = await Promise.all([
-        supabaseBrowser.from('quotes_mbcb').select('id, section').eq('id', quoteId).maybeSingle(),
-        supabaseBrowser.from('quotes_signages').select('id, section').eq('id', quoteId).maybeSingle(),
-        supabaseBrowser.from('quotes_paint').select('id, section').eq('id', quoteId).maybeSingle(),
+        fetch(`/api/quotes?product_type=mbcb&limit=1000`).then(r => r.json()),
+        fetch(`/api/quotes?product_type=signages&limit=1000`).then(r => r.json()),
+        fetch(`/api/quotes?product_type=paint&limit=1000`).then(r => r.json()),
       ]);
       
-      if (mbcbRes.data) return 'mbcb';
-      if (signagesRes.data) return 'signages';
-      if (paintRes.data) return 'paint';
+      // Check if quote ID exists in any of the results
+      if (mbcbRes.data && mbcbRes.data.some((q: any) => q.id === quoteId)) return 'mbcb';
+      if (signagesRes.data && signagesRes.data.some((q: any) => q.id === quoteId)) return 'signages';
+      if (paintRes.data && paintRes.data.some((q: any) => q.id === quoteId)) return 'paint';
       
       return null;
     } catch (error) {
@@ -198,58 +230,38 @@ export default function HistoryPage() {
     }
   }, [highlightedQuoteId, loading, activeTab, quotesForActiveTab]);
 
-  // Load quotes from Supabase based on active tab and user role
+  // Load quotes from API route (never query Supabase directly)
   const loadQuotes = async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      let query: any;
-      
-      if (activeTab === 'mbcb') {
-        query = supabaseBrowser
-          .from('quotes_mbcb')
-          .select('*');
-      } else if (activeTab === 'signages') {
-        query = supabaseBrowser
-          .from('quotes_signages')
-          .select('*');
-      } else if (activeTab === 'paint') {
-        query = supabaseBrowser
-          .from('quotes_paint')
-          .select('*');
-      } else {
-        setQuotes([]);
-        setLoading(false);
-        return;
-      }
-      
-      // Filter by user role: Admin sees all, employees see only their own quotations
-      if (!isAdmin && currentUsername) {
-        // For sales employees: filter by quotations they created
-        // This ensures they only see quotations for their own customers
-        query = query.eq('created_by', currentUsername);
-      }
-      // Admin sees all quotations - no filtering needed
-      
-      // Order by created_at descending
-      query = query.order('created_at', { ascending: false });
-      
-      const { data, error: queryError } = await query;
-      
-      if (queryError) throw queryError;
-      
+
+      const storedUsername = localStorage.getItem("username") || "";
+      const username = storedUsername;
+
+      const isAdmin = username === "Admin";
+
+      const url = isAdmin
+        ? `/api/quotes?product_type=${activeTab}`
+        : `/api/quotes?product_type=${activeTab}&created_by=${username}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      if (!res.ok) throw new Error(json.error || "Failed to fetch");
+
+      const quotes = json.data || [];
+
       // Fetch all states and cities once
-      const [statesRes, allQuotes] = await Promise.all([
+      const [statesRes] = await Promise.all([
         fetch('/api/states'),
-        Promise.resolve(data || [])
       ]);
       
       const statesData = await statesRes.json();
       const statesMap = new Map((statesData.states || []).map((s: any) => [s.id, s.name]));
       
-      // Get unique state_ids from quotes
-      const uniqueStateIds = [...new Set((data || []).map((q: any) => q.state_id).filter(Boolean))];
+      // Get unique state_ids from all quotes
+      const uniqueStateIds = [...new Set(quotes.map((q: any) => q.state_id).filter(Boolean))];
       
       // Fetch cities for all states at once
       const citiesPromises = uniqueStateIds.map(stateId => 
@@ -257,7 +269,7 @@ export default function HistoryPage() {
       );
       const citiesResults = await Promise.all(citiesPromises);
       const citiesMap = new Map();
-      citiesResults.forEach((result, index) => {
+      citiesResults.forEach((result) => {
         if (result.success && result.cities) {
           result.cities.forEach((city: any) => {
             citiesMap.set(city.id, city.name);
@@ -265,18 +277,16 @@ export default function HistoryPage() {
         }
       });
       
-      // Transform data to include state_name and city_name
-      const transformedData = (data || []).map((quote: any) => ({
+      // Transform all quotes data to include state_name and city_name
+      const transformedData = quotes.map((quote: any) => ({
         ...quote,
         state_name: quote.state_id ? statesMap.get(quote.state_id) || null : null,
         city_name: quote.city_id ? citiesMap.get(quote.city_id) || null : null,
-        // Keep place_of_supply for backward compatibility
         place_of_supply: quote.place_of_supply || (quote.state_id && quote.city_id && statesMap.get(quote.state_id) && citiesMap.get(quote.city_id) ? `${statesMap.get(quote.state_id)}, ${citiesMap.get(quote.city_id)}` : null),
       }));
-      
+
       setQuotes(transformedData);
     } catch (err: any) {
-      console.error('Error loading quotes:', err);
       setError(err.message || 'Failed to load quotation history');
     } finally {
       setLoading(false);
@@ -285,17 +295,49 @@ export default function HistoryPage() {
 
   // Load quotes when tab changes or user info changes
   useEffect(() => {
-    if (currentUsername) { // Only load when we have user info
+    // Always read fresh from localStorage
+    const storedUsername = typeof window !== 'undefined' ? localStorage.getItem('username') || '' : '';
+    const usernameToUse = currentUsername || storedUsername;
+    
+    // Correct admin detection
+    const isAdminUser = usernameToUse === "Admin";
+    
+    console.log("[History] useEffect triggered");
+    console.log("[History] activeTab:", activeTab);
+    console.log("[History] currentUsername state:", currentUsername);
+    console.log("[History] storedUsername:", storedUsername);
+    console.log("[History] usernameToUse:", usernameToUse);
+    console.log("[History] isAdminUser:", isAdminUser);
+    
+    // For admin users, load immediately
+    // For non-admin users, wait until username is available
+    if (isAdminUser) {
+      console.log("[History] 👑 Admin user detected - loading all quotations");
       loadQuotes();
+    } else if (usernameToUse && usernameToUse.trim() !== '') {
+      console.log("[History] 👤 Employee user detected - loading quotations for:", usernameToUse);
+      loadQuotes();
+    } else {
+      console.log("[History] ⏳ Waiting for user info to load...");
+      console.log("[History] Debug:", { 
+        currentUsername, 
+        storedUsername, 
+        hasUsername: !!(usernameToUse && usernameToUse.trim() !== '')
+      });
     }
-    // Note: We no longer clear all selections when tab changes to support cross-product merging
-    // Selections are preserved across tabs
-  }, [activeTab, currentUsername, isAdmin]); // Reload when tab changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentUsername]);
+
+  // Debug: Log quotations data whenever it changes
+  useEffect(() => {
+    console.log("History page data:", quotes);
+  }, [quotes]);
   
   // Handle checkbox toggle - tracks selection for merge PDF generation
   const handleToggleSelect = (quote: Quote) => {
     const quoteId = quote.id;
-    const sourceTable = activeTab; // Use activeTab since quotes are filtered by tab
+    // Fix: Determine table from section, not activeTab
+    const sourceTable = getTableFromSection(quote.section);
     
     setSelectedQuotesForMerge(prev => {
       const exists = prev.some(s => s.id === quoteId && s.table === sourceTable);
@@ -321,17 +363,22 @@ export default function HistoryPage() {
   
   // Handle select all in current tab
   const handleSelectAll = () => {
-    const allCurrentSelected = filteredQuotes.every(q => isQuoteSelected(q.id, activeTab));
+    const allCurrentSelected = filteredQuotes.every(q => {
+      const table = getTableFromSection(q.section);
+      return isQuoteSelected(q.id, table as SectionTab);
+    });
     
     if (allCurrentSelected) {
       // Deselect all from current tab only
-      setSelectedQuotesForMerge(prev => prev.filter(s => s.table !== activeTab));
+      const currentTabTables = new Set(filteredQuotes.map(q => getTableFromSection(q.section)));
+      setSelectedQuotesForMerge(prev => prev.filter(s => !currentTabTables.has(s.table)));
     } else {
       // Select all from current tab (keep other tabs' selections)
-      const otherTabSelections = selectedQuotesForMerge.filter(s => s.table !== activeTab);
+      const currentTabTables = new Set(filteredQuotes.map(q => getTableFromSection(q.section)));
+      const otherTabSelections = selectedQuotesForMerge.filter(s => !currentTabTables.has(s.table));
       const currentTabSelections = filteredQuotes.map(q => ({
         id: q.id,
-        table: activeTab,
+        table: getTableFromSection(q.section),
         final_total_cost: q.final_total_cost,
         section: q.section,
         state_id: q.state_id || null,
@@ -345,7 +392,7 @@ export default function HistoryPage() {
     }
   };
   
-  // Validation with restrictions: same place of supply, same estimate date, same expiry date
+  // Validation with restrictions: same state_id, city_id, estimate_date, expiry_date
   const mergeValidation = useMemo(() => {
     if (selectedQuotesForMerge.length === 0) {
       return { canMerge: false, message: 'Select quotations to generate merged PDF' };
@@ -355,14 +402,21 @@ export default function HistoryPage() {
       return { canMerge: false, message: 'Select at least 2 quotations to merge' };
     }
     
-    // Check all have same place of supply (state_id + city_id)
-    const placeOfSupplyKeys = selectedQuotesForMerge.map(s => `${s.state_id || 'null'}-${s.city_id || 'null'}`);
-    const uniquePlaces = new Set(placeOfSupplyKeys);
-    if (uniquePlaces.size > 1) {
-      return { canMerge: false, message: '⚠️ All quotations must have the same Place of Supply' };
+    // Validate: All must have same state_id
+    const stateIds = selectedQuotesForMerge.map(s => s.state_id);
+    const uniqueStateIds = new Set(stateIds.filter(id => id !== null));
+    if (uniqueStateIds.size > 1) {
+      return { canMerge: false, message: '⚠️ All quotations must have the same State' };
     }
     
-    // Check all have same estimate date (from raw_payload or date field)
+    // Validate: All must have same city_id
+    const cityIds = selectedQuotesForMerge.map(s => s.city_id);
+    const uniqueCityIds = new Set(cityIds.filter(id => id !== null));
+    if (uniqueCityIds.size > 1) {
+      return { canMerge: false, message: '⚠️ All quotations must have the same City' };
+    }
+    
+    // Validate: All must have same estimate_date
     const estimateDates = selectedQuotesForMerge.map(s => {
       const payload = s.raw_payload || {};
       return payload.estimateDate || payload.quotationDate || s.date || '';
@@ -372,7 +426,7 @@ export default function HistoryPage() {
       return { canMerge: false, message: '⚠️ All quotations must have the same Estimate Date' };
     }
     
-    // Check all have same expiry date (from raw_payload)
+    // Validate: All must have same expiry_date
     const expiryDates = selectedQuotesForMerge.map(s => {
       const payload = s.raw_payload || {};
       return payload.expiryDate || '';
@@ -410,8 +464,11 @@ export default function HistoryPage() {
     try {
       setIsMerging(true);
       
-      // Prepare request body
-      const quoteSources = selectedQuotesForMerge.map(s => ({ id: s.id, table: s.table }));
+      // Prepare request body with correct table mapping
+      const quoteSources = selectedQuotesForMerge.map(s => ({
+        id: s.id,
+        table: getTableFromSection(s.section)
+      }));
       
       const response = await fetch('/api/merge-quotes', {
         method: 'POST',
@@ -521,98 +578,6 @@ export default function HistoryPage() {
     }
   };
   
-  const exportToExcel = async (quote?: Quote) => {
-    try {
-    // Dynamic import xlsx to reduce initial bundle size
-      // Use namespace import to get all exports
-    const XLSX = await import('xlsx');
-      
-      // Verify XLSX has required methods
-      if (!XLSX || !XLSX.utils || !XLSX.writeFile) {
-        console.error('XLSX library not properly loaded:', XLSX);
-        setToast({ message: 'Excel export library is not available. Please refresh the page and try again.', type: 'error' });
-        return;
-      }
-    
-    const dataToExport = quote ? [quote] : filteredQuotes;
-      
-      if (!dataToExport || dataToExport.length === 0) {
-        setToast({ message: 'No quotations to export', type: 'error' });
-        return;
-      }
-    
-    const excelData = dataToExport.map(q => {
-      const baseData: any = {
-        'ID': q.id,
-        'Created By': q.created_by || '',
-        'Section': q.section,
-        'State': q.state_name || '',
-        'City': q.city_name || '',
-          'Sub Account Name': q.sub_account_name || q.customer_name || '',
-        'Purpose': q.purpose || '',
-          'Date': q.date || '',
-          'Final Total Cost': q.final_total_cost || 0,
-        'Created At': formatTimestampIST(q.created_at),
-      };
-      
-      // Add section-specific fields
-      if (isMBCBQuote(q)) {
-        baseData['Quantity (rm)'] = q.quantity_rm || '';
-        baseData['Total Weight per rm'] = q.total_weight_per_rm || '';
-        baseData['Total Cost per rm'] = q.total_cost_per_rm || '';
-      } else if (isSignagesQuote(q)) {
-        const payload = q.raw_payload || {};
-        baseData['Board Type'] = payload.boardType || '';
-        baseData['Shape'] = payload.shape || '';
-        baseData['Area (sq ft)'] = payload.areaSqFt || '';
-        baseData['Quantity'] = payload.quantity || '';
-        baseData['Cost Per Piece'] = payload.costPerPiece || '';
-        } else if (q.section?.toLowerCase().includes('paint')) {
-          const payload = q.raw_payload || {};
-          baseData['Area (sq ft)'] = payload.areaSqFt || '';
-          baseData['Cost Per Sq Ft'] = payload.costPerSqFt || '';
-          baseData['Quantity'] = payload.quantity || '';
-      }
-      
-      return baseData;
-    });
-      
-      if (!excelData || excelData.length === 0) {
-        setToast({ message: 'No data to export', type: 'error' });
-        return;
-      }
-    
-    const ws = XLSX.utils.json_to_sheet(excelData);
-      
-      // Set column widths for better readability
-      const maxWidth = 30;
-      const wscols = Object.keys(excelData[0] || {}).map(() => ({ wch: maxWidth }));
-      ws['!cols'] = wscols;
-      
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
-    
-    const fileName = quote 
-        ? `Quotation-${quote.id}-${(quote.customer_name || quote.sub_account_name || 'Unknown').replace(/\s+/g, '-')}.xlsx`
-      : `${activeTab.toUpperCase()}-Quotations-${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    XLSX.writeFile(wb, fileName);
-      
-      // Show success message
-      setToast({ 
-        message: quote 
-          ? 'Quotation exported to Excel successfully' 
-          : `${dataToExport.length} quotation(s) exported to Excel successfully`, 
-        type: 'success' 
-      });
-    } catch (err: any) {
-      console.error('Error exporting to Excel:', err);
-      setToast({ 
-        message: `Failed to export to Excel: ${err.message || 'Unknown error'}. Please try again.`, 
-        type: 'error' 
-      });
-    }
-  };
 
   // Helper function to convert Quote to any (removed - PDF export disabled)
   const convertQuoteToPDFData = (quote: Quote): any => {
@@ -811,28 +776,6 @@ export default function HistoryPage() {
     setDeleteConfirmOpen(true);
   };
   
-  const handleEditQuotation = (quote: Quote) => {
-    // Determine the route based on section
-    const section = quote.section?.toLowerCase() || '';
-    let route = '';
-    
-    if (section.includes('w-beam') && !section.includes('double')) {
-      route = `/mbcb/w-beam?edit=${quote.id}`;
-    } else if (section.includes('double')) {
-      route = `/mbcb/double-w-beam?edit=${quote.id}`;
-    } else if (section.includes('thrie')) {
-      route = `/mbcb/thrie?edit=${quote.id}`;
-    } else if (section.includes('signages') || section.includes('reflective')) {
-      route = `/signages/reflective?edit=${quote.id}`;
-    }
-    
-    if (route) {
-      router.push(route);
-    } else {
-      setToast({ message: 'Unable to determine edit route for this quotation', type: 'error' });
-    }
-  };
-  
   // Status updates are now handled in the Quotation Status Update page only
 
   const handleDeleteConfirm = async () => {
@@ -898,7 +841,10 @@ export default function HistoryPage() {
             <th className="text-left py-4 px-4 text-sm font-bold text-white">
               <input
                 type="checkbox"
-                checked={filteredQuotes.length > 0 && filteredQuotes.every(q => isQuoteSelected(q.id, activeTab))}
+                checked={filteredQuotes.length > 0 && filteredQuotes.every(q => {
+                  const table = getTableFromSection(q.section);
+                  return isQuoteSelected(q.id, table);
+                })}
                 onChange={handleSelectAll}
                 className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
               />
@@ -948,7 +894,7 @@ export default function HistoryPage() {
               <td className="py-4 px-4">
                 <input
                       type="checkbox"
-                      checked={isQuoteSelected(quote.id, activeTab)}
+                      checked={isQuoteSelected(quote.id, getTableFromSection(quote.section))}
                       onChange={() => handleToggleSelect(quote)}
                       className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                 />
@@ -1005,26 +951,21 @@ export default function HistoryPage() {
                     View
                   </button>
                   {!isAdmin && (
+                    <Link href={`/${getSectionSlug(quote.section)}?edit=${quote.id}`}>
+                      <button className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200">
+                        ✏️ Edit
+                      </button>
+                    </Link>
+                  )}
+                  {isAdmin && (
                     <button
-                      onClick={() => handleEditQuotation(quote)}
-                      className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200"
+                      onClick={() => handleDeleteClick(quote)}
+                      disabled={isDeleting}
+                      className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      ✏️ Edit
+                      🗑️ Delete
                     </button>
                   )}
-                  <button
-                    onClick={() => exportToExcel(quote)}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-premium-gold/80 hover:bg-premium-gold rounded-lg transition-all duration-200"
-                  >
-                    Excel
-                  </button>
-                  <button
-                    onClick={() => handleDeleteClick(quote)}
-                    disabled={isDeleting}
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    🗑️ Delete
-                  </button>
                 </div>
               </td>
             </tr>
@@ -1053,7 +994,10 @@ export default function HistoryPage() {
               <th className="text-left py-4 px-4 text-sm font-bold text-white">
                 <input
                   type="checkbox"
-                  checked={filteredQuotes.length > 0 && filteredQuotes.every(q => isQuoteSelected(q.id, activeTab))}
+                  checked={filteredQuotes.length > 0 && filteredQuotes.every(q => {
+                    const table = getTableFromSection(q.section);
+                    return isQuoteSelected(q.id, table);
+                  })}
                   onChange={handleSelectAll}
                   className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                 />
@@ -1096,7 +1040,7 @@ export default function HistoryPage() {
                   <td className="py-4 px-4">
                     <input
                       type="checkbox"
-                      checked={isQuoteSelected(quote.id, activeTab)}
+                      checked={isQuoteSelected(quote.id, getTableFromSection(quote.section))}
                       onChange={() => handleToggleSelect(quote)}
                       className="w-4 h-4 text-brand-primary bg-gray-100 border-gray-300 rounded focus:ring-brand-primary"
                     />
@@ -1153,26 +1097,21 @@ export default function HistoryPage() {
                         View
                       </button>
                       {!isAdmin && (
+                        <Link href={`/${getSectionSlug(quote.section)}?edit=${quote.id}`}>
+                          <button className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200">
+                            ✏️ Edit
+                          </button>
+                        </Link>
+                      )}
+                      {isAdmin && (
                         <button
-                          onClick={() => handleEditQuotation(quote)}
-                          className="px-3 py-1.5 text-xs font-semibold text-white bg-green-500/80 hover:bg-green-500 rounded-lg transition-all duration-200"
+                          onClick={() => handleDeleteClick(quote)}
+                          disabled={isDeleting}
+                          className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          ✏️ Edit
+                          🗑️ Delete
                         </button>
                       )}
-                      <button
-                        onClick={() => exportToExcel(quote)}
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-premium-gold/80 hover:bg-premium-gold rounded-lg transition-all duration-200"
-                      >
-                        Excel
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(quote)}
-                        disabled={isDeleting}
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-red-500/80 hover:bg-red-500 rounded-lg transition-all duration-200 hover:shadow-lg hover:shadow-red-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        🗑️ Delete
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -1346,15 +1285,6 @@ export default function HistoryPage() {
                 </div>
               </div>
               
-              {/* Export Buttons */}
-              <div className="mt-6 flex justify-end gap-4 flex-wrap">
-                <button
-                  onClick={() => exportToExcel()}
-                  className="btn-premium-gold btn-ripple btn-press btn-3d px-6 py-3 text-base shimmer"
-                >
-                  📊 Export All to Excel
-                </button>
-              </div>
             </div>
             
             {/* Merge Selection Panel - Shows when quotations are selected */}
@@ -1422,7 +1352,10 @@ export default function HistoryPage() {
               Showing {filteredQuotes.length} of {quotesForActiveTab.length} quotations
               {selectedQuotesForMerge.length > 0 && (
                 <span className="ml-2 text-cyan-300">
-                  • {selectedQuotesForMerge.filter(s => s.table === activeTab).length} selected in this tab
+                  • {selectedQuotesForMerge.filter(s => {
+                    const currentTabTables = new Set(filteredQuotes.map(q => getTableFromSection(q.section)));
+                    return currentTabTables.has(s.table);
+                  }).length} selected in this tab
                 </span>
               )}
             </div>

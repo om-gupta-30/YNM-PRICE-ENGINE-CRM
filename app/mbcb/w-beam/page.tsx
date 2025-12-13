@@ -1114,6 +1114,13 @@ export default function WBeamPage() {
       return;
     }
 
+    // Admin should never be allowed to save or generate PDFs
+    const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
+    if (currentUsername === 'Admin') {
+      setToast({ message: 'Admins cannot save quotations', type: 'error' });
+      return;
+    }
+
     // Validate inputs
     if (!isQuotationComplete) {
       setToast({ message: 'Please complete all mandatory quotation fields', type: 'error' });
@@ -1152,9 +1159,9 @@ export default function WBeamPage() {
       if (validationResult.errors.length > 0) {
         const errorMessages = validationResult.errors
           .map(err => formatValidationMessage(err))
-          .join('\n\n');
+          .join('\n');
         setToast({ message: errorMessages, type: 'error' });
-        return;
+        return; // Required
       }
 
       // Show warnings (non-blocking, but inform user)
@@ -1174,26 +1181,34 @@ export default function WBeamPage() {
     setIsSaving(true);
     
     try {
-      const currentUsername = username || (typeof window !== 'undefined' ? localStorage.getItem('username') || 'Admin' : 'Admin');
       
       // Fetch a NEW estimate number for PDF only if not in edit mode
       let pdfEstimateNumber = estimateNumber;
-      if (!isEditMode || !pdfEstimateNumber) {
-        try {
-          const estResponse = await fetch('/api/estimate/next-number', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          });
-          if (estResponse.ok) {
-            const estData = await estResponse.json();
-            if (estData.estimateNumber) {
-              pdfEstimateNumber = estData.estimateNumber;
-              setEstimateNumber(pdfEstimateNumber); // Update display
+      // Only fetch new estimate number if NOT in edit mode
+      // In edit mode, preserve the existing estimate number
+      if (!isEditMode) {
+        // If estimate number is empty, fetch a new one
+        if (!pdfEstimateNumber) {
+          try {
+            const estResponse = await fetch('/api/estimate/next-number', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            });
+            if (estResponse.ok) {
+              const estData = await estResponse.json();
+              if (estData.estimateNumber) {
+                pdfEstimateNumber = estData.estimateNumber;
+                setEstimateNumber(pdfEstimateNumber); // Update display
+              }
             }
+          } catch (e) {
+            console.log('Could not fetch new estimate number, using existing');
           }
-        } catch (e) {
-          console.log('Could not fetch new estimate number, using existing');
         }
+      } else {
+        // In edit mode, use the existing estimate number (already loaded from data)
+        // If for some reason it's empty, keep it empty (don't generate new one)
+        pdfEstimateNumber = estimateNumber || '';
       }
       
       // Convert DD/MM/YYYY to YYYY-MM-DD for database
@@ -1272,6 +1287,7 @@ export default function WBeamPage() {
         method,
         headers: {
           'Content-Type': 'application/json',
+          'x-ynm-username': localStorage.getItem('username') || 'Unknown',
         },
         body: JSON.stringify(quotePayload),
       });
@@ -3178,7 +3194,7 @@ export default function WBeamPage() {
         )}
 
         {/* Save Quotation and Generate PDF Button - Combined for employees - Only show when quotation, cost, and quantity are confirmed - Hidden for MBCB and Admin users */}
-        {!isViewOnlyUser && isQuotationConfirmed && isCostConfirmed && isQuantityConfirmed && ((fastenerMode === 'manual' && calculateFastenerWeight() > 0 && ratePerKg !== null && ratePerKg > 0) || 
+        {!isViewOnlyUser && username !== 'Admin' && isQuotationConfirmed && isCostConfirmed && isQuantityConfirmed && ((fastenerMode === 'manual' && calculateFastenerWeight() > 0 && ratePerKg !== null && ratePerKg > 0) || 
           (fastenerMode === 'default' && totalWeight > 0 && ratePerKg !== null && ratePerKg > 0)) && gstCalculations && (
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-10">
             <button

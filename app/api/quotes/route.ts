@@ -20,6 +20,9 @@ function getTableName(section: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    // Always read username from headers (set by frontend)
+    const username = request.headers.get("x-ynm-username") || "Unknown";
+    
     const body = await request.json();
     const {
       section,
@@ -42,7 +45,6 @@ export async function POST(request: NextRequest) {
       ai_pricing_insights,
       pdf_estimate_number,
       raw_payload,
-      created_by,
       is_saved,
     } = body;
 
@@ -134,7 +136,7 @@ export async function POST(request: NextRequest) {
       ai_pricing_insights: ai_pricing_insights || null,
       pdf_estimate_number: pdf_estimate_number || null,
       raw_payload: raw_payload || null,
-      created_by: created_by || null,
+      created_by: username,
       is_saved: is_saved !== undefined ? is_saved : false,
     };
 
@@ -247,7 +249,7 @@ export async function POST(request: NextRequest) {
 
         // Log quotation save activity
         await logQuotationSaveActivity({
-          employee_id: created_by || 'System',
+          employee_id: username || 'System',
           quotationId: data.id,
           section,
           accountName,
