@@ -71,16 +71,16 @@ export default function IndustrySelector({ value, onChange, disabled = false }: 
     const isSelected = isSubIndustrySelected(industry.id, subIndustry.id);
 
     if (isSelected) {
-      // Remove
+      // Remove - allow deselecting the current one
       onChange(
         value.filter(
           (item) => !(item.industry_id === industry.id && item.sub_industry_id === subIndustry.id)
         )
       );
     } else {
-      // Add
+      // Replace - only allow one sub-industry to be selected at a time
+      // Clear all existing selections and add the new one
       onChange([
-        ...value,
         {
           industry_id: industry.id,
           industry_name: industry.name,
@@ -101,15 +101,18 @@ export default function IndustrySelector({ value, onChange, disabled = false }: 
       // Deselect all from this industry
       onChange(value.filter((item) => item.industry_id !== industry.id));
     } else {
-      // Select all from this industry
-      const otherSelections = value.filter((item) => item.industry_id !== industry.id);
-      const allFromThisIndustry = industry.subIndustries.map((si) => ({
-        industry_id: industry.id,
-        industry_name: industry.name,
-        sub_industry_id: si.id,
-        sub_industry_name: si.name,
-      }));
-      onChange([...otherSelections, ...allFromThisIndustry]);
+      // Since only one sub-industry is allowed, select the first one from this industry
+      // This maintains the "Select All" button functionality but respects the single selection constraint
+      if (industry.subIndustries.length > 0) {
+        onChange([
+          {
+            industry_id: industry.id,
+            industry_name: industry.name,
+            sub_industry_id: industry.subIndustries[0].id,
+            sub_industry_name: industry.subIndustries[0].name,
+          },
+        ]);
+      }
     }
   };
 
@@ -193,9 +196,12 @@ export default function IndustrySelector({ value, onChange, disabled = false }: 
                       e.stopPropagation();
                       selectAllSubIndustries(industry);
                     }}
+                    disabled={value.length > 0 && !allSelected}
                     className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
                       allSelected
                         ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                        : value.length > 0 && !allSelected
+                        ? 'bg-slate-500/20 text-slate-400 cursor-not-allowed opacity-50'
                         : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
                     }`}
                   >
@@ -210,24 +216,29 @@ export default function IndustrySelector({ value, onChange, disabled = false }: 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {industry.subIndustries.map((subIndustry) => {
                       const isSelected = isSubIndustrySelected(industry.id, subIndustry.id);
+                      // Disable if another sub-industry is already selected (only one allowed)
+                      const hasOtherSelection = value.length > 0 && !isSelected;
+                      const isDisabled = disabled || hasOtherSelection;
 
                       return (
                         <label
                           key={`sub-${industry.id}-${subIndustry.id}`}
-                          className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                          className={`flex items-center gap-2 px-2 py-1.5 rounded transition-colors ${
                             isSelected
                               ? 'bg-premium-gold/20 border border-premium-gold/30'
-                              : 'bg-white/5 border border-transparent hover:bg-white/10'
-                          } ${disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              : isDisabled
+                              ? 'bg-white/5 border border-transparent opacity-40 cursor-not-allowed'
+                              : 'bg-white/5 border border-transparent hover:bg-white/10 cursor-pointer'
+                          }`}
                         >
                           <input
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSubIndustry(industry, subIndustry)}
-                            disabled={disabled}
-                            className="w-4 h-4 rounded border-white/30 bg-white/10 text-premium-gold focus:ring-premium-gold/50"
+                            disabled={isDisabled}
+                            className="w-4 h-4 rounded border-white/30 bg-white/10 text-premium-gold focus:ring-premium-gold/50 disabled:opacity-40 disabled:cursor-not-allowed"
                           />
-                          <span className={`text-sm ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                          <span className={`text-sm ${isSelected ? 'text-white' : isDisabled ? 'text-slate-500' : 'text-slate-300'}`}>
                             {subIndustry.name}
                           </span>
                         </label>

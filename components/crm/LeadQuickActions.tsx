@@ -15,12 +15,6 @@ export default function LeadQuickActions({ lead, onActionClick }: LeadQuickActio
       icon: '📝',
       color: 'bg-blue-500/80 hover:bg-blue-500',
     },
-    {
-      id: 'followup',
-      label: 'Set Follow-Up',
-      icon: '📅',
-      color: 'bg-purple-500/80 hover:bg-purple-500',
-    },
   ];
 
   return (

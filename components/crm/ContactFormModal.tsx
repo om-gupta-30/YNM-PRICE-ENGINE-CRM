@@ -138,8 +138,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={!!contact}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg"
               />
             </div>
             <div>
@@ -148,8 +147,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
                 type="text"
                 value={formData.designation}
                 onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={!!contact}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg"
               />
             </div>
             <div>
@@ -158,8 +156,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={!!contact}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg"
               />
             </div>
             <div>
@@ -168,8 +165,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={!!contact}
+                className="w-full px-3 py-2 text-sm font-semibold text-white bg-slate-700 hover:bg-slate-600 border border-slate-500 rounded-lg"
               />
             </div>
             <div>

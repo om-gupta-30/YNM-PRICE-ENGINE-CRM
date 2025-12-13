@@ -842,13 +842,18 @@ export default function SubAccountsPage() {
                     className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent [&>option]:bg-[#1A103C] [&>option]:text-white"
                   >
                     <option value="">Select Office Type (Optional)</option>
-                    <option value="Headquarter">Headquarter</option>
+                    {/* Only show Headquarter option if account doesn't already have one (and not editing existing headquarter) */}
+                    {(!subAccounts.some(sa => sa.isHeadquarter && sa.officeType === 'Headquarter') || editSubAccount?.isHeadquarter) && (
+                      <option value="Headquarter">Headquarter</option>
+                    )}
                     <option value="Zonal Office">Zonal Office</option>
                     <option value="Regional Office">Regional Office</option>
                     <option value="Site Office">Site Office</option>
                   </select>
                   <p className="text-xs text-slate-400 mt-1">
-                    Select the type of office for this sub-account location
+                    {subAccounts.some(sa => sa.isHeadquarter && sa.officeType === 'Headquarter') && !editSubAccount?.isHeadquarter
+                      ? 'This account already has a headquarter. Only one headquarter is allowed per account.'
+                      : 'Select the type of office for this sub-account location'}
                   </p>
                 </div>
 

@@ -138,6 +138,24 @@ export async function POST(request: NextRequest) {
 
     const supabase = createSupabaseServerClient();
 
+    // Validation: One account can have only one headquarter
+    if (isHeadquarter) {
+      const { data: existingHeadquarter } = await supabase
+        .from('sub_accounts')
+        .select('id, sub_account_name')
+        .eq('account_id', parseInt(accountId))
+        .eq('is_headquarter', true)
+        .eq('is_active', true)
+        .single();
+      
+      if (existingHeadquarter) {
+        return NextResponse.json(
+          { error: `This account already has a headquarter: "${existingHeadquarter.sub_account_name}". Only one headquarter is allowed per account.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Insert sub-account
     const { data: subAccount, error } = await supabase
       .from('sub_accounts')
@@ -256,6 +274,34 @@ export async function PUT(request: NextRequest) {
     }
 
     const supabase = createSupabaseServerClient();
+
+    // Validation: One account can have only one headquarter
+    if (isHeadquarter !== undefined && isHeadquarter) {
+      // Get account_id for this sub-account
+      const { data: currentSubAccount } = await supabase
+        .from('sub_accounts')
+        .select('account_id')
+        .eq('id', parseInt(id))
+        .single();
+      
+      if (currentSubAccount) {
+        const { data: existingHeadquarter } = await supabase
+          .from('sub_accounts')
+          .select('id, sub_account_name')
+          .eq('account_id', currentSubAccount.account_id)
+          .eq('is_headquarter', true)
+          .eq('is_active', true)
+          .neq('id', parseInt(id)) // Exclude current sub-account
+          .single();
+        
+        if (existingHeadquarter) {
+          return NextResponse.json(
+            { error: `This account already has a headquarter: "${existingHeadquarter.sub_account_name}". Only one headquarter is allowed per account.` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     // Update sub-account
     const updateData: any = {

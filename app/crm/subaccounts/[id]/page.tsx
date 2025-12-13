@@ -355,13 +355,13 @@ export default function SubAccountDetailsPage() {
             {/* Hero Header */}
             <div className="relative mb-8">
               <button
-                onClick={() => router.push(`/crm/accounts/${subAccount.accountId}`)}
+                onClick={() => router.push(`/crm/accounts/${subAccount.accountId}/sub-accounts`)}
                 className="group inline-flex items-center gap-2 text-slate-400 hover:text-premium-gold mb-6 transition-all"
               >
                 <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                <span className="text-sm font-medium">Back to Account</span>
+                <span className="text-sm font-medium">Back to Sub-Accounts</span>
               </button>
               
               <div className="relative bg-gradient-to-r from-slate-800/90 via-slate-800/70 to-slate-900/90 rounded-3xl border border-slate-700/50 overflow-hidden backdrop-blur-sm">

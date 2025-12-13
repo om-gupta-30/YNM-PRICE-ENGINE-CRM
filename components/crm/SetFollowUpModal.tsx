@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import DatePicker from 'react-datepicker';
+import { PortalPopperContainer } from '@/components/ui/PortalPopperContainer';
 import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 import 'react-datepicker/dist/react-datepicker.css';
 
@@ -162,6 +163,8 @@ export default function SetFollowUpModal({ isOpen, onClose, leadId, leadName, cu
               wrapperClassName="w-full"
               placeholderText="Select follow-up date"
               required
+              popperPlacement="bottom-start"
+              popperContainer={PortalPopperContainer}
             />
             {currentFollowUpDate && (
               <p className="text-xs text-slate-400 mt-2">

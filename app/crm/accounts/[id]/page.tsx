@@ -99,7 +99,17 @@ export default function AccountDetailsPage() {
           router.push(`/crm/accounts${filterParams ? `?${filterParams}` : ''}`);
         }
       } else {
-        setAccount(result.data);
+        // Ensure industry_projects is properly parsed if it's a string
+        const accountData = result.data;
+        if (accountData?.industry_projects && typeof accountData.industry_projects === 'string') {
+          try {
+            accountData.industry_projects = JSON.parse(accountData.industry_projects);
+          } catch {
+            // If parsing fails, keep as is or set to empty object
+            accountData.industry_projects = {};
+          }
+        }
+        setAccount(accountData);
       }
     } catch (err: any) {
       setError(err.message);
@@ -795,7 +805,25 @@ export default function AccountDetailsPage() {
             companyTag: account?.company_tag || '',
             notes: account?.notes || '',
             industries: account?.industries || [],
-            industryProjects: account?.industry_projects || {},
+            // CRITICAL: Ensure industry_projects is properly parsed (it might be a JSON string from database)
+            industryProjects: (() => {
+              const projects = account?.industry_projects;
+              if (!projects) return {};
+              // If it's a string, parse it; otherwise use as-is
+              if (typeof projects === 'string') {
+                try {
+                  const parsed = JSON.parse(projects);
+                  return parsed && typeof parsed === 'object' ? parsed : {};
+                } catch {
+                  return {};
+                }
+              }
+              // If it's already an object, ensure it's a proper object (not null)
+              if (typeof projects === 'object' && projects !== null) {
+                return projects;
+              }
+              return {};
+            })(),
           }}
           mode="edit"
           isAdmin={isAdmin}

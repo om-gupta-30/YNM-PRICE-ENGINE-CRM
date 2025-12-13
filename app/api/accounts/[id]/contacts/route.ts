@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/utils/supabaseClient';
 import { formatTimestampIST } from '@/lib/utils/dateFormatters';
+import { syncContactNotification } from '@/lib/utils/notificationSync';
 
 // GET - Fetch contacts for an account
 export async function GET(
@@ -171,6 +172,36 @@ export async function POST(
         description: `Contact ${name} added`,
         metadata: { action: 'contact_created' },
       });
+    }
+
+    // CRITICAL: Sync notification when follow-up date is set during contact creation
+    // This MUST be called for every contact with a follow-up date
+    if (follow_up_date) {
+      try {
+        console.log(`🔔 [API] Creating notification for contact ${contact.id} (${name})`);
+        const syncResult = await syncContactNotification(
+          contact.id,
+          name,
+          follow_up_date,
+          call_status || null,
+          finalSubAccountId,
+          accountId,
+          created_by || 'Admin'
+        );
+        
+        if (!syncResult.success) {
+          console.error(`❌ [API] Failed to sync notification for contact ${contact.id}:`, syncResult.error);
+          // Log but don't fail - notification can be created manually later
+        } else {
+          console.log(`✅ [API] Successfully synced notification for contact ${contact.id}`);
+        }
+      } catch (notificationError: any) {
+        console.error(`❌ [API] Exception while syncing notification for contact ${contact.id}:`, notificationError);
+        console.error('   Error stack:', notificationError?.stack);
+        // Don't fail the request if notification sync fails, but log it clearly
+      }
+    } else {
+      console.log(`⚠️ [API] Contact ${contact.id} created without follow-up date - no notification needed`);
     }
 
     return NextResponse.json({ data: contact, success: true });

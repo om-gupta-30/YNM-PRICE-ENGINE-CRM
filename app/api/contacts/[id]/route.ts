@@ -90,10 +90,19 @@ export async function PUT(
       updated_at: getCurrentISTTime(),
     };
 
-    // IMPORTANT:
-    // After a contact is created, we lock identity fields.
-    // Only allow updates to call_status, notes, and follow_up_date from this endpoint.
-
+    // Allow updates to all fields when editing
+    if (body.name !== undefined) {
+      updateData.name = body.name?.trim() || null;
+    }
+    if (body.designation !== undefined) {
+      updateData.designation = body.designation?.trim() || null;
+    }
+    if (body.email !== undefined) {
+      updateData.email = body.email?.trim() || null;
+    }
+    if (body.phone !== undefined) {
+      updateData.phone = body.phone?.trim() || null;
+    }
     if (body.call_status !== undefined) {
       updateData.call_status = body.call_status;
     }
@@ -102,6 +111,9 @@ export async function PUT(
     }
     if (body.follow_up_date !== undefined) {
       updateData.follow_up_date = body.follow_up_date || null;
+    }
+    if (body.sub_account_id !== undefined) {
+      updateData.sub_account_id = body.sub_account_id || null;
     }
 
     const { data, error } = await supabase
@@ -186,25 +198,40 @@ export async function PUT(
       }
     }
 
-    // Sync notification when follow-up date or call status changes
+    // CRITICAL: Sync notification when follow-up date is added, edited, or changed
+    // This MUST be called for every contact update with a follow-up date
     if (data) {
       try {
         // Get updated values (use body values if provided, otherwise use existing data)
         const updatedFollowUpDate = body.follow_up_date !== undefined ? body.follow_up_date : data.follow_up_date;
         const updatedCallStatus = body.call_status !== undefined ? body.call_status : data.call_status;
         
-        await syncContactNotification(
-          id,
-          data.name,
-          updatedFollowUpDate,
-          updatedCallStatus,
-          data.sub_account_id,
-          data.account_id,
-          body.updated_by || 'Admin'
-        );
-      } catch (notificationError) {
-        console.error('Error syncing notification (non-critical):', notificationError);
-        // Don't fail the request if notification sync fails
+        // Always sync notification if follow_up_date is present (added, edited, or changed)
+        if (updatedFollowUpDate) {
+          console.log(`🔔 [API] Updating notification for contact ${id} (${data.name})`);
+          const syncResult = await syncContactNotification(
+            id,
+            data.name,
+            updatedFollowUpDate,
+            updatedCallStatus,
+            data.sub_account_id,
+            data.account_id,
+            body.updated_by || 'Admin'
+          );
+          
+          if (!syncResult.success) {
+            console.error(`❌ [API] Failed to sync notification for contact ${id}:`, syncResult.error);
+            // Log but don't fail - notification can be created manually later
+          } else {
+            console.log(`✅ [API] Successfully synced notification for contact ${id}`);
+          }
+        } else {
+          console.log(`⚠️ [API] Contact ${id} updated without follow-up date - notification will be deleted if exists`);
+        }
+      } catch (notificationError: any) {
+        console.error(`❌ [API] Exception while syncing notification for contact ${id}:`, notificationError);
+        console.error('   Error stack:', notificationError?.stack);
+        // Don't fail the request if notification sync fails, but log it clearly
       }
     }
 

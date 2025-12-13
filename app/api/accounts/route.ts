@@ -239,6 +239,17 @@ export async function POST(request: NextRequest) {
       finalAssignedEmployee = createdBy;
     }
 
+    // Validation: One account can be assigned only one sub industry
+    if (industries && Array.isArray(industries) && industries.length > 0) {
+      const subIndustryIds = new Set(industries.map((ind: any) => ind.sub_industry_id));
+      if (subIndustryIds.size > 1) {
+        return NextResponse.json(
+          { error: 'An account can be assigned only one sub industry. Please select only one sub industry.' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Insert account
     // Stage, Tag, and Employee are optional - admin can assign later
     // Convert empty strings to null for enum fields (database doesn't accept empty strings for enums)

@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useFollowUpNotifications } from '@/hooks/useFollowUpNotifications';
 import AINotificationsPanel from '@/components/crm/AINotificationsPanel';
 
-type TabType = 'leads' | 'contacts';
+type TabType = 'contacts';
 
 export default function NotificationBell() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [showAINotifications, setShowAINotifications] = useState(false);
   const [username, setUsername] = useState('');
-  const [activeTab, setActiveTab] = useState<TabType>('leads');
+  const [activeTab, setActiveTab] = useState<TabType>('contacts');
   const [markingAllAsSeen, setMarkingAllAsSeen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { notifications, count, loading, refresh } = useFollowUpNotifications();
@@ -43,50 +43,31 @@ export default function NotificationBell() {
     };
   }, [isOpen]);
 
-  // Split notifications into leads and contacts
-  const { leads, contacts } = useMemo(() => {
-    const leadsList = notifications.filter(n => n.isLead);
+  // Filter notifications to only contacts (leads are filtered out in API)
+  const contacts = useMemo(() => {
     const contactsList = notifications.filter(n => !n.isLead);
     
-    // Sort each list: Today's first, then future dates, then no-date
-    const sortNotifications = (list: typeof notifications) => {
-      return [...list].sort((a, b) => {
-        const aDate = a.followUpDate;
-        const bDate = b.followUpDate;
-        
-        // No date items go to bottom
-        if (!aDate && !bDate) return 0;
-        if (!aDate) return 1;
-        if (!bDate) return -1;
-        
-        // Today's items first
-        const aIsToday = a.isDueToday ?? isToday(aDate);
-        const bIsToday = b.isDueToday ?? isToday(bDate);
-        
-        if (aIsToday && !bIsToday) return -1;
-        if (!aIsToday && bIsToday) return 1;
-        
-        // Both today or both not today - sort by date (ascending)
-        return aDate.getTime() - bDate.getTime();
-      });
-    };
-    
-    return {
-      leads: sortNotifications(leadsList),
-      contacts: sortNotifications(contactsList),
-    };
+    // Sort: Today's first, then future dates, then no-date
+    return [...contactsList].sort((a, b) => {
+      const aDate = a.followUpDate;
+      const bDate = b.followUpDate;
+      
+      // No date items go to bottom
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      
+      // Today's items first
+      const aIsToday = a.isDueToday ?? isToday(aDate);
+      const bIsToday = b.isDueToday ?? isToday(bDate);
+      
+      if (aIsToday && !bIsToday) return -1;
+      if (!aIsToday && bIsToday) return 1;
+      
+      // Both today or both not today - sort by date (ascending)
+      return aDate.getTime() - bDate.getTime();
+    });
   }, [notifications]);
-
-  // Auto-select tab based on content
-  useEffect(() => {
-    if (!loading && notifications.length > 0) {
-      if (activeTab === 'leads' && leads.length === 0 && contacts.length > 0) {
-        setActiveTab('contacts');
-      } else if (activeTab === 'contacts' && contacts.length === 0 && leads.length > 0) {
-        setActiveTab('leads');
-      }
-    }
-  }, [loading, notifications.length, leads.length, contacts.length, activeTab]);
 
   const handleNotificationClick = async (item: any, e?: React.MouseEvent) => {
     if (e) {
@@ -181,7 +162,7 @@ export default function NotificationBell() {
     e.preventDefault();
     e.stopPropagation();
     
-    const currentNotifications = activeTab === 'leads' ? leads : contacts;
+    const currentNotifications = contacts;
     const unseenNotifications = currentNotifications.filter(n => !n.isSeen);
     
     if (unseenNotifications.length === 0) {
@@ -254,8 +235,9 @@ export default function NotificationBell() {
     }
   };
 
-  const currentNotifications = activeTab === 'leads' ? leads : contacts;
-  const currentCount = activeTab === 'leads' ? leads.length : contacts.length;
+  // Only contacts are supported now (leads removed)
+  const currentNotifications = contacts;
+  const currentCount = contacts.length;
   const unseenCount = currentNotifications.filter(n => !n.isSeen).length;
 
   return (
@@ -373,27 +355,8 @@ export default function NotificationBell() {
               )}
             </div>
 
-            {/* Tabs */}
+            {/* Tabs - Only Contacts */}
             <div className="flex gap-2 border-b border-white/10">
-              <button
-                onClick={() => setActiveTab('leads')}
-                className={`flex-1 px-4 py-2 text-sm font-semibold rounded-t-lg transition-all duration-200 relative ${
-                  activeTab === 'leads'
-                    ? 'text-premium-gold bg-premium-gold/10 border-b-2 border-premium-gold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Leads
-                {leads.length > 0 && (
-                  <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold ${
-                    activeTab === 'leads' 
-                      ? 'bg-premium-gold/30 text-premium-gold' 
-                      : 'bg-slate-700 text-slate-300'
-                  }`}>
-                    {leads.length}
-                  </span>
-                )}
-              </button>
               <button
                 onClick={() => setActiveTab('contacts')}
                 className={`flex-1 px-4 py-2 text-sm font-semibold rounded-t-lg transition-all duration-200 relative ${
@@ -434,7 +397,7 @@ export default function NotificationBell() {
             ) : currentNotifications.length === 0 ? (
               <div className="p-8 text-center">
                 <p className="text-slate-300 text-sm">
-                  No {activeTab === 'leads' ? 'lead' : 'contact'} follow-ups.
+                  No contact follow-ups.
                 </p>
               </div>
             ) : (
@@ -442,7 +405,7 @@ export default function NotificationBell() {
                 {/* Section Header */}
                 <div className="px-2 mb-2">
                   <h4 className="text-sm font-bold text-premium-gold uppercase tracking-wide">
-                    {activeTab === 'leads' ? 'Lead Follow-Ups' : 'Contact Follow-Ups'}
+                    Contact Follow-Ups
                   </h4>
                 </div>
 
@@ -476,7 +439,7 @@ export default function NotificationBell() {
                             {/* Name - Prominent */}
                             <div className="flex items-center gap-2 mb-2">
                               <h5 className="text-white font-bold text-base group-hover:text-premium-gold transition-colors duration-200">
-                                {activeTab === 'leads' ? 'Lead:' : 'Contact:'} {item.name}
+                                Contact: {item.name}
                               </h5>
                             </div>
 

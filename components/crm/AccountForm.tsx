@@ -119,27 +119,60 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
-    if (initialData) {
-      setFormData({
-        ...initialData,
-        industries: initialData.industries || [],
-        industryProjects: initialData.industryProjects || {},
-        assignedEmployee: (initialData as any).assignedEmployee || null,
-      });
-      setIndustryProjects(initialData.industryProjects || {});
-    } else {
-      setFormData({
-        accountName: '',
-        companyStage: '',
-        companyTag: '',
-        notes: '',
-        industries: [],
-        industryProjects: {},
-        assignedEmployee: null,
-      });
-      setIndustryProjects({});
+    if (isOpen) {
+      if (initialData) {
+        // Ensure industryProjects is properly initialized from initialData
+        // Handle both object and string formats
+        let projects: Record<string, number> = {};
+        if (initialData.industryProjects) {
+          if (typeof initialData.industryProjects === 'string') {
+            try {
+              const parsed = JSON.parse(initialData.industryProjects);
+              projects = parsed && typeof parsed === 'object' ? parsed : {};
+            } catch {
+              projects = {};
+            }
+          } else if (typeof initialData.industryProjects === 'object' && initialData.industryProjects !== null) {
+            projects = { ...initialData.industryProjects }; // Create a copy
+          }
+        }
+        
+        // CRITICAL: Set industryProjects state FIRST before setting formData
+        // This ensures the state is available when the form renders
+        setIndustryProjects(projects);
+        
+        setFormData({
+          ...initialData,
+          industries: initialData.industries || [],
+          industryProjects: projects,
+          assignedEmployee: (initialData as any).assignedEmployee || null,
+        });
+      } else {
+        setFormData({
+          accountName: '',
+          companyStage: '',
+          companyTag: '',
+          notes: '',
+          industries: [],
+          industryProjects: {},
+          assignedEmployee: null,
+        });
+        setIndustryProjects({});
+      }
     }
   }, [initialData, isOpen, isAdmin, currentUser]);
+
+  // CRITICAL: Sync industryProjects when industries are loaded to ensure values are preserved
+  // This runs after industries are set to ensure project counts are loaded
+  useEffect(() => {
+    if (isOpen && initialData && formData.industries && formData.industries.length > 0 && Object.keys(industryProjects).length === 0) {
+      // If industryProjects state is empty but we have initialData, load it
+      const projectsFromInitial = initialData.industryProjects || {};
+      if (Object.keys(projectsFromInitial).length > 0) {
+        setIndustryProjects(projectsFromInitial);
+      }
+    }
+  }, [formData.industries, isOpen, initialData, industryProjects]);
 
   // Handle input change
   const handleInputChange = (field: keyof AccountFormData, value: string) => {
@@ -156,15 +189,32 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
   };
 
   // Handle industry selection change - show project input when selected
+  // Only allow one sub-industry to be selected at a time
   const handleIndustryChange = (selected: SelectedIndustry[]) => {
-    setFormData(prev => ({ ...prev, industries: selected }));
+    // Ensure only one sub-industry is selected (take the first one if multiple)
+    const singleSelection = selected.length > 0 ? [selected[0]] : [];
+    setFormData(prev => ({ ...prev, industries: singleSelection }));
     
-    // Update industryProjects to match selected industries
-    const newProjects: Record<string, number> = {};
-    selected.forEach(item => {
+    // CRITICAL: Don't reset industryProjects when industries change
+    // Only add new entries if they don't exist, preserve all existing values
+    const newProjects: Record<string, number> = { ...industryProjects };
+    
+    singleSelection.forEach(item => {
       const key = `${item.industry_id}-${item.sub_industry_id}`;
-      newProjects[key] = industryProjects[key] || 0;
+      // Only set to 0 if this key doesn't exist anywhere
+      if (newProjects[key] === undefined || newProjects[key] === null) {
+        // Check initialData first, then default to 0
+        if (initialData?.industryProjects?.[key] !== undefined && initialData.industryProjects[key] !== null) {
+          newProjects[key] = initialData.industryProjects[key];
+        } else if (formData.industryProjects?.[key] !== undefined && formData.industryProjects[key] !== null) {
+          newProjects[key] = formData.industryProjects[key];
+        } else {
+          newProjects[key] = 0;
+        }
+      }
+      // If key already exists in newProjects, keep it as is (don't overwrite)
     });
+    
     setIndustryProjects(newProjects);
   };
 
@@ -331,7 +381,22 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                 <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar">
                   {formData.industries.map((item) => {
                     const key = `${item.industry_id}-${item.sub_industry_id}`;
-                    const projectCount = industryProjects[key] || 0;
+                    // CRITICAL: Get project count with priority: state > initialData > formData > 0
+                    // Use Number() to ensure we get a valid number, not NaN
+                    let projectCount = Number(industryProjects[key]);
+                    if (isNaN(projectCount) || projectCount === 0) {
+                      const fromInitial = Number(initialData?.industryProjects?.[key]);
+                      if (!isNaN(fromInitial) && fromInitial > 0) {
+                        projectCount = fromInitial;
+                      } else {
+                        const fromFormData = Number(formData.industryProjects?.[key]);
+                        if (!isNaN(fromFormData) && fromFormData > 0) {
+                          projectCount = fromFormData;
+                        } else {
+                          projectCount = Number(industryProjects[key]) || 0;
+                        }
+                      }
+                    }
                     return (
                       <div key={key} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
                         <div className="flex-1">
@@ -343,7 +408,7 @@ export default function AccountForm({ isOpen, onClose, onSubmit, initialData, mo
                           <input
                             type="number"
                             min="0"
-                            value={projectCount}
+                            value={projectCount || ''}
                             onChange={(e) => handleProjectCountChange(item.industry_id, item.sub_industry_id, parseInt(e.target.value) || 0)}
                             className="input-premium w-full px-3 py-2 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
                             placeholder="0"

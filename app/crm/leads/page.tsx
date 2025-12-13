@@ -1031,7 +1031,6 @@ export default function LeadsPage() {
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Status</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Priority</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white hidden lg:table-cell">Employee</th>
-                        <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Follow-Up</th>
                         <th className="text-left py-4 px-2 md:px-4 text-xs md:text-sm font-bold text-white">Actions</th>
                     </tr>
                   </thead>
@@ -1044,20 +1043,7 @@ export default function LeadsPage() {
                             className="border-b border-white/10 hover:bg-white/5 transition-all duration-200"
                           >
                             <td className="py-4 px-2 md:px-4 text-slate-200 font-semibold text-xs md:text-sm">
-                              <div className="flex items-center gap-2">
-                                <span>{lead.lead_name}</span>
-                                {lead.follow_up_date && (
-                                  <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                                    isFollowUpOverdue(lead.follow_up_date) 
-                                      ? 'bg-red-500/20 text-red-300' 
-                                      : isFollowUpDueToday(lead.follow_up_date)
-                                      ? 'bg-orange-500/20 text-orange-300'
-                                      : 'bg-blue-500/20 text-blue-300'
-                                  }`} title={`Follow-up: ${formatDate(lead.follow_up_date)}`}>
-                                    {isFollowUpOverdue(lead.follow_up_date) ? '⚠️' : '📅'}
-                                  </span>
-                                )}
-                              </div>
+                              <span>{lead.lead_name}</span>
                             </td>
                             <td className="py-4 px-2 md:px-4 text-slate-200 text-xs md:text-sm">{lead.contact_person || '-'}</td>
                             <td className="py-4 px-2 md:px-4 text-slate-200 text-xs md:text-sm hidden md:table-cell">{lead.phone || '-'}</td>
@@ -1080,21 +1066,6 @@ export default function LeadsPage() {
                               )}
                             </td>
                             <td className="py-4 px-2 md:px-4 text-slate-200 text-xs md:text-sm hidden lg:table-cell">{lead.assigned_employee || '-'}</td>
-                            <td className="py-4 px-2 md:px-4">
-                              {lead.follow_up_date ? (
-                                <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                  isFollowUpOverdue(lead.follow_up_date) 
-                                    ? 'bg-red-500/20 text-red-300' 
-                                    : isFollowUpDueToday(lead.follow_up_date)
-                                    ? 'bg-orange-500/20 text-orange-300'
-                                    : 'bg-blue-500/20 text-blue-300'
-                                }`}>
-                                  {isFollowUpOverdue(lead.follow_up_date) ? '⚠️ Overdue' : isFollowUpDueToday(lead.follow_up_date) ? '📅 Today' : formatDate(lead.follow_up_date)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 text-xs">-</span>
-                              )}
-                        </td>
                             <td className="py-4 px-2 md:px-4" onClick={(e) => e.stopPropagation()}>
                               <div className="flex items-center gap-1 md:gap-2 flex-wrap">
                             <button

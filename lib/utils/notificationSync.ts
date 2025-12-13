@@ -17,20 +17,25 @@ export async function syncContactNotification(
   try {
     const supabase = createSupabaseServerClient();
     
-    // If call status is "Connected" or no follow-up date, delete any existing notifications
-    if (callStatus === 'Connected' || !followUpDate) {
+    // CRITICAL: Only delete notification if there's NO follow-up date
+    // Call status doesn't matter - if there's a follow-up date, show the notification
+    if (!followUpDate) {
       const { error: deleteError } = await supabase
         .from('notifications')
         .delete()
-        .eq('contact_id', contactId)
+        .eq('contact_id', contactId) // CRITICAL: Only delete for this specific contact
         .eq('notification_type', 'followup_due');
       
       if (deleteError) {
-        console.error('Error deleting notification:', deleteError);
+        console.error('❌ [CONTACT] Error deleting notification:', deleteError);
         return { success: false, error: deleteError.message };
       }
+      console.log(`✅ [CONTACT] Deleted notification for contact ${contactId} (no follow-up date)`);
       return { success: true };
     }
+    
+    // If we have a follow-up date, create/update notification regardless of call status
+    console.log(`🔔 [CONTACT] Processing notification for contact ${contactId} with follow-up date (call status: ${callStatus || 'none'} - doesn't matter)`);
     
     // Get sub-account to find assigned employee
     let assignedEmployee = 'Admin';
@@ -86,11 +91,11 @@ export async function syncContactNotification(
     const message = `Follow up with ${contactName}${locationInfo ? ` from ${locationInfo}` : ''}`;
     
     // Check if notification already exists for this contact and user
-    // Use case-insensitive matching for user_id
+    // CRITICAL: Use case-insensitive matching for user_id and ensure we're checking for THIS specific contact
     const { data: existingNotifications, error: fetchError } = await supabase
       .from('notifications')
-      .select('id, user_id')
-      .eq('contact_id', contactId)
+      .select('id, user_id, contact_id')
+      .eq('contact_id', contactId) // CRITICAL: Only check for THIS specific contact
       .eq('notification_type', 'followup_due')
       .ilike('user_id', normalizedAssignedEmployee); // Case-insensitive match
     
@@ -103,7 +108,10 @@ export async function syncContactNotification(
       ? existingNotifications[0] 
       : null;
     
-    console.log(`🔔 [CONTACT] Found ${existingNotifications?.length || 0} existing notifications for contact ${contactId}`);
+    console.log(`🔔 [CONTACT] Found ${existingNotifications?.length || 0} existing notifications for contact ${contactId} (user: ${normalizedAssignedEmployee})`);
+    if (existingNotifications && existingNotifications.length > 0) {
+      console.log(`   Existing notification IDs: ${existingNotifications.map((n: any) => n.id).join(', ')}`);
+    }
     
     // Check if assigned employee is admin - admins should not receive notifications
     const isAssignedEmployeeAdmin = normalizedAssignedEmployee === 'admin';
@@ -157,7 +165,8 @@ export async function syncContactNotification(
       let lastError = null;
       let createdNotificationId = null;
       
-      // Try inserting notification
+      // CRITICAL: Try inserting notification - ensure each contact gets its own notification
+      console.log(`🔔 [CONTACT] Attempting to create notification for contact ${contactId}...`);
       const { data: newNotification, error: insertError } = await supabase
         .from('notifications')
         .insert(notificationData)
@@ -167,11 +176,17 @@ export async function syncContactNotification(
       if (!insertError && newNotification) {
         notificationCreated = true;
         createdNotificationId = newNotification.id;
-        console.log(`✅ [CONTACT] Created follow-up notification for ${normalizedAssignedEmployee} (original: ${assignedEmployee}): ${message}`);
+        console.log(`✅ [CONTACT] SUCCESS: Created follow-up notification for contact ${contactId}`);
+        console.log(`   Contact: ${contactName}`);
+        console.log(`   User: ${normalizedAssignedEmployee} (original: ${assignedEmployee})`);
         console.log(`   Notification ID: ${createdNotificationId}`);
+        console.log(`   Message: ${message}`);
       } else {
         lastError = insertError;
-        console.error('❌ [CONTACT] Error creating notification:', insertError);
+        console.error(`❌ [CONTACT] ERROR: Failed to create notification for contact ${contactId}`);
+        console.error(`   Contact: ${contactName}`);
+        console.error(`   User: ${normalizedAssignedEmployee} (original: ${assignedEmployee})`);
+        console.error('   Error:', insertError);
         console.error('   Error details:', JSON.stringify(insertError, null, 2));
         
         // Try without sub_account_id if that's the issue
@@ -203,8 +218,15 @@ export async function syncContactNotification(
         console.error('   Contact ID:', contactId);
         console.error('   Contact name:', contactName);
         console.error('   Assigned employee:', assignedEmployee, '(normalized:', normalizedAssignedEmployee, ')');
+        console.error('   Follow-up date:', followUpDate);
         console.error('   Last error:', lastError);
-        return { success: false, error: lastError?.message || 'Failed to create notification' };
+        console.error('   Notification data attempted:', JSON.stringify(notificationData, null, 2));
+        
+        // CRITICAL: Don't fail silently - log this as a critical error
+        // But still return success so the contact creation doesn't fail
+        // The notification can be created manually later if needed
+        console.error('⚠️ [CONTACT] WARNING: Contact was created but notification was not. This needs manual investigation.');
+        return { success: true, error: lastError?.message || 'Failed to create notification (non-critical)' };
       }
 
       // Log activity for notification creation

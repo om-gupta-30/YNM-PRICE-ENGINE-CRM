@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom';
 import { Lead } from '@/app/crm/leads/page';
 import LeadQuickActions from '@/components/crm/LeadQuickActions';
 import AddNoteModal from '@/components/crm/AddNoteModal';
-import SetFollowUpModal from '@/components/crm/SetFollowUpModal';
 import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface LeadDetailsModalProps {
@@ -19,7 +18,6 @@ interface LeadDetailsModalProps {
 
 export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuickAction, onLeadUpdate }: LeadDetailsModalProps) {
   const [addNoteOpen, setAddNoteOpen] = useState(false);
-  const [setFollowUpOpen, setSetFollowUpOpen] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingEmployee, setUpdatingEmployee] = useState(false);
   const [updatingPriority, setUpdatingPriority] = useState(false);
@@ -109,23 +107,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
     }
   };
 
-  const isFollowUpDueToday = (followUpDate: string | null) => {
-    if (!followUpDate) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const followUp = new Date(followUpDate);
-    followUp.setHours(0, 0, 0, 0);
-    return followUp.getTime() === today.getTime();
-  };
-
-  const isFollowUpOverdue = (followUpDate: string | null) => {
-    if (!followUpDate) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const followUp = new Date(followUpDate);
-    followUp.setHours(0, 0, 0, 0);
-    return followUp.getTime() < today.getTime();
-  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (newStatus === lead.status) return;
@@ -288,8 +269,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
   const handleQuickAction = (action: string) => {
     if (action === 'note') {
       setAddNoteOpen(true);
-    } else if (action === 'followup') {
-      setSetFollowUpOpen(true);
     } else if (onQuickAction) {
       onQuickAction(action, lead);
     }
@@ -303,30 +282,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
     }
   };
 
-  const handleFollowUpSet = async () => {
-    setRefreshKey(prev => prev + 1);
-    // Fetch updated lead to get new follow_up_date
-    if (lead) {
-      try {
-        const response = await fetch(`/api/crm/leads/list?id=${lead.id}`);
-        const data = await response.json();
-        if (data.success && data.leads && data.leads.length > 0) {
-          const updatedLead = data.leads[0];
-          if (onLeadUpdate) {
-            onLeadUpdate(updatedLead);
-          }
-        } else if (onLeadUpdate) {
-          // Fallback - just update with current lead
-          onLeadUpdate(lead);
-        }
-      } catch (error) {
-        // If fetch fails, just use current lead
-        if (onLeadUpdate) {
-          onLeadUpdate(lead);
-        }
-      }
-    }
-  };
 
   const modalContent = (
     <>
@@ -357,24 +312,9 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
 
         {/* Content */}
         <div className="space-y-6">
-            {/* Lead Name with Follow-Up Badge */}
+            {/* Lead Name */}
           <div>
-              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                <label className="block text-sm font-semibold text-slate-400">Lead Name</label>
-                <div className="flex items-center gap-2">
-                  {lead.follow_up_date && (
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${
-                      isFollowUpOverdue(lead.follow_up_date) 
-                        ? 'bg-red-500/20 text-red-300 border border-red-500/30' 
-                        : isFollowUpDueToday(lead.follow_up_date)
-                        ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-                        : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                    }`}>
-                      {isFollowUpOverdue(lead.follow_up_date) ? '⚠️ Overdue' : isFollowUpDueToday(lead.follow_up_date) ? '📅 Due Today' : `📅 ${formatDateOnly(lead.follow_up_date)}`}
-                    </span>
-                  )}
-                </div>
-              </div>
+              <label className="block text-sm font-semibold text-slate-400 mb-2">Lead Name</label>
             <p className="text-xl font-bold text-white bg-slate-800/50 rounded-lg p-3">{lead.lead_name}</p>
           </div>
 
@@ -412,54 +352,28 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
               </div>
             )}
 
-              {/* Status - Editable */}
+              {/* Status - Read Only */}
               <div>
                 <label className="block text-sm font-semibold text-slate-400 mb-2">Status</label>
-                <select
-                  value={lead.status || 'New'}
-                  onChange={(e) => handleStatusChange(e.target.value)}
-                  disabled={updatingStatus}
-                  className={`w-full px-3 py-2 rounded-lg text-sm font-semibold border-2 bg-transparent ${getStatusColor(lead.status)} focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50`}
-                >
-                  <option value="New">New</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Quotation Sent">Quotation Sent</option>
-                  <option value="Follow-Up">Follow-Up</option>
-                  <option value="Closed Won">Closed Won</option>
-                  <option value="Closed Lost">Closed Lost</option>
-                </select>
+                <p className={`w-full px-3 py-2 rounded-lg text-sm font-semibold border-2 bg-transparent ${getStatusColor(lead.status)}`}>
+                  {lead.status || 'New'}
+                </p>
               </div>
 
-              {/* Assigned Employee - Editable */}
+              {/* Assigned Employee - Read Only */}
               <div>
                 <label className="block text-sm font-semibold text-slate-400 mb-2">Assigned Employee</label>
-                <select
-                  value={lead.assigned_employee || ''}
-                  onChange={(e) => handleEmployeeChange(e.target.value)}
-                  disabled={updatingEmployee}
-                  className="w-full px-3 py-2 text-white bg-slate-700/50 hover:bg-slate-600/50 border border-slate-500 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50"
-                >
-                  <option value="">Unassigned</option>
-                  {employees.map(emp => (
-                    <option key={emp} value={emp}>{emp}</option>
-                  ))}
-                </select>
+                <p className="w-full px-3 py-2 text-white bg-slate-800/30 rounded-lg text-sm">
+                  {lead.assigned_employee || 'Unassigned'}
+                </p>
               </div>
 
-              {/* Priority - Editable */}
+              {/* Priority - Read Only */}
               <div>
                 <label className="block text-sm font-semibold text-slate-400 mb-2">Priority</label>
-                <select
-                  value={lead.priority || ''}
-                  onChange={(e) => handlePriorityChange(e.target.value)}
-                  disabled={updatingPriority}
-                  className="w-full px-3 py-2 rounded-lg text-sm font-semibold border-2 bg-slate-700/50 text-white hover:bg-slate-600/50 border-slate-500 focus:outline-none focus:ring-2 focus:ring-premium-gold disabled:opacity-50"
-                >
-                  <option value="">No Priority</option>
-                  {LEAD_PRIORITIES.map(priority => (
-                    <option key={priority} value={priority}>{priority}</option>
-                  ))}
-                </select>
+                <p className={`w-full px-3 py-2 rounded-lg text-sm font-semibold border-2 bg-slate-800/30 text-white border-slate-500`}>
+                  {lead.priority || 'No Priority'}
+                </p>
               </div>
 
             {/* Linked Account */}
@@ -503,27 +417,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
             </div>
           )}
 
-            {/* Follow-Up Date Display */}
-            {lead.follow_up_date && (
-            <div>
-                <label className="block text-sm font-semibold text-slate-400 mb-2">Follow-Up Date</label>
-                <div className={`p-3 rounded-lg ${
-                  isFollowUpOverdue(lead.follow_up_date) 
-                    ? 'bg-red-500/10 border border-red-500/30' 
-                    : isFollowUpDueToday(lead.follow_up_date)
-                    ? 'bg-orange-500/10 border border-orange-500/30'
-                    : 'bg-blue-500/10 border border-blue-500/30'
-                }`}>
-                  <p className="text-white font-semibold">{formatDateOnly(lead.follow_up_date)}</p>
-                  {isFollowUpOverdue(lead.follow_up_date) && (
-                    <p className="text-xs text-red-300 mt-1">⚠️ This follow-up is overdue</p>
-                  )}
-                  {isFollowUpDueToday(lead.follow_up_date) && (
-                    <p className="text-xs text-orange-300 mt-1">📅 Follow-up is due today</p>
-                  )}
-                </div>
-            </div>
-          )}
         </div>
 
           {/* Quick Actions */}
@@ -569,15 +462,6 @@ export default function LeadDetailsModal({ isOpen, onClose, lead, onEdit, onQuic
         onNoteAdded={handleNoteAdded}
       />
 
-      {/* Set Follow-Up Modal */}
-      <SetFollowUpModal
-        isOpen={setFollowUpOpen}
-        onClose={() => setSetFollowUpOpen(false)}
-        leadId={lead.id}
-        leadName={lead.lead_name}
-        currentFollowUpDate={lead.follow_up_date}
-        onFollowUpSet={handleFollowUpSet}
-      />
     </>
   );
 

@@ -119,7 +119,19 @@ export async function PUT(
     if (body.companyStage !== undefined) updateData.company_stage = (body.companyStage && body.companyStage.trim() !== '') ? body.companyStage : null;
     if (body.companyTag !== undefined) updateData.company_tag = (body.companyTag && body.companyTag.trim() !== '') ? body.companyTag : null;
     if (body.notes !== undefined) updateData.notes = body.notes?.trim() || null;
-    if (body.industries !== undefined) updateData.industries = body.industries || [];
+    // Validation: One account can be assigned only one sub industry
+    if (body.industries !== undefined) {
+      const industries = body.industries || [];
+      // Check if there are multiple sub industries
+      const subIndustryIds = new Set(industries.map((ind: any) => ind.sub_industry_id));
+      if (subIndustryIds.size > 1) {
+        return NextResponse.json(
+          { error: 'An account can be assigned only one sub industry. Please select only one sub industry.' },
+          { status: 400 }
+        );
+      }
+      updateData.industries = industries;
+    }
     if (body.industryProjects !== undefined) updateData.industry_projects = body.industryProjects || {};
     // Update both assigned_employee and assigned_to columns (assigned_to is an alias for compatibility)
     if (body.assignedEmployee !== undefined) {

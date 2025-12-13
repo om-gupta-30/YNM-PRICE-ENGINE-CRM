@@ -182,7 +182,6 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
               className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
               placeholder="Enter contact name"
               required
-              disabled={mode === 'edit'}
             />
           </div>
 
@@ -199,7 +198,6 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
                 onChange={(e) => handleInputChange('designation', e.target.value)}
                 className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
                 placeholder="Enter designation (optional)"
-                disabled={mode === 'edit'}
               />
             </div>
 
@@ -238,7 +236,6 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
                 className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
                 placeholder="Enter email"
                 required
-                disabled={mode === 'edit'}
               />
             </div>
 
@@ -253,7 +250,6 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
                 className="input-premium w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
                 placeholder="Enter phone number"
                 required
-                disabled={mode === 'edit'}
               />
             </div>
           </div>

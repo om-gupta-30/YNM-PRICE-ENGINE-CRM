@@ -58,7 +58,8 @@ export default function LoginPage() {
       // Check if response has success flag first
       if (!data?.success) {
         const errorMsg = data?.error || 'Invalid user ID or password';
-        console.error('Login failed:', errorMsg);
+        // Don't log expected authentication failures to console.error (triggers Next.js error overlay)
+        // Just set the error message for the user
         setError(errorMsg);
         setIsLoading(false);
         return;
@@ -67,7 +68,8 @@ export default function LoginPage() {
       // Check response status after checking success flag
       if (!response.ok) {
         const errorMsg = data?.error || 'Invalid user ID or password';
-        console.error('Login failed:', errorMsg);
+        // Don't log expected authentication failures to console.error (triggers Next.js error overlay)
+        // Just set the error message for the user
         setError(errorMsg);
         setIsLoading(false);
         return;
@@ -111,7 +113,10 @@ export default function LoginPage() {
           router.replace('/home');
       }
     } catch (err: any) {
-      console.error('Login error:', err);
+      // Only log unexpected errors (network errors, etc.) - not authentication failures
+      if (err?.message && !err.message.includes('Invalid user ID or password')) {
+        console.error('Login error:', err);
+      }
       const errorMsg = err?.message || 'An error occurred. Please try again.';
       setError(errorMsg);
       setIsLoading(false);
