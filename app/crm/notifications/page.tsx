@@ -346,6 +346,30 @@ export default function NotificationsPage() {
                       <div>
                         <h3 className="text-lg font-bold text-white">{notification.title}</h3>
                         <p className="text-slate-300 text-sm mt-1">{notification.message}</p>
+                        {(notification as any).followUpDate && (
+                          <div className="mt-2 p-2 bg-slate-800/50 rounded-lg border border-premium-gold/30">
+                            <div className="flex items-center gap-2">
+                              <span className="text-slate-300 text-xs font-semibold">📅 Follow-up Date:</span>
+                              <span className="text-white text-sm font-bold">
+                                {new Date((notification as any).followUpDate).toLocaleDateString('en-IN', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-slate-300 text-xs font-semibold">⏰ Follow-up Time:</span>
+                              <span className="text-premium-gold text-sm font-bold">
+                                {new Date((notification as any).followUpDate).toLocaleTimeString('en-IN', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: true
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <span className="text-slate-400 text-xs whitespace-nowrap ml-4">
                         {formatTimestampIST(notification.created_at)}

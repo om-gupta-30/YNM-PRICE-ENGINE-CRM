@@ -175,7 +175,7 @@ export default function SubAccountContactsPage() {
         phone: formData.phone,
         call_status: formData.callStatus || null,
         notes: formData.notes,
-        follow_up_date: formData.followUpDate ? formData.followUpDate.toISOString() : null,
+        follow_up_date: formData.followUpDate ? (formData.followUpDate instanceof Date ? formData.followUpDate.toISOString() : formData.followUpDate) : null,
         created_by: username,
       };
       if (editContact) {
@@ -310,6 +310,7 @@ export default function SubAccountContactsPage() {
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Email</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Call Status</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Follow-Up Date</th>
+                    <th className="text-left py-4 px-4 text-sm font-bold text-white">Follow-Up Time</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Notes</th>
                     <th className="text-left py-4 px-4 text-sm font-bold text-white">Actions</th>
                   </tr>
@@ -345,6 +346,18 @@ export default function SubAccountContactsPage() {
                       <td className="py-4 px-4 text-slate-200">
                         {contact.followUpDate
                           ? formatDateIST(contact.followUpDate)
+                          : <span className="text-slate-500 italic">-</span>}
+                      </td>
+                      <td className="py-4 px-4 text-slate-200">
+                        {contact.followUpDate
+                          ? (() => {
+                              const date = new Date(contact.followUpDate);
+                              return date.toLocaleString('en-IN', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: true
+                              });
+                            })()
                           : <span className="text-slate-500 italic">-</span>}
                       </td>
                       <td className="py-4 px-4 text-slate-200 max-w-xs truncate" title={contact.notes || ''}>
@@ -390,6 +403,7 @@ export default function SubAccountContactsPage() {
           callStatus: editContact.callStatus || '',
           notes: editContact.notes || '',
           followUpDate: editContact.followUpDate ? new Date(editContact.followUpDate) : null,
+          followUpTime: editContact.followUpDate ? new Date(editContact.followUpDate).toTimeString().slice(0, 5) : '',
         } : null}
         mode={editContact ? 'edit' : 'create'}
       />

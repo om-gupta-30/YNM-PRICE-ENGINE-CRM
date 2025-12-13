@@ -30,6 +30,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import DataResultTable from './DataResultTable';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface RAGChatInterfaceProps {
   isOpen: boolean;
@@ -103,6 +104,14 @@ export default function RAGChatInterface({ isOpen, onClose, userId, sessionId, i
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to chat window when it opens
+  useEffect(() => {
+    if (isOpen && chatWindowRef.current) {
+      bringElementIntoView(chatWindowRef.current);
+    }
+  }, [isOpen]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -695,7 +704,10 @@ I'll show you exactly what I understand and what queries I'll run!`,
       />
 
       {/* Chat Window */}
-      <div className="fixed right-4 bottom-4 top-4 w-full max-w-4xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 shadow-2xl z-[9999] flex overflow-hidden">
+      <div 
+        ref={chatWindowRef}
+        className="fixed right-4 bottom-4 top-4 w-full max-w-4xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 shadow-2xl z-[9999] flex overflow-hidden"
+      >
         {/* Conversation History Panel */}
         {showHistory && (
           <div className="w-64 border-r border-slate-700/50 bg-slate-800/30 flex flex-col">

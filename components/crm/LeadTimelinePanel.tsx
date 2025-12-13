@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Lead } from '@/app/crm/leads/page';
 import LeadQuickActions from '@/components/crm/LeadQuickActions';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface LeadTimelinePanelProps {
   isOpen: boolean;
@@ -12,6 +14,15 @@ interface LeadTimelinePanelProps {
 }
 
 export default function LeadTimelinePanel({ isOpen, onClose, lead, onEdit, onQuickAction }: LeadTimelinePanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to panel when it opens
+  useEffect(() => {
+    if (isOpen && panelRef.current) {
+      bringElementIntoView(panelRef.current);
+    }
+  }, [isOpen]);
+
   if (!isOpen || !lead) return null;
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -35,9 +46,12 @@ export default function LeadTimelinePanel({ isOpen, onClose, lead, onEdit, onQui
       />
 
       {/* Side Panel */}
-      <div className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-[#1d0f0a] border-l-2 border-premium-gold/30 shadow-2xl z-[10001] transform transition-transform duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}>
+      <div 
+        ref={panelRef}
+        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-[#1d0f0a] border-l-2 border-premium-gold/30 shadow-2xl z-[10001] transform transition-transform duration-300 ease-in-out ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-white/10 bg-[#2a1a15]">

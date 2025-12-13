@@ -187,7 +187,7 @@ export default function ContactFormModal({ accountId, subAccountId, contact, sub
                 ))}
               </select>
             </div>
-            {formData.call_status === 'ATCBL' && (
+            {(formData.call_status === 'ATCBL' || formData.call_status === 'Connected' || formData.call_status === 'DNP' || formData.call_status === 'Unable to connect') && (
               <div>
                 <label className="block text-sm font-semibold text-slate-200 mb-2">Follow-up Date & Time</label>
                 <input

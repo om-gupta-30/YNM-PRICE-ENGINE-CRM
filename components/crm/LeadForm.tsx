@@ -447,6 +447,14 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
         </div>
       `;
       document.body.appendChild(errorDiv);
+      // Auto-scroll to error popup
+      requestAnimationFrame(() => {
+        errorDiv.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest',
+        });
+      });
       setTimeout(() => {
         if (errorDiv.parentElement) {
           errorDiv.remove();
@@ -467,6 +475,14 @@ export default function LeadForm({ isOpen, onClose, onSubmit, initialData, mode 
           </div>
         `;
         document.body.appendChild(errorDiv);
+        // Auto-scroll to error popup
+        requestAnimationFrame(() => {
+          errorDiv.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest',
+          });
+        });
         setTimeout(() => {
           if (errorDiv.parentElement) {
             errorDiv.remove();

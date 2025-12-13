@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface AIChatCoachProps {
   isOpen: boolean;
@@ -58,6 +59,14 @@ export default function AIChatCoach({ isOpen, onClose, user, role, context }: AI
   const [aiMode, setAiMode] = useState<AIMode>('coach');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const chatWindowRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to chat window when it opens
+  useEffect(() => {
+    if (isOpen && chatWindowRef.current) {
+      bringElementIntoView(chatWindowRef.current);
+    }
+  }, [isOpen]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -492,7 +501,10 @@ Ask me anything about your CRM!`,
       />
 
       {/* Chat Window */}
-      <div className="fixed right-4 bottom-4 top-4 w-full max-w-lg bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 shadow-2xl z-[9999] flex flex-col overflow-hidden">
+      <div 
+        ref={chatWindowRef}
+        className="fixed right-4 bottom-4 top-4 w-full max-w-lg bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl border border-slate-700/50 shadow-2xl z-[9999] flex flex-col overflow-hidden"
+      >
         {/* Header */}
         <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-premium-gold/10 to-amber-600/5">
           <div className="flex items-center justify-between">

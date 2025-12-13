@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Toast from '@/components/ui/Toast';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface CelebrationData {
   quotationId: number;
@@ -15,6 +16,7 @@ interface CelebrationData {
 export default function CelebrationToast() {
   const [celebration, setCelebration] = useState<CelebrationData | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const toastRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -101,6 +103,13 @@ export default function CelebrationToast() {
     return () => clearInterval(interval);
   }, []);
 
+  // Auto-scroll to celebration toast when it appears
+  useEffect(() => {
+    if (showToast && toastRef.current) {
+      bringElementIntoView(toastRef.current);
+    }
+  }, [showToast]);
+
   if (!celebration || !showToast) {
     return null;
   }
@@ -122,7 +131,7 @@ export default function CelebrationToast() {
   );
 
   return (
-    <div className="fixed top-20 right-4 z-[10000] animate-bounce">
+    <div ref={toastRef} className="fixed top-20 right-4 z-[10000] animate-bounce">
       <div className="glassmorphic-premium rounded-xl p-4 border-2 border-premium-gold shadow-2xl max-w-sm">
         {message}
       </div>

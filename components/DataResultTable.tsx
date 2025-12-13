@@ -31,7 +31,8 @@
  */
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface DataResultTableProps {
   data: any[];
@@ -64,6 +65,14 @@ export default function DataResultTable({ data, columns, title, userId, context 
   const [generatingReport, setGeneratingReport] = useState(false);
   const [generatedReport, setGeneratedReport] = useState<string | null>(null);
   const rowsPerPage = 10;
+  const reportModalRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to report modal when it opens
+  useEffect(() => {
+    if (showReportModal && reportModalRef.current) {
+      bringElementIntoView(reportModalRef.current);
+    }
+  }, [showReportModal]);
 
   // Auto-detect columns if not provided
   const detectedColumns = useMemo(() => {
@@ -757,7 +766,10 @@ export default function DataResultTable({ data, columns, title, userId, context 
             }}
           />
           <div className="fixed inset-0 flex items-center justify-center z-[9999] p-4">
-            <div className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div 
+              ref={reportModalRef}
+              className="bg-slate-900 rounded-2xl border border-slate-700/50 shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            >
               {/* Modal Header */}
               <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-premium-gold/10 to-amber-600/5">
                 <div className="flex items-center justify-between">

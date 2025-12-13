@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, memo } from 'react';
+import { useEffect, useState, memo, useRef } from 'react';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface ToastProps {
   message: string;
@@ -11,6 +12,7 @@ interface ToastProps {
 
 function Toast({ message, type = 'success', onClose, duration = 3000 }: ToastProps) {
   const [isVisible, setIsVisible] = useState(true);
+  const toastRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -21,10 +23,18 @@ function Toast({ message, type = 'success', onClose, duration = 3000 }: ToastPro
     return () => clearTimeout(timer);
   }, [duration, onClose]);
 
+  // Auto-scroll to toast when it appears
+  useEffect(() => {
+    if (isVisible && toastRef.current) {
+      bringElementIntoView(toastRef.current);
+    }
+  }, [isVisible]);
+
   if (!isVisible) return null;
 
   return (
     <div
+      ref={toastRef}
       className={`fixed top-20 right-4 z-[10001] glassmorphic-premium rounded-xl p-4 shadow-2xl border-2 ${
         type === 'success' ? 'border-green-400/50' : 'border-red-400/50'
       } animate-fade-up`}

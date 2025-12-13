@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import DatePicker from 'react-datepicker';
 import { PortalPopperContainer } from '@/components/ui/PortalPopperContainer';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
+import TimePicker from '@/components/forms/TimePicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
 interface ContactFormData {
@@ -13,6 +15,7 @@ interface ContactFormData {
   callStatus: string;
   notes: string;
   followUpDate?: Date | null;
+  followUpTime?: string;
   accountName?: string;
 }
 
@@ -45,6 +48,7 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
     callStatus: '',
     notes: '',
     followUpDate: null,
+    followUpTime: '',
     accountName: ''
   });
 
@@ -64,7 +68,18 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
       hasInitializedRef.current = true;
       
       if (initialData) {
-        setFormData(initialData);
+        // Extract time from initialData if it's a Date object
+        const initData = { ...initialData };
+        if (initData.followUpDate instanceof Date) {
+          initData.followUpTime = initData.followUpDate.toTimeString().slice(0, 5);
+        } else if (initData.followUpDate && typeof initData.followUpDate === 'string') {
+          // If it's a string, try to parse it and extract time
+          const date = new Date(initData.followUpDate);
+          if (!isNaN(date.getTime())) {
+            initData.followUpTime = date.toTimeString().slice(0, 5);
+          }
+        }
+        setFormData(initData);
       } else {
         // Get first account if available
         const defaultAccountName = accounts && accounts.length > 0 ? accounts[0] : '';
@@ -76,6 +91,7 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
           callStatus: '',
           notes: '',
           followUpDate: null,
+          followUpTime: '',
           accountName: defaultAccountName
         });
       }
@@ -118,8 +134,31 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
   // Handle form submit
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(formData);
+    
+    // Combine date and time if both are provided
+    let combinedFormData = { ...formData };
+    if (formData.followUpDate && formData.followUpTime) {
+      // Create a new date with the selected date and time
+      const date = new Date(formData.followUpDate);
+      const [hours, minutes] = formData.followUpTime.split(':');
+      date.setHours(parseInt(hours, 10));
+      date.setMinutes(parseInt(minutes, 10));
+      date.setSeconds(0);
+      date.setMilliseconds(0);
+      combinedFormData.followUpDate = date;
+    }
+    
+    onSubmit(combinedFormData);
   };
+
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Bring modal into view when it opens
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      bringElementIntoView(modalRef.current);
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -129,6 +168,7 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
       onClick={onClose}
     >
       <div 
+        ref={modalRef}
         className="glassmorphic-premium rounded-3xl max-w-2xl w-full border-2 border-premium-gold/30 shadow-2xl flex flex-col max-h-[85vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -268,28 +308,43 @@ export default function ContactForm({ isOpen, onClose, onSubmit, initialData, mo
             />
           </div>
 
-          {/* Follow-up Date - Show for Connected, ATCBL, DNP, and Unable to connect */}
+          {/* Follow-up Date & Time - Show for Connected, ATCBL, DNP, and Unable to connect */}
           {(formData.callStatus === 'Connected' || formData.callStatus === 'ATCBL' || formData.callStatus === 'DNP' || formData.callStatus === 'Unable to connect') && (
-            <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
-                Follow-up Date <span className="text-blue-400">
-                  {formData.callStatus === 'Connected' 
-                    ? '(Optional - Set next follow-up)' 
-                    : formData.callStatus === 'ATCBL' 
-                    ? '(Schedule Callback)' 
-                    : '(Required Follow-up)'}
-                </span>
-              </label>
-              <DatePicker
-                selected={formData.followUpDate || null}
-                onChange={(date: Date | null) => handleInputChange('followUpDate', date)}
-                dateFormat="dd/MM/yyyy"
-                className="input-premium input-focus-glow w-full px-4 py-3 text-white placeholder-slate-400"
-                wrapperClassName="w-full"
-                popperPlacement="bottom-start"
-                placeholderText="Select follow-up date"
-                minDate={new Date()}
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-200 mb-2">
+                  Follow-up Date <span className="text-blue-400">
+                    {formData.callStatus === 'Connected' 
+                      ? '(Optional - Set next follow-up)' 
+                      : formData.callStatus === 'ATCBL' 
+                      ? '(Schedule Callback)' 
+                      : '(Required Follow-up)'}
+                  </span>
+                </label>
+                <DatePicker
+                  selected={formData.followUpDate || null}
+                  onChange={(date: Date | null) => handleInputChange('followUpDate', date)}
+                  dateFormat="dd/MM/yyyy"
+                  className="input-premium input-focus-glow w-full px-4 py-3 text-white placeholder-slate-400"
+                  wrapperClassName="w-full"
+                  popperPlacement="bottom-start"
+                  placeholderText="Select follow-up date"
+                  minDate={new Date()}
+                />
+              </div>
+              {formData.followUpDate && (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-200 mb-2">
+                    Follow-up Time <span className="text-blue-400">(Optional)</span>
+                  </label>
+                  <TimePicker
+                    value={formData.followUpTime || ''}
+                    onChange={(time) => handleInputChange('followUpTime', time)}
+                    className="input-premium input-focus-glow w-full px-4 py-3 text-white bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:ring-2 focus:ring-premium-gold focus:border-transparent"
+                    placeholder="Select time"
+                  />
+                </div>
+              )}
             </div>
           )}
 

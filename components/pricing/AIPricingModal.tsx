@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { PricingAnalysisOutput } from '@/lib/services/aiPricingAnalysis';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 // Alias for backward compatibility
 export type AIPricingResult = PricingAnalysisOutput;
@@ -30,14 +31,7 @@ export default function AIPricingModal({
   // Auto-scroll modal into view when it opens
   useEffect(() => {
     if (isOpen && modalRef.current) {
-      // Small delay to ensure modal is rendered
-      setTimeout(() => {
-        modalRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
-          block: 'center',
-          inline: 'nearest'
-        });
-      }, 100);
+      bringElementIntoView(modalRef.current);
     }
   }, [isOpen]);
 

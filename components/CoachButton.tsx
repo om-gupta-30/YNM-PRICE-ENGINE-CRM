@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import AIChatCoach from './AIChatCoach';
 import RAGChatInterface from './RAGChatInterface';
 import PricingInsightsDashboard from './PricingInsightsDashboard';
+import { bringElementIntoView } from '@/lib/utils/bringElementIntoView';
 
 interface CoachButtonProps {
   user: string;
@@ -29,6 +30,14 @@ export default function CoachButton({ user, role, userId, context }: CoachButton
   const [showPricingDashboard, setShowPricingDashboard] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const pricingDashboardRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to pricing dashboard when it opens
+  useEffect(() => {
+    if (showPricingDashboard && pricingDashboardRef.current) {
+      bringElementIntoView(pricingDashboardRef.current);
+    }
+  }, [showPricingDashboard]);
 
   // Hide tooltip after 5 seconds
   useEffect(() => {
@@ -313,6 +322,7 @@ export default function CoachButton({ user, role, userId, context }: CoachButton
       {showPricingDashboard && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998]" onClick={handleClosePricingDashboard}>
           <div 
+            ref={pricingDashboardRef}
             className="fixed inset-4 sm:inset-8 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 rounded-3xl border border-slate-700/50 shadow-2xl z-[9999] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >

@@ -717,6 +717,7 @@ export default function AccountDetailsPage() {
                         <th className="text-left py-4 px-4 text-sm font-bold text-white">Phone</th>
                         <th className="text-left py-4 px-4 text-sm font-bold text-white">Call Status</th>
                         <th className="text-left py-4 px-4 text-sm font-bold text-white">Follow-up Date</th>
+                        <th className="text-left py-4 px-4 text-sm font-bold text-white">Follow-up Time</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -743,6 +744,18 @@ export default function AccountDetailsPage() {
                           </td>
                           <td className="py-4 px-4 text-slate-200 text-xs">
                             {contact.follow_up_date ? formatDate(contact.follow_up_date) : '-'}
+                          </td>
+                          <td className="py-4 px-4 text-slate-200 text-xs">
+                            {contact.follow_up_date
+                              ? (() => {
+                                  const date = new Date(contact.follow_up_date);
+                                  return date.toLocaleString('en-IN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: true
+                                  });
+                                })()
+                              : '-'}
                           </td>
                         </tr>
                       ))}

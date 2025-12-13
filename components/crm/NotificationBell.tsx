@@ -468,6 +468,21 @@ export default function NotificationBell() {
                                 {dueToday ? 'Due Today' : formatDate(item.followUpDate)}
                               </span>
 
+                              {/* Time Badge */}
+                              {item.followUpDate && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-premium-gold/20 text-premium-gold border border-premium-gold/30">
+                                  <span className="mr-1.5">⏰</span>
+                                  {(() => {
+                                    const date = item.followUpDate instanceof Date ? item.followUpDate : new Date(item.followUpDate);
+                                    return date.toLocaleTimeString('en-IN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                      hour12: true
+                                    });
+                                  })()}
+                                </span>
+                              )}
+
                               {/* Call Status Badge (Contacts only) */}
                               {!item.isLead && item.callStatus && (
                                 <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getCallStatusColor(item.callStatus)}`}>

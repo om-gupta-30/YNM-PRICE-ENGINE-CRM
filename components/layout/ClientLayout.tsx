@@ -7,6 +7,7 @@ import LogoutButton from '@/components/layout/LogoutButton';
 import ActivityTracker from '@/components/utils/ActivityTracker';
 import UserStatusIndicator from '@/components/ui/UserStatusIndicator';
 import NotificationBell from '@/components/ui/NotificationBell';
+import FollowUpReminder from '@/components/crm/FollowUpReminder';
 import { ReactNode } from 'react';
 
 interface ClientLayoutProps {
@@ -48,6 +49,7 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
         </div>
         {memoizedChildren}
       </div>
+      <FollowUpReminder />
     </>
   );
 }

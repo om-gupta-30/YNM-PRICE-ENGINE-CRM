@@ -18,12 +18,12 @@ export default function QuotationDetailsModal({ quote, onClose }: QuotationDetai
     setMounted(true);
   }, []);
 
-  // Bring modal into view when it opens
+  // Bring modal into view when it opens or quote changes
   useEffect(() => {
     if (modalRef.current) {
       bringElementIntoView(modalRef.current);
     }
-  }, []);
+  }, [quote]);
 
   const formatIndianUnits = (value: number): string => {
     const formatted = value.toLocaleString('en-IN', { 
